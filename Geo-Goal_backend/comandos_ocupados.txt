@@ -1,0 +1,19 @@
+1 - npm i express
+2 - npm i -D @types/express
+3 - npm i -D nodemon ts-node typescript
+4 - En el archivo "package.json" de modifica asi 
+"scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts"
+  },
+para que solo en terminal pongamos "npm run dev" y se ejecute
+
+5- npm i colors
+6 - npm i mongoose dotenv
+7 - npm i express-validator
+8 - npm i cors
+9 -  npm i -D @types/cors
+10 - npm i bcrypt
+11 - npm i -D @types/bcrypt
+12 - npm install sequelize pg pg-hstore
+13 - npm install --save sequelize
+14 - npm install sequelize-typescript reflect-metadata
