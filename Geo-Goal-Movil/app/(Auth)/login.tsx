@@ -144,7 +144,7 @@ export default function LoginScreen() {
                         </TouchableOpacity>
 
                         {/* Navegación (Links) */}
-                        <TouchableOpacity className="mt-6">
+                        <TouchableOpacity className="mt-6" onPress={() => router.push('/(Auth)/RegisterView')}>
                             <Text className=" text-[#0ED000] font-bold">
                                 ¿No tienes cuenta? Crear Una
                             </Text>
@@ -152,7 +152,7 @@ export default function LoginScreen() {
                         
                         <TouchableOpacity className="mt-6">
                             <Text className=" text-[#0ED000] font-bold">
-                                ¿Has olvidado tu contraseña? Reestablecer
+                                ¿Has olvidado tu contraseña?
                             </Text>
                         </TouchableOpacity>
                     </View>

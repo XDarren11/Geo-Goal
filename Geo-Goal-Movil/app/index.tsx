@@ -57,14 +57,14 @@ export default function index() {
 
           <TouchableOpacity
             className=" bg-white w-3/5 py-3 rounded-full items-center mt-5"
-            onPress={() => {}}
+            onPress={() => router.push('/(Auth)/RegisterView')}
           >
             <Text className=" text-gray-400 font-bold text-2xl">
               Registrate
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity className="mt-4" onPress={() => {}}>
+          <TouchableOpacity className="mt-4" onPress={() => router.push('/(Auth)/ForgotPasswordView')}>
             <Text className=" text-[#0ED000] font-bold">
               ¿Has olvidado tu contraseña?
             </Text>
