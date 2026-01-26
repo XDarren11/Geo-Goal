@@ -11,7 +11,7 @@ const db = new Sequelize(process.env.DATABASE_URL!, {
 export const connetDB = async () => {
     try {
         await db.authenticate()
-        db.sync()
+        await db.sync({ alter: true }); //para crear tablas nuevas sin borrar datos
         console.log(colors.magenta.bold(`Conexion exitosa a la BD`))
     } catch (error) {
         console.log(error)

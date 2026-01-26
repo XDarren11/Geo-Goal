@@ -1,6 +1,6 @@
 import {Request, Response, NextFunction} from 'express'
 import jwt from 'jsonwebtoken'
-import User from '../models/User'
+import { User } from '../models/User'
 
 declare global {
     namespace Express {
@@ -27,7 +27,7 @@ export const authnticate = async (req: Request, res: Response, next: NextFunctio
         if(typeof decoded === 'object' && decoded.id) {
 
             const user = await User.findByPk(decoded.id, {
-                attributes: ['id', 'name', 'email'] 
+                attributes: ['id', 'name', 'email', 'role'] 
             });
 
             if(user) {

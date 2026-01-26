@@ -1,16 +1,24 @@
 import type { Request, Response } from "express"
-import User from "../models/User"
 import { checkPassword, hashPassword } from "../utils/auth"
 import Token from "../models/Token"
 import { generateToken } from "../utils/token"
 import { AuthEmail } from "../emails/AutEmail"
 import { generateJWT } from "../utils/jwt"
+import { User } from "../models/User"
 
 export class AuthController {
 
     static createAccount = async (req:Request, res: Response) => {
         try {
-            const {password, email, name} = req.body
+            const {password, email, name, role} = req.body
+
+            const validRoles = ['coach', 'player', 'admin']
+
+            // Si el rol que envían NO está en la lista o no lo enviaron...
+            if (!role || !validRoles.includes(role)) {
+                const error = new Error('Rol no seleccionado');
+                return res.status(400).json({ error: error.message });
+            }
 
             // Prevenir duplicados
             const userExists = await User.findOne({where: {email}}) 
@@ -26,7 +34,8 @@ export class AuthController {
             const user = await User.create({
                 name,
                 email,
-                password: hashedPassword
+                password: hashedPassword,
+                role
             })
 
             // Generar Token
@@ -45,6 +54,7 @@ export class AuthController {
             res.send('Cuenta creada, revisa tu email para confirmarla')
         } catch (error) {
             res.status(500).json({error: 'Hubo un error'})
+            console.log(error)
         }
     }
 

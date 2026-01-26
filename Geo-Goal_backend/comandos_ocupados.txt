@@ -17,3 +17,5 @@ para que solo en terminal pongamos "npm run dev" y se ejecute
 12 - npm install sequelize pg pg-hstore
 13 - npm install --save sequelize
 14 - npm install sequelize-typescript reflect-metadata
+15 - npm i multer
+16 - npm i -D @types/multer
