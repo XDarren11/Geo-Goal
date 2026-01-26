@@ -1,33 +1,41 @@
-import { Table, Column, Model, DataType, Default } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, Default, HasMany, BelongsToMany } from 'sequelize-typescript';
+import { League } from './League';
+import { Team } from './Team';
+import { TeamMember } from './TeamMember';
 
-@Table({
-    tableName: 'users' // Nombre de la tabla en la BD
-})
-class User extends Model {
-    @Column({
-        type: DataType.STRING,
-        allowNull: false
-    })
+@Table({ tableName: 'users' })
+export class User extends Model {
+    @Column({ type: DataType.STRING, allowNull: false })
     declare name: string;
 
-    @Column({
-        type: DataType.STRING,
-        allowNull: false,
-        unique: true
-    })
+    @Column({ type: DataType.STRING, allowNull: false, unique: true })
     declare email: string;
 
-    @Column({
-        type: DataType.STRING,
-        allowNull: false
-    })
+    @Column({ type: DataType.STRING, allowNull: false })
     declare password: string;
 
-    @Default(false) // Valor por defecto
-    @Column({
-        type: DataType.BOOLEAN
-    })
+    @Default(false)
+    @Column({ type: DataType.BOOLEAN })
     declare confirmed: boolean;
-}
 
-export default User;
+    @Column({ type: DataType.STRING })
+    declare token: string;
+
+    @Default('jugador')
+    @Column({ type: DataType.STRING, allowNull: false })
+    declare role: string;
+
+    // --- RELACIONES ---
+
+    // 1. ADMIN: Sus ligas
+    @HasMany(() => League)
+    declare leagues: League[];
+
+    // 2. ENTRENADOR: Sus equipos gestionados
+    @HasMany(() => Team, 'trainerId')
+    declare teamsManaged: Team[];
+
+    // 3. JUGADOR: Equipos donde juega
+    @BelongsToMany(() => Team, () => TeamMember)
+    declare teamsPlaying: Team[];
+}

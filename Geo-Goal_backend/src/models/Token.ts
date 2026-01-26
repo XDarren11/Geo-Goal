@@ -1,5 +1,5 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
-import User from './User'; // Asegúrate de importar tu modelo de Usuario
+import { User } from './User'; // Asegúrate de importar tu modelo de Usuario
 
 @Table({
     tableName: 'tokens'

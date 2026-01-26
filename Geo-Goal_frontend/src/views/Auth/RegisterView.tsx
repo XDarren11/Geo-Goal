@@ -13,6 +13,7 @@ export default function RegisterView() {
         email: '',
         password: '',
         password_confirmation: '',
+        role: ''
     }
 
     const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<UserRegistrationForm>({ defaultValues: initialValues });
@@ -128,6 +129,29 @@ export default function RegisterView() {
             {errors.password_confirmation && (
                 <ErrorMessage>{errors.password_confirmation.message}</ErrorMessage>
             )}
+            </div>
+
+            <div className="flex flex-col gap-5">
+                <label
+                    className="font-normal text-2xl"
+                    htmlFor="role"
+                >¿Qué deseas hacer?</label>
+                
+                <select
+                    id="role"
+                    className="w-full p-3 border-gray-300 border bg-white"
+                    {...register("role", {
+                        required: "Seleccionar un rol es obligatorio"
+                    })}
+                >
+                    <option value="player">Soy Jugador</option>
+                    <option value="coach">Soy Entrenador</option>
+                    <option value="admin">Organizador</option>
+                </select>
+
+                {errors.role && (
+                    <ErrorMessage>{errors.role.message}</ErrorMessage>
+                )}
             </div>
 
             <input

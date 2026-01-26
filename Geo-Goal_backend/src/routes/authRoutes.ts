@@ -19,6 +19,9 @@ router.post('/create-account',
     }),
     body('email')
         .isEmail().withMessage('E-mail no valido'),
+    body('role')
+        .notEmpty().withMessage('El rol es obligatorio')
+        .isIn(['coach', 'player', 'admin']).withMessage('Rol no es valido'),
     handleInputError,
     AuthController.createAccount
 )
