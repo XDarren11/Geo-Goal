@@ -16,14 +16,17 @@ export default function AppLayout() {
 
   if(data) return (
     <>
-        <header className="bg-gray-800 py-5 px-20">
+        <header className="bg-[#58da02] py-5 px-20">
             <div className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row justify-between items-center">
-                <div className="w-64">
-                    <Link to={'/'}>
-                        <Logo/>
+
+                    <Link className="flex items-center gap-2" to={'/'}>
+                        <div className="w-20 h-20">
+                            <Logo />
+                        </div>
+
+                        <h1 className="font-bold text-white text-xl whitespace-nowrap">Geo-Goal</h1>
                     </Link>
                      
-                </div>
 
                 <NavMenu
                     name={data.name}

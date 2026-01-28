@@ -4,9 +4,9 @@ export default function DashboardView() {
 
     return (
       <>
-        <h1 className="text-5xl font-black">Mis Proyectos</h1>
+        <h1 className="text-5xl font-black">Mis Ligas</h1>
         <p className="text-2xl font-light text-gray-500 mt-5">
-          Maneja y administra tus juegos
+          Maneja y administra tus ligas
         </p>
 
         <nav className="my-5">

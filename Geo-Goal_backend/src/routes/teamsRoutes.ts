@@ -79,4 +79,12 @@ router.get('/:id/player',
     TeamController.getPlayersTeam
 )
 
+router.delete('/:id/player/:playerId',
+    hasRole('coach'),
+    param('id').isInt().withMessage('ID no válido'),
+    param('playerId').isInt().withMessage('ID no valido'),
+    handleInputError,
+    TeamController.deletePlayerToTeam
+)
+
 export default router
