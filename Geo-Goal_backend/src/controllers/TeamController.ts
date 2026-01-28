@@ -221,4 +221,37 @@ export class TeamController {
             res.status(500).json({error: 'Hubo un error'})
         }
     }
+
+    static deletePlayerToTeam = async (req:Request, res:Response) => {
+        try {
+            const {id, playerId} = req.params
+
+            //Validamos si el entrenador es dueño del equipo
+            const team = await Team.findOne({
+                where: {id: id, trainerId: req.user.id}
+            })
+
+            if(!team) {
+                return res.status(404).json({ error: 'Equipo no encontrado o no eres el DT' });
+            }
+
+            const teamMember = await TeamMember.findOne({
+                where: {
+                    teamId: id,
+                    userId: playerId
+                }
+            })
+
+            if (!teamMember) {
+                return res.status(404).json({ error: 'El jugador no pertenece a este equipo' });
+            }
+
+            await teamMember.destroy();
+
+            res.send('Jugador eliminado del equipo correctamente');
+            
+        } catch (error) {
+            res.status(500).json({error: 'Hubo un error'})
+        }
+    }
 }
