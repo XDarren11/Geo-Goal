@@ -22,6 +22,7 @@ export type NewPasswordForm = Pick<Auth, 'password' | 'password_confirmation'>
 export const userSchema = authSchema.pick({
     name: true,
     email: true,
+    role: true
 }).extend({
     id: z.number()
 })
