@@ -1,4 +1,4 @@
-import {CorsOptions} from 'cors'
+import {CorsOptions} from 'src/config/cors'
 
 export const corsConfig: CorsOptions = {
     origin: function(origin, callback) {
