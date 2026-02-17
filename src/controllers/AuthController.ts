@@ -42,14 +42,22 @@ export class AuthController {
                 userId : user.id
             })
 
-            // Enviar Email usando el nuevo servicio
-            await AuthEmailService.sendConfirmationEmail({
-                email: user.email,
-                name: user.name,
-                token: token.token
-            })
-
-            res.send(SUCCESS_MESSAGES.AUTH.ACCOUNT_CREATED)
+            // Intentar enviar Email (no falla si el email no se envía)
+            try {
+                await AuthEmailService.sendConfirmationEmail({
+                    email: user.email,
+                    name: user.name,
+                    token: token.token
+                })
+                res.send(SUCCESS_MESSAGES.AUTH.ACCOUNT_CREATED)
+            } catch (emailError) {
+                console.warn('⚠ No se pudo enviar el email de confirmación:', emailError)
+                // Aún así, la cuenta se creó exitosamente
+                res.status(201).json({
+                    message: 'Cuenta creada exitosamente. El email de confirmación no pudo ser enviado, contacta al administrador.',
+                    token: token.token // Enviamos el token en la respuesta para que puedan confirmar manualmente
+                })
+            }
         } catch (error) {
             console.error('Error en createAccount:', error)
             res.status(500).json({error: ERROR_MESSAGES.GENERAL.INTERNAL_ERROR})

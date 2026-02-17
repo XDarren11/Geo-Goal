@@ -4,8 +4,13 @@ export const corsConfig: CorsOptions = {
     origin: function(origin, callback) {
         const whitelist = [process.env.FRONTEND_URL]
         
-        // Permitir peticiones sin origin (mismo origen, como Swagger UI)
+        // Permitir peticiones sin origin (mismo origen, como Swagger UI y archivos estáticos)
         if(!origin) {
+            return callback(null, true)
+        }
+
+        // Permitir localhost en desarrollo
+        if(origin.includes('localhost') || origin.includes('127.0.0.1')) {
             return callback(null, true)
         }
 
@@ -15,9 +20,12 @@ export const corsConfig: CorsOptions = {
         }
 
         if(whitelist.includes(origin)) {
-            callback(null, true)
+            return callback(null, true)
         } else {
-            callback(new Error('Error de CORS'))
+            // No lanzar error, simplemente rechazar
+            return callback(null, false)
         }
-    }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200
 }
