@@ -2,9 +2,11 @@ import type { Request, Response } from "express"
 import { checkPassword, hashPassword } from "../utils/auth"
 import Token from "../models/Token"
 import { generateToken } from "../utils/token"
-import { AuthEmail } from "../emails/AutEmail"
+import { AuthEmailService } from "../services/AuthEmailService"
 import { generateJWT } from "../utils/jwt"
 import { User } from "../models/User"
+import { VALID_ROLES } from "../constants/roles"
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../constants/messages"
 
 export class AuthController {
 
@@ -12,19 +14,15 @@ export class AuthController {
         try {
             const {password, email, name, role} = req.body
 
-            const validRoles = ['coach', 'player', 'admin']
-
-            // Si el rol que envían NO está en la lista o no lo enviaron...
-            if (!role || !validRoles.includes(role)) {
-                const error = new Error('Rol no seleccionado');
-                return res.status(400).json({ error: error.message });
+            // Validar rol usando constantes
+            if (!role || !VALID_ROLES.includes(role)) {
+                return res.status(400).json({ error: ERROR_MESSAGES.AUTH.INVALID_ROLE });
             }
 
             // Prevenir duplicados
             const userExists = await User.findOne({where: {email}}) 
             if(userExists) {
-                const error = new Error('El usuario ya esta registrado')
-                return res.status(409).json({error: error.message})
+                return res.status(409).json({error: ERROR_MESSAGES.AUTH.USER_ALREADY_EXISTS})
             }
 
             // Hash Password
@@ -44,17 +42,17 @@ export class AuthController {
                 userId : user.id
             })
 
-            // Enviar Email
-            AuthEmail.sendConfirmationEmail({
+            // Enviar Email usando el nuevo servicio
+            await AuthEmailService.sendConfirmationEmail({
                 email: user.email,
                 name: user.name,
                 token: token.token
             })
 
-            res.send('Cuenta creada, revisa tu email para confirmarla')
+            res.send(SUCCESS_MESSAGES.AUTH.ACCOUNT_CREATED)
         } catch (error) {
-            res.status(500).json({error: 'Hubo un error'})
-            console.log(error)
+            console.error('Error en createAccount:', error)
+            res.status(500).json({error: ERROR_MESSAGES.GENERAL.INTERNAL_ERROR})
         }
     }
 
@@ -104,7 +102,7 @@ export class AuthController {
                 })
 
                 // Enviar Email
-                AuthEmail.sendConfirmationEmail({
+                await AuthEmailService.sendConfirmationEmail({
                     email: user.email,
                     name: user.name,
                     token: token.token
@@ -155,7 +153,7 @@ export class AuthController {
             });
 
             // 3. Enviar Email
-            AuthEmail.sendConfirmationEmail({
+            await AuthEmailService.sendConfirmationEmail({
                 email: user.email,
                 name: user.name,
                 token: token.token
@@ -189,7 +187,7 @@ export class AuthController {
             });
 
             // 3. Enviar Email
-            AuthEmail.sendPasswordResetToken({
+            await AuthEmailService.sendPasswordResetToken({
                 email: user.email,
                 name: user.name,
                 token: token.token
