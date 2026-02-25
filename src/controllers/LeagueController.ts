@@ -1,4 +1,6 @@
 import type { Request, Response } from "express"
+import { MatchGenerator } from '../utils/MatchGenerator';
+import { Match } from '../models/Match';
 import { League } from "../models/League"
 import { User } from "../models/User"
 import { Team } from "../models/Team"
@@ -219,6 +221,87 @@ export class LeagueController {
 
         } catch (error) {
             res.status(500).json({error: 'Hubo un error'})
+        }
+    }
+
+    static generateFixture = async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+            const { type } = req.body; 
+
+            const league = await League.findOne({
+                where: { id, managerId: req.user!.id },
+                include: [Team] // Traemos los equipos inscritos
+            });
+
+            if (!league) return res.status(404).json({ error: 'Liga no encontrada' });
+
+            const teams = league.teams;
+            if (teams.length < 2) {
+                return res.status(400).json({ error: 'Necesitas al menos 2 equipos para crear un fixture' });
+            }
+
+            const teamIds = teams.map(t => t.id);
+            let generatedMatches = [];
+
+            if (type === 'round-robin') {
+                generatedMatches = MatchGenerator.generateRoundRobin(teamIds);
+            } else if (type === 'knockout') {
+                generatedMatches = MatchGenerator.generateKnockout(teamIds);
+            } else {
+                return res.status(400).json({ error: 'Tipo de torneo no válido' });
+            }
+
+            const matchesToSave = generatedMatches.map(m => ({
+                leagueId: league.id,
+                homeTeamId: m.home,
+                awayTeamId: m.away,
+                roundName: m.round,
+                played: false
+            }));
+
+            await Match.bulkCreate(matchesToSave);
+
+            res.json({ 
+                message: 'Pareos generado exitosamente', 
+                totalMatches: matchesToSave.length 
+            });
+
+        } catch (error) {
+            console.log(error);
+            res.status(500).json({ error: 'Hubo un error al generar el fixture' });
+        }
+    }
+
+    static getLeagueFixture = async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+
+            // Buscamos los partidos de esa liga
+            const matches = await Match.findAll({
+                where: { leagueId: id },
+                include: [
+                    { model: Team, as: 'homeTeam', attributes: ['id', 'name', 'logoUrl'] },
+                    { model: Team, as: 'awayTeam', attributes: ['id', 'name', 'logoUrl'] }
+                ],
+                order: [['roundName', 'ASC']] // Ordenados por Jornada
+            });
+
+            // Opcional: Agruparlos por jornada para el Frontend
+            // Esto devuelve algo como: { "Jornada 1": [partido1, partido2], "Jornada 2": [...] }
+            const groupedMatches = matches.reduce((acc: any, match) => {
+                const round = match.roundName;
+                if (!acc[round]) {
+                    acc[round] = [];
+                }
+                acc[round].push(match);
+                return acc;
+            }, {});
+
+            res.json(groupedMatches);
+
+        } catch (error) {
+            res.status(500).json({ error: 'Hubo un error al obtener el calendario' });
         }
     }
 

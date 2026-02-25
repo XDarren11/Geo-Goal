@@ -360,4 +360,18 @@ router.delete('/:leagueId/teams/:teamId',
     LeagueController.removeTeamFromLeague
 )
 
+router.post('/:id/calculate-fixture',
+    hasRole('admin'),
+    param('id').isInt(),
+    body('type').isIn(['round-robin', 'knockout']).withMessage('Tipo inválido'),
+    handleInputError,
+    LeagueController.generateFixture
+);
+
+router.get('/:id/fixture',
+    param('id').isInt(),
+    handleInputError,
+    LeagueController.getLeagueFixture
+);
+
 export default router
