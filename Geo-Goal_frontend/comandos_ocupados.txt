@@ -1,3 +1,0 @@
-1- npm i zod
-2 - npm i axios para la comunicacion para la api
-3 - npm i @chakra-ui/pin-input
