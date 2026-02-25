@@ -5,8 +5,8 @@ type UserPayload = {
     role: string
 }
 
-const ACCESS_EXPIRES_IN = '15m'
-const REFRESH_EXPIRES_IN = '7d'
+const ACCESS_EXPIRES_IN = '30d'
+const REFRESH_EXPIRES_IN = '30d'
 
 export const generateTokens = (payload: UserPayload) => {
     const secret = process.env.JWT_SECRET!
