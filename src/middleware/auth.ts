@@ -14,16 +14,18 @@ export const authnticate = async (req: Request, res: Response, next: NextFunctio
     
     const bearer = req.headers.authorization
     if(!bearer) {
-        const error = new Error('No Autorizado')
-        return res.status(401).json({error: error.message})
+        return res.status(401).json({error: 'No Autorizado'})
     }
 
-    // Extraemos el JWT que se manda
     const [, token] = bearer.split(' ')
 
+    if(!token) {
+        return res.status(401).json({error: 'Token no proporcionado'})
+    }
+
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
-        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!)
+
         if(typeof decoded === 'object' && decoded.id) {
 
             const user = await User.findByPk(decoded.id, {
@@ -34,12 +36,12 @@ export const authnticate = async (req: Request, res: Response, next: NextFunctio
                 req.user = user
                 next()
             } else {
-                res.status(500).json({error: 'Token No Valido'})
+                res.status(401).json({error: 'Token No Válido'})
             }
         }
         
     } catch (error) {
-        res.status(500).json({error: 'Token No Valido'})
+        res.status(401).json({error: 'Token No Válido'})
     }
     
 }

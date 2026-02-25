@@ -1,14 +1,29 @@
 import jwt from 'jsonwebtoken'
 
 type UserPayload = {
-    id: number // Cambiamos ObjectId por number (para SQL)
+    id: number
+    role: string
 }
 
-export const generateJWT = (payload: UserPayload) => {
-    
-    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
-        expiresIn: '180d'
+const ACCESS_EXPIRES_IN = '15m'
+const REFRESH_EXPIRES_IN = '7d'
+
+export const generateTokens = (payload: UserPayload) => {
+    const secret = process.env.JWT_SECRET!
+
+    const accessToken = jwt.sign(payload, secret, {
+        expiresIn: ACCESS_EXPIRES_IN
     })
 
-    return token
+    const refreshToken = jwt.sign(payload, secret, {
+        expiresIn: REFRESH_EXPIRES_IN
+    })
+
+    return {
+        tokenType: 'Bearer',
+        accessToken,
+        expiresIn: ACCESS_EXPIRES_IN,
+        refreshToken,
+        refreshExpiresIn: REFRESH_EXPIRES_IN
+    }
 }

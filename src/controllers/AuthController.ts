@@ -3,7 +3,7 @@ import { checkPassword, hashPassword } from "../utils/auth"
 import Token from "../models/Token"
 import { generateToken } from "../utils/token"
 import { AuthEmailService } from "../services/AuthEmailService"
-import { generateJWT } from "../utils/jwt"
+import { generateTokens } from "../utils/jwt"
 import { User } from "../models/User"
 import { VALID_ROLES } from "../constants/roles"
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../constants/messages"
@@ -109,12 +109,16 @@ export class AuthController {
                     userId : user.id
                 })
 
-                // Enviar Email
-                await AuthEmailService.sendConfirmationEmail({
-                    email: user.email,
-                    name: user.name,
-                    token: token.token
-                })
+                // Enviar Email (no bloquea si falla)
+                try {
+                    await AuthEmailService.sendConfirmationEmail({
+                        email: user.email,
+                        name: user.name,
+                        token: token.token
+                    })
+                } catch (emailError) {
+                    console.warn('⚠ No se pudo enviar el email de confirmación:', emailError)
+                }
 
                 const error = new Error('La cuenta no ha sido confirmada, hemos enviado un e-mail de confirmacion')
                 return res.status(401).json({error: error.message})
@@ -128,11 +132,12 @@ export class AuthController {
                 return res.status(401).json({error: error.message})
             }
 
-            // Traemos el JWT   
-            const token = generateJWT({ id: user.id });
-            res.send(token)
+            // Generar JWT firmado con id y rol
+            const tokens = generateTokens({ id: user.id, role: user.role })
+            res.json(tokens)
 
         } catch (error) {
+            console.error('Error en login:', error)
             res.status(500).json({error: 'Hubo un error'})
         }
     }
@@ -161,11 +166,15 @@ export class AuthController {
             });
 
             // 3. Enviar Email
-            await AuthEmailService.sendConfirmationEmail({
-                email: user.email,
-                name: user.name,
-                token: token.token
-            });
+            try {
+                await AuthEmailService.sendConfirmationEmail({
+                    email: user.email,
+                    name: user.name,
+                    token: token.token
+                });
+            } catch (emailError) {
+                console.warn('⚠ No se pudo enviar el email de confirmación:', emailError)
+            }
 
             res.send('Se envió un nuevo Token a tu e-mail');
             
@@ -195,11 +204,15 @@ export class AuthController {
             });
 
             // 3. Enviar Email
-            await AuthEmailService.sendPasswordResetToken({
-                email: user.email,
-                name: user.name,
-                token: token.token
-            });
+            try {
+                await AuthEmailService.sendPasswordResetToken({
+                    email: user.email,
+                    name: user.name,
+                    token: token.token
+                });
+            } catch (emailError) {
+                console.warn('⚠ No se pudo enviar el email de recuperación:', emailError)
+            }
 
             res.send('Se enviaron las instrucciones a tu correo');
             
