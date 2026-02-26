@@ -7,7 +7,36 @@ import { generateJWT } from "../utils/jwt"
 import { User } from "../models/User"
 
 export class AuthController {
-
+    /**
+     * @swagger
+     * /api/auth/register:
+     *   post:
+     *     summary: Registra un nuevo usuario
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               name:
+     *                 type: string
+     *               email:
+     *                 type: string
+     *               password:
+     *                 type: string
+     *               role:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Usuario registrado correctamente
+     *       409:
+     *         description: El usuario ya está registrado
+     *       400:
+     *         description: Rol no seleccionado
+     */
     static createAccount = async (req:Request, res: Response) => {
         try {
             const {password, email, name, role} = req.body
@@ -58,6 +87,28 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/confirm:
+     *   post:
+     *     summary: Confirma la cuenta de usuario
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               token:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Cuenta confirmada correctamente
+     *       404:
+     *         description: Token no válido
+     */
     static confirmAccount = async (req:Request, res: Response) => {
         try {
             
@@ -82,6 +133,43 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/login:
+     *   post:
+     *     summary: Inicia sesión y obtiene un JWT
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               email:
+     *                 type: string
+     *               password:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Token JWT generado correctamente
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 token:
+     *                   type: string
+     *                 tokenType:
+     *                   type: string
+     *                 expiresIn:
+     *                   type: integer
+     *                 refreshToken:
+     *                   type: string
+     *       401:
+     *         description: Credenciales inválidas
+     */
     static login = async (req:Request, res: Response) => {
         try {
             
@@ -131,6 +219,30 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/request-code:
+     *   post:
+     *     summary: Solicita un nuevo código de confirmación
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               email:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Se envió un nuevo Token a tu e-mail
+     *       404:
+     *         description: El usuario no está registrado
+     *       403:
+     *         description: El usuario ya está confirmado
+     */
     static requestConfirmationCode = async (req: Request, res: Response) => {
         try {
             const { email } = req.body;
@@ -169,6 +281,28 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/forgot-password:
+     *   post:
+     *     summary: Solicita recuperación de contraseña
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               email:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Instrucciones enviadas al correo
+     *       404:
+     *         description: El usuario no está registrado
+     */
     static forgotPassword = async (req: Request, res: Response) => {
         try {
             const { email } = req.body;
@@ -203,6 +337,28 @@ export class AuthController {
         }
     }
     
+    /**
+     * @swagger
+     * /api/auth/validate-token:
+     *   post:
+     *     summary: Valida el token de recuperación
+     *     tags:
+     *       - Auth
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               token:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Token válido, define nueva contraseña
+     *       404:
+     *         description: Token no válido
+     */
     static validateToken = async (req: Request, res: Response) => {
         try {
             const { token } = req.body;
@@ -223,6 +379,34 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/update-password/{token}:
+     *   put:
+     *     summary: Actualiza la contraseña usando el token
+     *     tags:
+     *       - Auth
+     *     parameters:
+     *       - in: path
+     *         name: token
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               password:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Contraseña modificada correctamente
+     *       404:
+     *         description: Token o usuario no válido
+     */
     static updatePasswordWithToken = async (req: Request, res: Response) => {
         try {
             const { token } = req.params;
@@ -260,6 +444,17 @@ export class AuthController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/auth/user:
+     *   get:
+     *     summary: Obtiene el usuario autenticado
+     *     tags:
+     *       - Auth
+     *     responses:
+     *       200:
+     *         description: Usuario autenticado
+     */
     static user = async (req:Request, res: Response) => {
         return res.json(req.user)
     }

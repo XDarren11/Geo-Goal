@@ -7,6 +7,7 @@ import morgan from 'morgan'
 import authRoutes from './routes/authRoutes'
 import leagueRoutes from './routes/leagueRoutes'
 import teamsRoutes from './routes/teamsRoutes'
+import { setupSwagger } from './config/swagger';
 
 dotenv.config()
 
@@ -27,5 +28,7 @@ app.use(express.json())  //esto es para que en el postman si mandamos algon en j
 app.use('/api/auth', authRoutes)
 app.use('/api/league', leagueRoutes)
 app.use('/api/teams', teamsRoutes)
+
+setupSwagger(app);
 
 export default app

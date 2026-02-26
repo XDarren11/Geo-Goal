@@ -5,6 +5,28 @@ import { Team } from "../models/Team"
 
 export class LeagueController {
 
+    /**
+     * @swagger
+     * /api/league:
+     *   post:
+     *     summary: Crea una nueva liga
+     *     tags:
+     *       - League
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               name:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Liga creada correctamente
+     *       500:
+     *         description: Error interno
+     */
     static createLeague = async(req:Request, res: Response) => {
         try {
             const league = new League(req.body)
@@ -16,6 +38,19 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league:
+     *   get:
+     *     summary: Obtiene todas las ligas del usuario
+     *     tags:
+     *       - League
+     *     responses:
+     *       200:
+     *         description: Lista de ligas
+     *       500:
+     *         description: Error interno
+     */
     static getAllLeagues = async(req:Request, res: Response) => {
         try {
             const leagues = await League.findAll({
@@ -27,12 +62,33 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}:
+     *   get:
+     *     summary: Obtiene una liga por ID
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Liga encontrada
+     *       404:
+     *         description: Liga no encontrada o no tienes acceso
+     *       500:
+     *         description: Error interno
+     */
     static getLeagueById = async (req: Request, res: Response) => {
         try {
             const { leagueId } = req.params;
 
             const league = await League.findOne({
-                where: { 
+                where: {
                     id: leagueId,
                     managerId: req.user!.id
                 },
@@ -50,6 +106,38 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}:
+     *   put:
+     *     summary: Actualiza una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               name:
+     *                 type: string
+     *               description:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Liga actualizada correctamente
+     *       404:
+     *         description: Liga no encontrada o no tienes permisos
+     *       500:
+     *         description: Error interno
+     */
     static updateLeague = async(req:Request, res: Response) => {
         try {
             const {leagueId} = req.params
@@ -72,6 +160,27 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}:
+     *   delete:
+     *     summary: Elimina una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Liga eliminada correctamente
+     *       404:
+     *         description: Liga no encontrada o no tienes permisos
+     *       500:
+     *         description: Error interno
+     */
     static deleteLegue = async(req:Request, res: Response) => {
         try {
             const {leagueId} = req.params
@@ -92,6 +201,36 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}/trainer-teams:
+     *   post:
+     *     summary: Obtiene equipos de un entrenador en una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               email:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Lista de equipos
+     *       404:
+     *         description: Liga o entrenador no encontrado
+     *       500:
+     *         description: Error interno
+     */
     static getTrainerTeams = async(req:Request, res: Response) => {
         try {
             const {leagueId} = req.params
@@ -126,6 +265,38 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}/add-team:
+     *   post:
+     *     summary: Agrega un equipo a una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               teamId:
+     *                 type: string
+     *     responses:
+     *       200:
+     *         description: Equipo agregado correctamente
+     *       404:
+     *         description: Liga o equipo no encontrado
+     *       409:
+     *         description: Equipo ya registrado en una liga
+     *       500:
+     *         description: Error interno
+     */
     static addTeamToLeague = async(req:Request, res: Response) => {
         try {
             const {leagueId} = req.params
@@ -158,12 +329,33 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}/teams:
+     *   get:
+     *     summary: Obtiene equipos de una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Lista de equipos
+     *       404:
+     *         description: Liga no encontrada o no tienes acceso
+     *       500:
+     *         description: Error interno
+     */
     static getTeamsLeague = async(req:Request, res: Response) => {
         try {
             const {leagueId} = req.params
 
             const league = await League.findOne({
-                where: { 
+                where: {
                     id: leagueId,
                     managerId: req.user!.id
                 },
@@ -186,6 +378,32 @@ export class LeagueController {
         }
     }
 
+    /**
+     * @swagger
+     * /api/league/{leagueId}/remove-team/{teamId}:
+     *   delete:
+     *     summary: Elimina un equipo de una liga
+     *     tags:
+     *       - League
+     *     parameters:
+     *       - in: path
+     *         name: leagueId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: path
+     *         name: teamId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Equipo eliminado de la liga correctamente
+     *       404:
+     *         description: Liga o equipo no encontrado
+     *       500:
+     *         description: Error interno
+     */
     static removeTeamFromLeague = async(req:Request, res: Response) => {
         try {
             const { leagueId, teamId } = req.params;

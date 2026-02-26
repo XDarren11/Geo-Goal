@@ -5,7 +5,49 @@ import path from 'path'; // Para manejar rutas
 import { User } from "../models/User";
 import { TeamMember } from "../models/TeamMember";
 
+/**
+ * @swagger
+ * /api/teams:
+ *   post:
+ *     summary: Crea un nuevo equipo
+ *     tags:
+ *       - Team
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               lat:
+ *                 type: number
+ *               lng:
+ *                 type: number
+ *               fieldAddress:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Equipo creado correctamente
+ *       500:
+ *         description: Error interno
+ */
+
 export class TeamController {
+    /**
+ * @swagger
+ * /api/teams:
+ *   get:
+ *     summary: Obtiene todos los equipos del entrenador
+ *     tags:
+ *       - Team
+ *     responses:
+ *       200:
+ *         description: Lista de equipos
+ *       500:
+ *         description: Error interno
+ */
     static getMyTeams = async (req:Request, res:Response) => {
         try {
             const teams = await Team.findAll({
@@ -18,6 +60,27 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}:
+ *   get:
+ *     summary: Obtiene un equipo por ID
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Equipo encontrado
+ *       404:
+ *         description: Equipo no encontrado
+ *       500:
+ *         description: Error interno
+ */
     static getTeamById = async (req:Request, res:Response) => {
         try {
             const {id} = req.params
@@ -36,6 +99,34 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams:
+ *   post:
+ *     summary: Crea un nuevo equipo
+ *     tags:
+ *       - Team
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               lat:
+ *                 type: number
+ *               lng:
+ *                 type: number
+ *               fieldAddress:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Equipo creado correctamente
+ *       500:
+ *         description: Error interno
+ */
     static createTeam = async (req:Request, res:Response) => {
         try {
             const {name, lat, lng, fieldAddress} = req.body
@@ -63,6 +154,42 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}:
+ *   put:
+ *     summary: Actualiza un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               lat:
+ *                 type: number
+ *               lng:
+ *                 type: number
+ *               fieldAddress:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Equipo actualizado correctamente
+ *       404:
+ *         description: Equipo no encontrado o no eres el DT
+ *       500:
+ *         description: Error interno
+ */
     static updateTeam = async (req:Request, res:Response) => {
         try {
 
@@ -97,6 +224,27 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}:
+ *   delete:
+ *     summary: Elimina un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Equipo eliminado correctamente
+ *       404:
+ *         description: Equipo no encontrado o no eres el DT
+ *       500:
+ *         description: Error interno
+ */
     static deleteTeam = async (req:Request, res:Response) => {
         try {
 
@@ -125,6 +273,36 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}/find-player:
+ *   post:
+ *     summary: Busca un jugador por email en un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Jugador encontrado
+ *       404:
+ *         description: Equipo o jugador no encontrado
+ *       500:
+ *         description: Error interno
+ */
     static findPlayer = async (req:Request, res:Response) => {
         try {
             const {id} = req.params
@@ -152,6 +330,38 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}/add-player:
+ *   post:
+ *     summary: Agrega un jugador a un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               playerId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Jugador agregado correctamente
+ *       404:
+ *         description: Equipo o jugador no encontrado
+ *       409:
+ *         description: Jugador ya forma parte de este equipo
+ *       500:
+ *         description: Error interno
+ */
     static addPlayerToTeam = async (req:Request, res:Response) => {
         try {
             const {id} = req.params
@@ -192,6 +402,27 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}/players:
+ *   get:
+ *     summary: Obtiene los jugadores de un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Lista de jugadores
+ *       404:
+ *         description: Equipo no encontrado o no eres el DT
+ *       500:
+ *         description: Error interno
+ */
     static getPlayersTeam = async (req:Request, res:Response) => {
         try {
             const { id } = req.params;
@@ -222,6 +453,32 @@ export class TeamController {
         }
     }
 
+    /**
+ * @swagger
+ * /api/teams/{id}/remove-player/{playerId}:
+ *   delete:
+ *     summary: Elimina un jugador de un equipo
+ *     tags:
+ *       - Team
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: playerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Jugador eliminado del equipo correctamente
+ *       404:
+ *         description: Equipo o jugador no encontrado
+ *       500:
+ *         description: Error interno
+ */
     static deletePlayerToTeam = async (req:Request, res:Response) => {
         try {
             const {id, playerId} = req.params
