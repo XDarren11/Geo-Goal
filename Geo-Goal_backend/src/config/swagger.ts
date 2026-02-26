@@ -12,7 +12,8 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3000/api',
+        //ajustar direccion
+        url: 'http://localhost:4000',
       },
     ],
   },
