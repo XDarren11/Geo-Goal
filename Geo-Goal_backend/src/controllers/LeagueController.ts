@@ -87,4 +87,10 @@ export class LeagueController {
     const data = await LeagueService.getLeagueFixture(id);
     res.json(data);
   };
+
+  static getFixtureWithLocations = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const data = await LeagueService.getFixtureWithLocations(id);
+    res.json(data);
+  };
 }

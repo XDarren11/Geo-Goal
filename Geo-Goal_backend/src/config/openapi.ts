@@ -393,13 +393,54 @@ export const openApiSpec = {
         responses: { "200": { description: "Fixture generado" }, "400": { description: "Menos de 2 equipos o tipo inválido" }, "404": { description: "Liga no encontrada" } },
       },
     },
+    "/api/league/{id}/fixture/locations": {
+      get: {
+        tags: ["Ligas - Fixture"],
+        summary: "Partidos con ubicación para el mapa",
+        description:
+          "Lista de partidos con datos de ubicación (lat, lng, fieldAddress del equipo local). Si un partido no tiene ubicación (equipo sin coordenadas), location es null: el front puede mostrar \"ubicación no disponible\". Si no hay partidos o ninguno tiene ubicación, devuelve [] (mostrar \"sin ubicaciones registradas\").",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "id", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": {
+            description: "Lista de partidos con ubicación",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "integer" },
+                      roundName: { type: "string" },
+                      date: { type: "string", nullable: true },
+                      homeTeamId: { type: "integer" },
+                      awayTeamId: { type: "integer" },
+                      homeTeamName: { type: "string" },
+                      awayTeamName: { type: "string" },
+                      location: {
+                        type: "object",
+                        nullable: true,
+                        properties: { lat: { type: "number" }, lng: { type: "number" }, fieldAddress: { type: "string", nullable: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     "/api/league/{id}/fixture": {
       get: {
         tags: ["Ligas - Fixture"],
         summary: "Obtener fixture de la liga",
+        description:
+          "Partidos agrupados por jornada. Cada partido incluye homeTeam y awayTeam con id, name, logoUrl, lat, lng, fieldAddress. Si un equipo no tiene coordenadas, esos campos serán null (front puede mostrar \"ubicación no disponible\").",
         security: [{ bearerAuth: [] }],
         parameters: [{ in: "path", name: "id", required: true, schema: { type: "integer" } }],
-        responses: { "200": { description: "Partidos agrupados por jornada" } },
+        responses: { "200": { description: "Partidos agrupados por jornada (objeto por nombre de jornada)" } },
       },
     },
     // ----- TEAMS -----

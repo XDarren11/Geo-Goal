@@ -367,6 +367,12 @@ router.post('/:id/calculate-fixture',
     asyncHandler(LeagueController.generateFixture)
 );
 
+router.get('/:id/fixture/locations',
+    param('id').isInt(),
+    handleInputError,
+    asyncHandler(LeagueController.getFixtureWithLocations)
+);
+
 router.get('/:id/fixture',
     param('id').isInt(),
     handleInputError,

@@ -191,8 +191,16 @@ export class LeagueService {
     const matches = await Match.findAll({
       where: { leagueId },
       include: [
-        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
-        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+        {
+          model: Team,
+          as: "homeTeam",
+          attributes: ["id", "name", "logoUrl", "lat", "lng", "fieldAddress"],
+        },
+        {
+          model: Team,
+          as: "awayTeam",
+          attributes: ["id", "name", "logoUrl", "lat", "lng", "fieldAddress"],
+        },
       ],
       order: [["roundName", "ASC"]],
     });
@@ -203,5 +211,58 @@ export class LeagueService {
       return acc;
     }, {});
     return groupedMatches;
+  }
+
+  /**
+   * Devuelve los partidos de la liga con ubicación para el mapa.
+   * Usa la ubicación del equipo local (homeTeam). Si no tiene lat/lng, location es null.
+   * Si no hay partidos, devuelve [] para que el front muestre "sin ubicaciones registradas".
+   */
+  static async getFixtureWithLocations(leagueId: string) {
+    const matches = await Match.findAll({
+      where: { leagueId },
+      include: [
+        {
+          model: Team,
+          as: "homeTeam",
+          attributes: ["id", "name", "lat", "lng", "fieldAddress"],
+        },
+        {
+          model: Team,
+          as: "awayTeam",
+          attributes: ["id", "name"],
+        },
+      ],
+      order: [["roundName", "ASC"], ["id", "ASC"]],
+    });
+
+    const list = matches.map((m) => {
+      const home = m.homeTeam as Team & { lat?: number; lng?: number; fieldAddress?: string };
+      const hasLocation =
+        home &&
+        home.lat != null &&
+        home.lng != null &&
+        !Number.isNaN(Number(home.lat)) &&
+        !Number.isNaN(Number(home.lng));
+
+      return {
+        id: m.id,
+        roundName: m.roundName,
+        date: m.date,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        homeTeamName: home?.name ?? "Local",
+        awayTeamName: (m as any).awayTeam?.name ?? "Visitante",
+        location: hasLocation
+          ? {
+              lat: Number(home.lat),
+              lng: Number(home.lng),
+              fieldAddress: home.fieldAddress ?? null,
+            }
+          : null,
+      };
+    });
+
+    return list;
   }
 }
