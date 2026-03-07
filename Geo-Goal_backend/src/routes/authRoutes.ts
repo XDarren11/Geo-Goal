@@ -2,86 +2,81 @@ import { Router } from "express";
 import { AuthController } from "../controllers/AuthController";
 import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
-import { authnticate } from "../middleware/auth";
+import { authenticate } from "../middleware/auth";
+import { asyncHandler } from "../middleware/asyncHandler";
 
-const router = Router()
+const router = Router();
 
-router.post('/create-account',
-    body('name')
-        .notEmpty().withMessage('El nombre no puede ir vacio'),
-    body('password')
-        .isLength({min: 8}).withMessage('La contraseña es muy corta, minimo 8 caracteres'),
-    body('password_confirmation').custom((value, {req}) => {
-        if(value !== req.body.password) {
-            throw new Error('Las contraseñas no son iguales')
-        }
-        return true
-    }),
-    body('email')
-        .isEmail().withMessage('E-mail no valido'),
-    body('role')
-        .notEmpty().withMessage('El rol es obligatorio')
-        .isIn(['coach', 'player', 'admin']).withMessage('Rol no es valido'),
-    handleInputError,
-    AuthController.createAccount
-)
+router.post(
+  "/create-account",
+  body("name").notEmpty().withMessage("El nombre no puede ir vacío"),
+  body("password")
+    .isLength({ min: 8 })
+    .withMessage("La contraseña es muy corta, mínimo 8 caracteres"),
+  body("password_confirmation").custom((value, { req }) => {
+    if (value !== req.body.password) throw new Error("Las contraseñas no coinciden");
+    return true;
+  }),
+  body("email").isEmail().withMessage("E-mail no válido"),
+  body("role")
+    .notEmpty().withMessage("El rol es obligatorio")
+    .isIn(["coach", "player", "admin"])
+    .withMessage("Rol no válido"),
+  handleInputError,
+  asyncHandler(AuthController.createAccount)
+);
 
-router.post('/confirm-account',
-    body('token')
-        .notEmpty().withMessage('El Token no puede ir vacio'),
-    handleInputError,
-    AuthController.confirmAccount
-)
+router.post(
+  "/confirm-account",
+  body("token").notEmpty().withMessage("El token no puede ir vacío"),
+  handleInputError,
+  asyncHandler(AuthController.confirmAccount)
+);
 
-router.post('/login',
-    body('email')
-        .isEmail().withMessage('E-mail no valido'),
-    body('password')
-        .notEmpty().withMessage('La contraseña no puede ir vacia'),
-    handleInputError,
-    AuthController.login
-)
+router.post(
+  "/login",
+  body("email").isEmail().withMessage("E-mail no válido"),
+  body("password").notEmpty().withMessage("La contraseña no puede ir vacía"),
+  handleInputError,
+  asyncHandler(AuthController.login)
+);
 
-router.post('/request-code',
-    body('email')
-        .isEmail().withMessage('E-mail no valido'),
-    handleInputError,
-    AuthController.requestConfirmationCode
-)
+router.post(
+  "/request-code",
+  body("email").isEmail().withMessage("E-mail no válido"),
+  handleInputError,
+  asyncHandler(AuthController.requestConfirmationCode)
+);
 
-router.post('/forgot-password',
-    body('email')
-        .isEmail().withMessage('E-mail no valido'),
-    handleInputError,
-    AuthController.forgotPassword
-)
+router.post(
+  "/forgot-password",
+  body("email").isEmail().withMessage("E-mail no válido"),
+  handleInputError,
+  asyncHandler(AuthController.forgotPassword)
+);
 
-router.post('/validate-token',
-    body('token')
-        .notEmpty().withMessage('El Token no puede ir vacio'),
-    handleInputError,
-    AuthController.validateToken
-)
+router.post(
+  "/validate-token",
+  body("token").notEmpty().withMessage("El token no puede ir vacío"),
+  handleInputError,
+  asyncHandler(AuthController.validateToken)
+);
 
-router.post('/update-password/:token',
-    param('token')
-        .isNumeric().withMessage('Token no valido'),
-    body('password')
-        .isLength({min: 8}).withMessage('La contraseña es muy corta, minimo 8 caracteres'),
-    body('password_confirmation').custom((value, {req}) => {
-        if(value !== req.body.password) {
-            throw new Error('Las contraseñas no son iguales')
-        }
-        return true
-    }),
-    handleInputError,
-    AuthController.updatePasswordWithToken
-)
+router.post(
+  "/update-password/:token",
+  param("token").isNumeric().withMessage("Token no válido"),
+  body("password")
+    .isLength({ min: 8 })
+    .withMessage("La contraseña es muy corta, mínimo 8 caracteres"),
+  body("password_confirmation").custom((value, { req }) => {
+    if (value !== req.body.password) throw new Error("Las contraseñas no coinciden");
+    return true;
+  }),
+  handleInputError,
+  asyncHandler(AuthController.updatePasswordWithToken)
+);
 
-router.get('/user',
-    authnticate,
-    AuthController.user
-)
+router.get("/user", authenticate, asyncHandler(AuthController.user));
 
 
 export default router
