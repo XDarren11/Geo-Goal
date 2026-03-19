@@ -5,6 +5,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { LeagueController } from "../controllers/LeagueController";
 import { asyncHandler } from "../middleware/asyncHandler";
+import { MatchController } from "../controllers/MatchController";
 
 const router = Router();
 
@@ -377,6 +378,24 @@ router.get('/:id/fixture',
     param('id').isInt(),
     handleInputError,
     asyncHandler(LeagueController.getLeagueFixture)
+);
+
+// 1. Actualizar Marcador (Admin)
+router.post('/matches/:matchId/result',
+    hasRole('admin'),
+    param('matchId').isInt(),
+    body('homeScore').isInt().withMessage('El marcador debe ser un número'),
+    body('awayScore').isInt().withMessage('El marcador debe ser un número'),
+    handleInputError,
+    MatchController.updateScore
+);
+
+// 2. Ver Tabla de Posiciones (Público o Autenticado)
+router.get('/:id/standings',
+    authenticate,
+    param('id').isInt(),
+    handleInputError,
+    LeagueController.getStandings
 );
 
 export default router

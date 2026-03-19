@@ -39,4 +39,30 @@ export class Team extends Model {
 
     @BelongsToMany(() => User, () => TeamMember)
     declare players: User[];
+
+    // --- ESTADÍSTICAS (TABLA DE POSICIONES) ---
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare points: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare gamesPlayed: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare wins: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare draws: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare losses: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare goalsFor: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare goalsAgainst: number;
+
+    @Column({ type: DataType.INTEGER, defaultValue: 0 })
+    declare goalDifference: number; // Diferencia de Goles
 }
