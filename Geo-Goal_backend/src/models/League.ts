@@ -1,8 +1,9 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasMany } from 'sequelize-typescript';
 import { Team } from './Team';
 import { User } from './User';
+import { TeamLeagueStat } from './TeamLeagueStat';
 
-@Table({ tableName: 'leagues' })
+@Table({ tableName: 'leagues', paranoid: true })
 export class League extends Model {
     @Column({ type: DataType.STRING, allowNull: false })
     declare name: string;
@@ -21,4 +22,7 @@ export class League extends Model {
     // Relación: Una liga tiene muchos equipos
     @HasMany(() => Team)
     declare teams: Team[];
+
+    @HasMany(() => TeamLeagueStat)
+    declare teamStats: TeamLeagueStat[];
 }

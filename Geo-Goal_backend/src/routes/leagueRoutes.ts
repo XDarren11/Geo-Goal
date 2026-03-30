@@ -1,15 +1,15 @@
 import { Router } from "express";
-import { authnticate } from "../middleware/auth";
+import { authenticate } from "../middleware/auth";
 import { hasRole } from "../middleware/role";
 import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { LeagueController } from "../controllers/LeagueController";
-import { TeamController } from "../controllers/TeamController";
-import { upload } from "../middleware/upload";
+import { asyncHandler } from "../middleware/asyncHandler";
+import { MatchController } from "../controllers/MatchController";
 
-const router = Router()
+const router = Router();
 
-router.use(authnticate)
+router.use(authenticate);
 
 /**
  * @swagger
@@ -50,7 +50,7 @@ router.post('/',
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
     handleInputError,
-    LeagueController.createLeague
+    asyncHandler(LeagueController.createLeague)
 )
 
 /**
@@ -82,7 +82,7 @@ router.post('/',
  */
 router.get('/',
     hasRole('admin'),
-    LeagueController.getAllLeagues
+    asyncHandler(LeagueController.getAllLeagues)
 )
 
 /**
@@ -121,7 +121,7 @@ router.get('/:leagueId',
     hasRole('admin'),
     param('leagueId').isInt().withMessage('ID no válido'),
     handleInputError,
-    LeagueController.getLeagueById
+    asyncHandler(LeagueController.getLeagueById)
 );
 
 /**
@@ -168,7 +168,7 @@ router.put('/:leagueId',
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
     handleInputError,
-    LeagueController.updateLeague
+    asyncHandler(LeagueController.updateLeague)
 )
 
 /**
@@ -196,7 +196,7 @@ router.delete('/:leagueId',
     hasRole('admin'),
     param('leagueId').isNumeric().withMessage('ID de la liga no valido'),
     handleInputError,
-    LeagueController.deleteLegue
+    asyncHandler(LeagueController.deleteLeague)
 )
 
 // BUSCAR, AGREGAR y ELIMINAR EQUIPOS A LA LIGA
@@ -240,7 +240,7 @@ router.post('/:leagueId/teams/find',
     param('leagueId').isNumeric().withMessage('ID de la liga no valido'),
     body('email').isEmail().withMessage('E-mail no valido'),
     handleInputError,
-    LeagueController.getTrainerTeams
+    asyncHandler(LeagueController.getTrainerTeams)
 )
 
 /**
@@ -322,7 +322,7 @@ router.get('/:leagueId/teams',
     hasRole('admin'),
     param('leagueId').isInt().withMessage('ID no válido'),
     handleInputError,
-    LeagueController.getTeamsLeague
+    asyncHandler(LeagueController.getTeamsLeague)
 )
 
 /**
@@ -357,7 +357,7 @@ router.delete('/:leagueId/teams/:teamId',
     param('leagueId').isNumeric().withMessage('ID de la liga no valido'),
     param('teamId').isNumeric().withMessage('El ID del equipo es obligatorio'),
     handleInputError,
-    LeagueController.removeTeamFromLeague
+    asyncHandler(LeagueController.removeTeamFromLeague)
 )
 
 router.post('/:id/calculate-fixture',
@@ -365,13 +365,55 @@ router.post('/:id/calculate-fixture',
     param('id').isInt(),
     body('type').isIn(['round-robin', 'knockout']).withMessage('Tipo inválido'),
     handleInputError,
-    LeagueController.generateFixture
+    asyncHandler(LeagueController.generateFixture)
+);
+
+router.get('/:id/fixture/locations',
+    param('id').isInt(),
+    handleInputError,
+    asyncHandler(LeagueController.getFixtureWithLocations)
 );
 
 router.get('/:id/fixture',
     param('id').isInt(),
     handleInputError,
-    LeagueController.getLeagueFixture
+    asyncHandler(LeagueController.getLeagueFixture)
 );
 
+// 1. Actualizar Marcador (Admin)
+router.post('/matches/:matchId/result',
+    hasRole('admin'),
+    param('matchId').isInt(),
+    body('homeScore').isInt().withMessage('El marcador debe ser un número'),
+    body('awayScore').isInt().withMessage('El marcador debe ser un número'),
+    body('homePenaltiesScore').optional().isInt(),
+    body('awayPenaltiesScore').optional().isInt(),
+    handleInputError,
+    MatchController.updateScore
+);
+
+// 2. Ver Tabla de Posiciones (Público o Autenticado)
+router.get('/:id/standings',
+    authenticate,
+    param('id').isInt(),
+    handleInputError,
+    LeagueController.getStandings
+);
+
+// Ver los resultados de las jornadas
+router.get('/:id/matches',
+    authenticate,
+    param('id').isNumeric().withMessage('ID de la liga no válido'),
+    handleInputError,
+    LeagueController.getLeagueMatches
+);
+
+// Reestructurar calendario a mitad de torneo (cuando entran o salen equipos)
+router.post('/:id/restructure-fixture',
+    authenticate,
+    hasRole('admin'),
+    param('id').isInt().withMessage('El ID de la liga no es válido'),
+    handleInputError,
+    LeagueController.restructureFixture
+);
 export default router

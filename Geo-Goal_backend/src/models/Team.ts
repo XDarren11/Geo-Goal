@@ -1,9 +1,10 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo, BelongsToMany } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, ForeignKey, BelongsTo, BelongsToMany, HasMany } from 'sequelize-typescript';
 import { User } from './User';
 import { League } from './League';
 import { TeamMember } from './TeamMember';
+import { TeamLeagueStat } from './TeamLeagueStat';
 
-@Table({ tableName: 'teams' })
+@Table({ tableName: 'teams'})
 export class Team extends Model {
     @Column({ type: DataType.STRING, allowNull: false })
     declare name: string;
@@ -39,4 +40,7 @@ export class Team extends Model {
 
     @BelongsToMany(() => User, () => TeamMember)
     declare players: User[];
+
+    @HasMany(() => TeamLeagueStat)
+    declare leagueStats: TeamLeagueStat[];
 }

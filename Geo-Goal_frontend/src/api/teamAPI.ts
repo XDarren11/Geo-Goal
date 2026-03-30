@@ -1,0 +1,89 @@
+import api from "@/lib/axios";
+import type { Team, Player } from "@/types";
+
+const BASE = "/teams";
+
+export async function getMyTeams(): Promise<Team[]> {
+  const { data } = await api.get<Team[]>(BASE);
+  return data;
+}
+
+export async function getTeamById(teamId: number): Promise<Team> {
+  const { data } = await api.get<Team>(`${BASE}/${teamId}`);
+  return data;
+}
+
+export async function createTeam(body: {
+  name: string;
+  lat: number;
+  lng: number;
+  fieldAddress: string;
+  logo?: File;
+}): Promise<string> {
+  const formData = new FormData();
+  formData.append("name", body.name);
+  formData.append("lat", String(body.lat));
+  formData.append("lng", String(body.lng));
+  formData.append("fieldAddress", body.fieldAddress);
+  if (body.logo) formData.append("logo", body.logo);
+  const { data } = await api.post<string>(BASE, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function updateTeam(
+  teamId: number,
+  body: {
+    name?: string;
+    lat?: number;
+    lng?: number;
+    fieldAddress?: string;
+    logo?: File;
+  }
+): Promise<string> {
+  const formData = new FormData();
+  if (body.name != null) formData.append("name", body.name);
+  if (body.lat != null) formData.append("lat", String(body.lat));
+  if (body.lng != null) formData.append("lng", String(body.lng));
+  if (body.fieldAddress != null) formData.append("fieldAddress", body.fieldAddress);
+  if (body.logo) formData.append("logo", body.logo);
+  const { data } = await api.put<string>(`${BASE}/${teamId}`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function deleteTeam(teamId: number): Promise<string> {
+  const { data } = await api.delete<string>(`${BASE}/${teamId}`);
+  return data;
+}
+
+export async function findPlayer(teamId: number, email: string): Promise<Player> {
+  const { data } = await api.post<Player>(`${BASE}/${teamId}/player/find`, { email });
+  return data;
+}
+
+export async function addPlayerToTeam(teamId: number, playerId: number): Promise<string> {
+  const { data } = await api.post<string>(`${BASE}/${teamId}/player`, { playerId });
+  return data;
+}
+
+export async function getPlayersTeam(teamId: number): Promise<Player[]> {
+  const { data } = await api.get<Player[]>(`${BASE}/${teamId}/player`);
+  return data;
+}
+
+export async function removePlayerFromTeam(
+  teamId: number,
+  playerId: number
+): Promise<string> {
+  const { data } = await api.delete<string>(`${BASE}/${teamId}/player/${playerId}`);
+  return data;
+}
+
+export function teamLogoUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+}
