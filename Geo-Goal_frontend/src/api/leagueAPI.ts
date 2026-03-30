@@ -81,3 +81,43 @@ export function leagueLogoUrl(path: string | null | undefined): string {
   const base = import.meta.env.VITE_API_URL || "";
   return `${base.replace(/\/$/, "")}/uploads/${path}`;
 }
+
+
+
+export const updateMatchScore = async (
+  matchId: number, 
+  homeScore: number, 
+  awayScore: number,
+  homePenaltiesScore?: number,
+  awayPenaltiesScore?: number 
+) => {
+  const payload: any = { 
+    homeScore: Number(homeScore), 
+    awayScore: Number(awayScore) 
+  };
+  
+  if (homePenaltiesScore !== undefined && !isNaN(homePenaltiesScore)) {
+    payload.homePenaltiesScore = Number(homePenaltiesScore);
+  }
+  if (awayPenaltiesScore !== undefined && !isNaN(awayPenaltiesScore)) {
+    payload.awayPenaltiesScore = Number(awayPenaltiesScore);
+  }
+
+  const { data } = await api.post(`${BASE}/matches/${matchId}/result`, payload);
+  return data;
+};
+
+export const getStandings = async (leagueId: number) => {
+  const { data } = await api.get(`${BASE}/${leagueId}/standings`); 
+  return data;
+};
+
+export const restructureFixture = async (leagueId: number) => {
+  const { data } = await api.post(`${BASE}/${leagueId}/restructure-fixture`);
+  return data;
+};
+
+export const getLeagueMatches = async (leagueId: number) => {
+  const { data } = await api.get(`${BASE}/${leagueId}/matches`);
+  return data;
+};

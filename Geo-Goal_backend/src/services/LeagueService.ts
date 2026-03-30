@@ -49,16 +49,26 @@ export class LeagueService {
     return `Liga: ${league.name} actualizada correctamente`;
   }
 
-  static async deleteLeague(leagueId: string, managerId: number): Promise<string> {
+static async deleteLeague(leagueId: string, managerId: number): Promise<string> {
+    
     const league = await League.findOne({
       where: { id: leagueId, managerId },
     });
+
     if (!league) {
       throw new AppError(404, "Liga no encontrada o no tienes permisos");
     }
+
     const name = league.name;
+
+    await Team.update(
+      { leagueId: null }, 
+      { where: { leagueId: leagueId } }
+    );
+
     await league.destroy();
-    return `Liga: ${name} eliminada correctamente`;
+
+    return `Liga: ${name} finalizada. El historial se guardó y los equipos fueron liberados.`;
   }
 
   static async getTrainerTeams(
@@ -82,28 +92,28 @@ export class LeagueService {
     });
   }
 
-  static async addTeamToLeague(
-    leagueId: string,
-    managerId: number,
-    teamId: number
-  ): Promise<string> {
-    const league = await League.findOne({
-      where: { id: leagueId, managerId },
-    });
-    if (!league) {
-      throw new AppError(404, "Liga no encontrada o no tienes permisos");
-    }
-    const team = await Team.findByPk(teamId);
-    if (!team) {
-      throw new AppError(404, "Equipo no encontrado");
-    }
-    if (team.leagueId) {
-      throw new AppError(409, "Este equipo ya está registrado en una liga");
-    }
-    team.leagueId = league.id;
-    await team.save();
-    return `El equipo "${team.name}" se agregó correctamente`;
-  }
+  // static async addTeamToLeague(
+  //   leagueId: string,
+  //   managerId: number,
+  //   teamId: number
+  // ): Promise<string> {
+  //   const league = await League.findOne({
+  //     where: { id: leagueId, managerId },
+  //   });
+  //   if (!league) {
+  //     throw new AppError(404, "Liga no encontrada o no tienes permisos");
+  //   }
+  //   const team = await Team.findByPk(teamId);
+  //   if (!team) {
+  //     throw new AppError(404, "Equipo no encontrado");
+  //   }
+  //   if (team.leagueId) {
+  //     throw new AppError(409, "Este equipo ya está registrado en una liga");
+  //   }
+  //   team.leagueId = league.id;
+  //   await team.save();
+  //   return `El equipo "${team.name}" se agregó correctamente`;
+  // }
 
   static async getTeamsLeague(leagueId: string, managerId: number) {
     const league = await League.findOne({

@@ -281,7 +281,7 @@ router.post('/:leagueId/teams',
     param('leagueId').isNumeric().withMessage('ID de la liga no valido'),
     body('teamId').isNumeric().withMessage('El ID del equipo es obligatorio'),
     handleInputError,
-    asyncHandler(LeagueController.addTeamToLeague)
+    LeagueController.addTeamToLeague
 )
 
 /**
@@ -386,6 +386,8 @@ router.post('/matches/:matchId/result',
     param('matchId').isInt(),
     body('homeScore').isInt().withMessage('El marcador debe ser un número'),
     body('awayScore').isInt().withMessage('El marcador debe ser un número'),
+    body('homePenaltiesScore').optional().isInt(),
+    body('awayPenaltiesScore').optional().isInt(),
     handleInputError,
     MatchController.updateScore
 );
@@ -398,4 +400,20 @@ router.get('/:id/standings',
     LeagueController.getStandings
 );
 
+// Ver los resultados de las jornadas
+router.get('/:id/matches',
+    authenticate,
+    param('id').isNumeric().withMessage('ID de la liga no válido'),
+    handleInputError,
+    LeagueController.getLeagueMatches
+);
+
+// Reestructurar calendario a mitad de torneo (cuando entran o salen equipos)
+router.post('/:id/restructure-fixture',
+    authenticate,
+    hasRole('admin'),
+    param('id').isInt().withMessage('El ID de la liga no es válido'),
+    handleInputError,
+    LeagueController.restructureFixture
+);
 export default router

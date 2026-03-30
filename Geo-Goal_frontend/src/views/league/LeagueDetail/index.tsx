@@ -7,6 +7,7 @@ import {
   addTeamToLeague,
   getTrainerTeams,
   removeTeamFromLeague,
+  restructureFixture
 } from "@/api/leagueAPI";
 import { useState } from "react";
 import { toast } from "react-toastify";
@@ -16,17 +17,23 @@ import {
   CalendarDaysIcon,
   PlusIcon,
   TrashIcon,
+  PencilSquareIcon,
+  ExclamationTriangleIcon
 } from "@heroicons/react/24/outline";
+import UpdateScoreModal from "@/components/Modals/UpdateScoreModal";
 
 export default function LeagueDetailView() {
   const { leagueId } = useParams<{ leagueId: string }>();
   const id = Number(leagueId);
   const queryClient = useQueryClient();
+
   const [trainerEmail, setTrainerEmail] = useState("");
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [trainerTeams, setTrainerTeams] = useState<{ id: number; name: string }[]>([]);
   const [searchingTrainer, setSearchingTrainer] = useState(false);
   const [, setSelectedTeamId] = useState<number | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
+  const [needsRestructure, setNeedsRestructure] = useState(false);
 
   const { data: league, isLoading } = useQuery({
     queryKey: ["league", id],
@@ -40,6 +47,7 @@ export default function LeagueDetailView() {
     enabled: Number.isInteger(id),
   });
 
+
   const addTeamMutation = useMutation({
     mutationFn: ({ teamId }: { teamId: number }) => addTeamToLeague(id, teamId),
     onSuccess: () => {
@@ -49,6 +57,7 @@ export default function LeagueDetailView() {
       setTrainerTeams([]);
       setSelectedTeamId(null);
       toast.success("Equipo agregado a la liga");
+      setNeedsRestructure(true);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -58,6 +67,7 @@ export default function LeagueDetailView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["league", id] });
       toast.success("Equipo quitado de la liga");
+      setNeedsRestructure(true);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -67,6 +77,17 @@ export default function LeagueDetailView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fixture", id] });
       toast.success("Fixture generado");
+      setNeedsRestructure(false)
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const restructureMutation = useMutation({
+    mutationFn: () => restructureFixture(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fixture", id] });
+      toast.success("Calendario reestructurado exitosamente");
+      setNeedsRestructure(false); 
     },
     onError: (e) => toast.error(e.message),
   });
@@ -218,6 +239,24 @@ export default function LeagueDetailView() {
           <CalendarDaysIcon className="h-5 w-5 text-geo-green" />
           Calendario de partidos
         </h2>
+        {needsRestructure && (
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 text-yellow-500 flex-shrink-0" />
+              <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                Se detectaron cambios en los equipos. Es necesario reestructurar el calendario para incluir las nuevas jornadas.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => restructureMutation.mutate()}
+              disabled={restructureMutation.isPending}
+              className="whitespace-nowrap rounded-lg bg-yellow-500 px-4 py-2 text-sm font-bold text-black hover:bg-yellow-400 disabled:opacity-60"
+            >
+              {restructureMutation.isPending ? "Aplicando..." : "Reestructurar ahora"}
+            </button>
+          </div>
+        )}
         {teams.length < 2 ? (
           <p className="mt-4 text-[var(--geo-text-muted)]">
             Necesitas al menos 2 equipos para generar el fixture.
@@ -255,14 +294,31 @@ export default function LeagueDetailView() {
                           key={m.id}
                           className="flex items-center justify-between rounded border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm"
                         >
-                          <span className="text-[var(--geo-text)]">
-                            {m.homeTeam?.name ?? "Local"} vs {m.awayTeam?.name ?? "Visitante"}
-                          </span>
-                          {m.played && (
-                            <span className="font-mono text-geo-green">
-                              {m.homeScore} - {m.awayScore}
+                          <div className="flex-1">
+                            <span className="text-[var(--geo-text)]">
+                              {m.homeTeam?.name ?? "Local"} vs {m.awayTeam?.name ?? "Visitante"}
                             </span>
-                          )}
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            {/* Mostramos el marcador actual si ya se jugó */}
+                            {m.played ? (
+                               <span className="font-mono text-geo-green font-bold">
+                                 {m.homeScore} - {m.awayScore}
+                               </span>
+                            ) : (
+                               <span className="text-zinc-500 text-xs italic">Pendiente</span>
+                            )}
+
+                            {/* NUEVO: Botón para abrir el modal y actualizar el resultado */}
+                            <button
+                              onClick={() => setSelectedMatch(m)}
+                              className="text-zinc-400 hover:text-geo-green transition-colors"
+                              title="Actualizar Resultado"
+                            >
+                              <PencilSquareIcon className="h-5 w-5" />
+                            </button>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -277,6 +333,14 @@ export default function LeagueDetailView() {
           </>
         )}
       </div>
+
+      {/* Renderizamos el modal al final */}
+      <UpdateScoreModal
+        isOpen={!!selectedMatch}
+        match={selectedMatch}
+        leagueId={id}
+        onClose={() => setSelectedMatch(null)}
+      />
     </div>
   );
 }

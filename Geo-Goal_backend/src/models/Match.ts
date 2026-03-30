@@ -41,6 +41,12 @@ export class Match extends Model {
     @Column({ type: DataType.INTEGER, defaultValue: 0 })
     declare awayScore: number;
 
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare homePenaltiesScore: number;
+
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare awayPenaltiesScore: number;
+
     @Column({ type: DataType.BOOLEAN, defaultValue: false })
     declare played: boolean;
 }

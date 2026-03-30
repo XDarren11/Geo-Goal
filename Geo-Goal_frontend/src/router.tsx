@@ -25,6 +25,8 @@ import MyTeamsView from "@/views/team/MyTeams";
 import StandingsView from "@/views/shared/Standings";
 import ResultsView from "@/views/shared/Results";
 import NewsView from "@/views/shared/News";
+import StandingsTableView from "./views/shared/Standings/StandingsTableView";
+import LeagueMatchesView from "./views/shared/Results/LeagueMatchesView";
 
 export default function Router() {
   return (
@@ -116,7 +118,15 @@ export default function Router() {
           />
 
           <Route path="/standings" element={<StandingsView />} />
+          <Route path="/league/:leagueId/standings" element={<StandingsTableView />} />
+          
           <Route path="/results" element={<ResultsView />} />
+
+          <Route path="/leagues/:leagueId/results" element={
+              <LeagueMatchesView />
+            }
+          />
+
           <Route path="/news" element={<NewsView />} />
         </Route>
 
