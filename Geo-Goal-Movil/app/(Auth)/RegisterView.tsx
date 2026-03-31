@@ -44,7 +44,7 @@ export default function RegisterView() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
             style={{ flex: 1 }}
         >
-            <View className="flex-1 bg-[#0ED000]">
+            <View className="flex-1 bg-geo-green">
                 <StatusBar barStyle="default"/>
 
                 <ScrollView 
@@ -54,16 +54,16 @@ export default function RegisterView() {
                 >
                     {/* Header */}
                     <View className="pt-16 pb-10 justify-center items-center">
-                        <Text className="text-black text-4xl font-bold tracking-wider">
+                        <Text className="text-geo-black text-4xl font-bold tracking-wider">
                             Regístrate
                         </Text>
                     </View>
 
-                    <View className="flex-1 bg-black rounded-t-[60px] px-8 pt-12 pb-40 justify-start">
+                    <View className="flex-1 bg-geo-black rounded-t-[60px] px-8 pt-12 pb-40 justify-start">
 
                         {/* --- Input: Nombre --- */}
                         <View className="mb-6">
-                            <Text className="text-[#0ED000] font-bold mb-2 ml-5">Nombre del Usuario</Text>
+                            <Text className="text-geo-green font-bold mb-2 ml-5">Nombre del Usuario</Text>
                             <Controller
                                 control={control}
                                 name="name"
@@ -75,7 +75,7 @@ export default function RegisterView() {
                                         onBlur={onBlur}
                                         onChangeText={onChange}
                                         value={value}
-                                        className={`bg-[#E8F7E6] rounded-full py-4 px-6 text-black text-lg ${errors.name ? 'border-2 border-red-500' : ''}`}
+                                        className={`bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30 ${errors.name ? 'border-2 border-red-500' : ''}`}
                                     />
                                 )}
                             />
@@ -84,7 +84,7 @@ export default function RegisterView() {
 
                         {/* --- Input: Email --- */}
                         <View className="mb-6">
-                            <Text className="text-[#0ED000] font-bold mb-2 ml-5">Email</Text>
+                            <Text className="text-geo-green font-bold mb-2 ml-5">Email</Text>
                             <Controller
                                 control={control}
                                 name="email"
@@ -101,7 +101,7 @@ export default function RegisterView() {
                                         onBlur={onBlur}
                                         onChangeText={onChange}
                                         value={value}
-                                        className={`bg-[#E8F7E6] rounded-full py-4 px-6 text-black text-lg ${errors.email ? 'border-2 border-red-500' : ''}`}
+                                        className={`bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30 ${errors.email ? 'border-2 border-red-500' : ''}`}
                                     />
                                 )}
                             />
@@ -110,13 +110,13 @@ export default function RegisterView() {
 
                         {/* --- Input: Password --- */}
                         <View className="mb-6">
-                            <Text className="text-[#0ED000] font-bold mb-2 ml-5">Contraseña</Text>
+                            <Text className="text-geo-green font-bold mb-2 ml-5">Contraseña</Text>
                             <Controller
                                 control={control}
                                 name="password"
                                 rules={{ required: "El Password es obligatorio", minLength: { value: 8, message: 'Mínimo 8 caracteres' } }}
                                 render={({ field: { onChange, onBlur, value } }) => (
-                                    <View className={`flex-row items-center bg-[#E8F7E6] rounded-full px-6 py-1 ${errors.password ? 'border-2 border-red-500' : ''}`}>
+                                    <View className={`flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30 ${errors.password ? 'border-2 border-red-500' : ''}`}>
                                         <TextInput
                                             placeholder="••••••••"
                                             placeholderTextColor="#888"
@@ -124,10 +124,10 @@ export default function RegisterView() {
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value}
-                                            className="flex-1 text-black text-lg py-3"
+                                            className="flex-1 text-white text-lg py-3"
                                         />
                                         <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                                            <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="gray" />
+                                            <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#39FF14" />
                                         </TouchableOpacity>
                                     </View>
                                 )}
@@ -137,13 +137,13 @@ export default function RegisterView() {
 
                         {/* --- Input: Confirm Password --- */}
                         <View className="mb-8">
-                            <Text className="text-[#0ED000] font-bold mb-2 ml-5">Confirmar Contraseña</Text>
+                            <Text className="text-geo-green font-bold mb-2 ml-5">Confirmar Contraseña</Text>
                             <Controller
                                 control={control}
                                 name="password_confirmation"
                                 rules={{ required: "Repetir Password es obligatorio", validate: value => value === password || 'Los Passwords no coinciden' }}
                                 render={({ field: { onChange, onBlur, value } }) => (
-                                    <View className={`flex-row items-center bg-[#E8F7E6] rounded-full px-6 py-1 ${errors.password_confirmation ? 'border-2 border-red-500' : ''}`}>
+                                    <View className={`flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30 ${errors.password_confirmation ? 'border-2 border-red-500' : ''}`}>
                                         <TextInput
                                             placeholder="••••••••"
                                             placeholderTextColor="#888"
@@ -151,7 +151,7 @@ export default function RegisterView() {
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value}
-                                            className="flex-1 text-black text-lg py-3"
+                                            className="flex-1 text-white text-lg py-3"
                                         />
                                     </View>
                                 )}
@@ -162,21 +162,21 @@ export default function RegisterView() {
                         {/* --- Botones --- */}
                         <View className="justify-center items-center">
                             <TouchableOpacity
-                                className={`bg-[#0ED000] w-3/5 py-4 rounded-full items-center mt-2 shadow-lg shadow-green-900 ${isPending ? 'opacity-50' : ''}`}
+                                className={`bg-geo-green w-3/5 py-4 rounded-xl items-center mt-2 shadow-lg shadow-geo-green/50 ${isPending ? 'opacity-50' : ''}`}
                                 onPress={handleSubmit(handleRegister)}
                                 disabled={isPending}
                             >
-                                {isPending ? <ActivityIndicator color="black" /> : <Text className="text-black font-bold text-2xl">Regístrate</Text>}
+                                {isPending ? <ActivityIndicator color="#0a0a0a" /> : <Text className="text-geo-black font-bold text-2xl">Regístrate</Text>}
                             </TouchableOpacity>
 
                             <TouchableOpacity className="mt-8 py-2" onPress={() => router.push('/(Auth)/login')}>
-                                <Text className="text-[#0ED000] font-bold text-lg text-center">
+                                <Text className="text-geo-green font-bold text-lg text-center">
                                     ¿Ya tienes cuenta? Inicia sesión
                                 </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity className="mt-4 py-2" onPress={() => router.push('/(Auth)/ForgotPasswordView')}>
-                                <Text className="text-[#0ED000] font-bold text-lg text-center">
+                                <Text className="text-geo-green font-bold text-lg text-center">
                                     ¿Has olvidado tu contraseña?
                                 </Text>
                             </TouchableOpacity>
