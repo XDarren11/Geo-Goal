@@ -17,7 +17,7 @@ export default function DashboardView() {
   const role = (user?.role as Role) || "player";
 
   return (
-    <div className="min-h-[60vh]">
+    <div className="min-h-full w-full">
       <h1 className="font-geo text-4xl lg:text-5xl tracking-wide text-[var(--geo-text)] opacity-0 animate-in-up">
         Hola, {user?.name}
       </h1>
