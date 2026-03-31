@@ -27,6 +27,7 @@ import ResultsView from "@/views/shared/Results";
 import NewsView from "@/views/shared/News";
 import StandingsTableView from "./views/shared/Standings/StandingsTableView";
 import LeagueMatchesView from "./views/shared/Results/LeagueMatchesView";
+import TeamDashboardView from "./views/league/JoinLeague/TeamDashboardView";
 
 export default function Router() {
   return (
@@ -126,6 +127,8 @@ export default function Router() {
               <LeagueMatchesView />
             }
           />
+
+          <Route path="/leagues/:leagueId/teams/:teamId/dashboard" element={<TeamDashboardView />} />
 
           <Route path="/news" element={<NewsView />} />
         </Route>

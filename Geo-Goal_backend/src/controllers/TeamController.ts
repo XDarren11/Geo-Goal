@@ -1,5 +1,9 @@
 import type { Request, Response } from "express";
 import { TeamService } from "../services/TeamService";
+import { League } from "../models/League";
+import { Team } from "../models/Team";
+import { Match } from "../models/Match";
+import { Op } from 'sequelize';
 
 /**
  * Handlers de equipos: extraen params/body y user (y file si hay upload), llaman al servicio.
@@ -78,4 +82,93 @@ export class TeamController {
     );
     res.send(result);
   };
+
+  static getCoachActiveLeagues = async (req: Request, res: Response) => {
+    try {
+        const leagues = await League.findAll({
+            include: [
+                {
+                    model: Team,
+                    where: { trainerId: req.user.id }, 
+                    attributes: ['id', 'name', 'logoUrl'] 
+                }
+            ],
+            order: [['createdAt', 'DESC']]
+        });
+
+        res.json(leagues);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: 'Hubo un error al obtener tus ligas activas' });
+    }
+  }
+
+  static getTeamDashboard = async (req: Request, res: Response) => {
+    try {
+        const { leagueId, teamId } = req.params;
+
+        const upcomingMatches = await Match.findAll({
+            where: {
+                leagueId,
+                played: false,
+                [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }]
+            },
+            include: [
+                { model: Team, as: 'homeTeam', attributes: ['id', 'name', 'logoUrl'] },
+                { model: Team, as: 'awayTeam', attributes: ['id', 'name', 'logoUrl'] }
+            ],
+            order: [['roundName', 'ASC']], // Ordenamos de la jornada más próxima en adelante
+            limit: 3
+        });
+
+        const lastMatches = await Match.findAll({
+            where: {
+                leagueId,
+                played: true,
+                [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }]
+            },
+            include: [
+                { model: Team, as: 'homeTeam', attributes: ['id', 'name', 'logoUrl'] },
+                { model: Team, as: 'awayTeam', attributes: ['id', 'name', 'logoUrl'] }
+            ],
+            order: [['updatedAt', 'DESC']], // Los más recientes primero
+            limit: 3
+        });
+
+        const allPlayedMatches = await Match.findAll({
+            where: {
+                leagueId,
+                played: true,
+                [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }]
+            },
+            order: [['id', 'ASC']] 
+        });
+
+        const chartData = allPlayedMatches.map(match => {
+            const isHome = match.homeTeamId === Number(teamId);
+            
+            const gf = isHome ? match.homeScore : match.awayScore;
+            const gc = isHome ? match.awayScore : match.homeScore;
+
+            const roundLabel = match.roundName.replace('Jornada ', 'J');
+
+            return {
+                round: roundLabel, // Ej: "J1"
+                gf: gf,            // Ej: 3
+                gc: gc             // Ej: 0
+            };
+        });
+
+        res.json({
+            upcomingMatches,
+            lastMatches,
+            chartData
+        });
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: 'Error al obtener el dashboard del equipo' });
+    }
+  }
 }

@@ -102,8 +102,7 @@ export const updateMatchScore = async (
   if (awayPenaltiesScore !== undefined && !isNaN(awayPenaltiesScore)) {
     payload.awayPenaltiesScore = Number(awayPenaltiesScore);
   }
-
-  const { data } = await api.post(`${BASE}/matches/${matchId}/result`, payload);
+  const { data } = await api.post(`/league/matches/${matchId}/result`, payload);
   return data;
 };
 

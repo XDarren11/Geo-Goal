@@ -84,4 +84,19 @@ router.delete(
   asyncHandler(TeamController.deletePlayerToTeam)
 );
 
+router.get('/leagues/coach/active',
+    authenticate,
+    hasRole("coach"),
+    handleInputError,
+    TeamController.getCoachActiveLeagues
+);
+
+router.get('/leagues/:leagueId/teams/:teamId/dashboard',
+    authenticate,
+    param('leagueId').isInt(),
+    param('teamId').isInt(),
+    handleInputError,
+    TeamController.getTeamDashboard
+);
+
 export default router;

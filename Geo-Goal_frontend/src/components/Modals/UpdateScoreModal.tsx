@@ -15,7 +15,11 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
   
   const [homeScore, setHomeScore] = useState<number | string>(match?.homeScore ?? "");
   const [awayScore, setAwayScore] = useState<number | string>(match?.awayScore ?? "");
-  const [hasTieBreaker, setHasTieBreaker] = useState(false);
+  
+  const [hasTieBreaker, setHasTieBreaker] = useState<boolean>(
+    match?.homePenaltiesScore !== null && match?.homePenaltiesScore !== undefined
+  );
+  
   const [homePenalties, setHomePenalties] = useState<number | string>(match?.homePenaltiesScore ?? "");
   const [awayPenalties, setAwayPenalties] = useState<number | string>(match?.awayPenaltiesScore ?? "");
 
@@ -30,13 +34,11 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
       setAwayScore(match.awayScore ?? "");
       setHomePenalties(match.homePenaltiesScore ?? "");
       setAwayPenalties(match.awayPenaltiesScore ?? "");
-      setHasTieBreaker(match.homePenaltiesScore != null || match.awayPenaltiesScore != null);
+      
+      const teniaPenales = match.homePenaltiesScore !== null && match.homePenaltiesScore !== undefined;
+      setHasTieBreaker(teniaPenales);
     }
   }, [match]);
-
-  useEffect(() => {
-    if (!isDraw) setHasTieBreaker(false);
-  }, [isDraw]);
 
   const updateScoreMutation = useMutation({
     mutationFn: () => updateMatchScore(
@@ -154,8 +156,14 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
           </button>
           <button
             onClick={() => updateScoreMutation.mutate()}
-            disabled={isAlreadyPlayed || updateScoreMutation.isPending || homeScore === "" || awayScore === ""}
-            className="rounded-lg bg-geo-green px-6 py-2 text-sm font-black text-black transition-colors hover:bg-geo-green-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={
+              isAlreadyPlayed || 
+              updateScoreMutation.isPending || 
+              homeScore === "" || 
+              awayScore === "" || 
+              (isDraw && hasTieBreaker && (homePenalties === "" || awayPenalties === ""))
+            }
+            className="rounded-lg bg-geo-green px-6 py-2 text-sm font-black tex t-black transition-colors hover:bg-geo-green-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {updateScoreMutation.isPending ? "Guardando..." : "Guardar"}
           </button>

@@ -67,8 +67,8 @@ export default function DashboardView() {
                 <KeyIcon className="h-8 w-8 text-geo-green" />
               </div>
               <div>
-                <h2 className="font-geo text-xl tracking-wide text-[var(--geo-text)]">Unirse a liga</h2>
-                <p className="text-sm text-[var(--geo-text-muted)]">Con token del organizador</p>
+                <h2 className="font-geo text-xl tracking-wide text-[var(--geo-text)]">Mis liga</h2>
+                <p className="text-sm text-[var(--geo-text-muted)]">Vizualiza las ligas</p>
               </div>
             </Link>
             <Link to="/teams" className={`${cardClass} stagger-3`}>

@@ -87,3 +87,13 @@ export function teamLogoUrl(path: string | null | undefined): string {
   const base = import.meta.env.VITE_API_URL || "";
   return `${base.replace(/\/$/, "")}/uploads/${path}`;
 }
+
+export const getActiveLeagues = async () => {
+  const { data } = await api.get(`${BASE}/leagues/coach/active`);
+  return data;
+};
+
+export const getTeamDashboard = async (leagueId: number, teamId: number) => {
+  const { data } = await api.get(`${BASE}/leagues/${leagueId}/teams/${teamId}/dashboard`);
+  return data;
+};
