@@ -25,9 +25,9 @@ export default function AppLayout() {
 
   if (data)
     return (
-      <>
+      <div className="min-h-screen w-full flex flex-col">
         <header className="sticky top-0 z-30 border-b-4 border-geo-green bg-white/95 py-3 px-4 lg:px-20 pitch-stripes-strong shadow-lg shadow-black/5 backdrop-blur-sm dark:bg-geo-black/95 dark:shadow-none">
-          <div className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
+          <div className="w-full flex flex-col lg:flex-row justify-between items-center gap-4">
             <Link
               className="flex items-center gap-3 transition-all duration-200 hover:opacity-90 hover:scale-[1.02]"
               to="/"
@@ -57,8 +57,8 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <section className="min-h-[60vh] bg-[var(--geo-bg)] pitch-stripes transition-colors duration-300">
-          <div className="max-w-screen-2xl mx-auto py-8 px-4 lg:px-6">
+        <section className="flex-1 bg-[var(--geo-bg)] pitch-stripes transition-colors duration-300">
+          <div className="w-full h-full py-8 px-4 lg:px-6">
             <Outlet />
           </div>
         </section>
@@ -76,7 +76,7 @@ export default function AppLayout() {
           toastClassName="!bg-[var(--geo-bg-card)] !text-[var(--geo-text)] !border-2 !border-geo-green/50 !rounded-xl !shadow-lg"
           progressClassName="!bg-geo-green"
         />
-      </>
+      </div>
     );
 
   return null;

@@ -39,12 +39,11 @@ export async function requestConfirmationCode(formData: RequestConfirmationCodeF
     }
 }
 
-export async function authenticateUser(formData: RequestConfirmationCodeForm) {
+export async function authenticateUser(formData: UserRegistrationForm | RequestConfirmationCodeForm) {
     try {
         const url = '/auth/login';
         const { data } = await api.post<string>(url, formData);
         
-        // 2. CAMBIO CLAVE: Usamos await AsyncStorage.setItem en lugar de localStorage
         await AsyncStorage.setItem('AUTH_TOKEN', data);
         
         return data;
@@ -52,6 +51,7 @@ export async function authenticateUser(formData: RequestConfirmationCodeForm) {
         if (isAxiosError(error) && error.response) {
             throw new Error(error.response.data.error);
         }
+        throw error;
     }
 }
 
@@ -93,16 +93,25 @@ export async function updatePasswordWithToken({ formData, token }: { formData: N
 
 export async function getUser() {
     try {
-        // Axios interceptor (configurado previamente) inyectará el token aquí
         const { data } = await api.get('/auth/user');
         
         const response = userSchema.safeParse(data);
         if (response.success) {
             return response.data;
         }
+        throw new Error('Invalid user data');
     } catch (error) {
         if (isAxiosError(error) && error.response) {
             throw new Error(error.response.data.error);
         }
+        throw error;
+    }
+}
+
+export async function logout() {
+    try {
+        await AsyncStorage.removeItem('AUTH_TOKEN');
+    } catch (error) {
+        console.error("Error al cerrar sesión", error);
     }
 }
