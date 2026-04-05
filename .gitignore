@@ -1,0 +1,12 @@
+node_modules/
+dist/
+package-lock.json
+package.json
+compiler.xml
+copilot.data.migration.ask2agent.xml
+.idea/
+.vscode/
+.DS_Store
+vcs.xml
+workspace.xml
+Project_Default.xml

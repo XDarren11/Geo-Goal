@@ -28,3 +28,46 @@ export const userSchema = authSchema.pick({
 })
 
 export type User = z.infer<typeof userSchema>
+
+export type Role = 'admin' | 'coach' | 'player'
+
+export interface League {
+  id: number
+  name: string
+  description?: string
+  managerId?: number
+  teams?: Team[]
+}
+
+export interface Team {
+  id: number
+  name: string
+  lat?: number
+  lng?: number
+  fieldAddress?: string
+  logoUrl?: string | null
+  leagueId?: number | null
+  trainerId?: number
+}
+
+export interface Match {
+  id: number
+  leagueId: number
+  homeTeamId: number
+  awayTeamId: number
+  date?: string | null
+  roundName: string
+  homeScore: number
+  awayScore: number
+  played: boolean
+  homeTeam?: Team
+  awayTeam?: Team
+}
+
+export type FixtureByRound = Record<string, Match[]>
+
+export interface Player {
+  id: number
+  name: string
+  email: string
+}

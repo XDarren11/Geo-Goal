@@ -49,23 +49,23 @@ export default function LoginScreen() {
     return (
         <KeyboardAvoidingView 
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            className="flex-1 bg-[#0ED000]"
+            className="flex-1 bg-geo-green"
         >
             <StatusBar style='auto'/>
 
             <ScrollView contentContainerStyle={{flexGrow:1}}>
 
                 <View className="h-[25%] justify-center items-center pt-10">
-                    <Text className="text-black text-4xl font-bold tracking-wider">
+                    <Text className="text-geo-black font-geo text-4xl font-bold tracking-wider">
                         Bienvenido
                     </Text>
                 </View>
 
-                <View className="flex-1 bg-black rounded-t-[60px] px-8 pt-12 pb-10 justify-start">
+                <View className="flex-1 bg-geo-black rounded-t-[60px] px-8 pt-12 pb-10 justify-start">
                     
                     {/* --- Input: Email --- */}
                     <View className="mb-6">
-                        <Text className="text-[#0ED000] font-bold mb-2 ml-5">Email o Usuario</Text>
+                        <Text className="text-geo-green font-bold mb-2 ml-5">Email</Text>
                         
                         <Controller
                             control={control}
@@ -79,9 +79,9 @@ export default function LoginScreen() {
                             }}
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <TextInput 
-                                    placeholder="example@example.com"
+                                    placeholder="tu@email.com"
                                     placeholderTextColor="#888"
-                                    className="bg-[#E8F7E6] rounded-full py-4 px-6 text-black text-lg"
+                                    className="bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
@@ -97,22 +97,22 @@ export default function LoginScreen() {
 
                     {/* --- Input: Password --- */}
                     <View className="mb-8">
-                        <Text className="text-[#0ED000] font-bold mb-2 ml-5">Contraseña</Text>
-                        <View className="flex-row items-center bg-[#E8F7E6] rounded-full px-6 py-1">
+                        <Text className="text-geo-green font-bold mb-2 ml-5">Contraseña</Text>
+                        <View className="flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30">
                             <Controller
                                 control={control}
                                 name="password" // Asegúrate que coincida con tu Type
                                 rules={{ required: "El Password es obligatorio" }}
                                 render={({ field: { onChange, onBlur, value } }) => (
-                                    <TextInput 
-                                        placeholder="● ● ● ● ● ● ●"
-                                        placeholderTextColor="#888"
-                                        secureTextEntry={!showPassword}
-                                        className="flex-1 text-black text-lg py-3" // Añadí py-3 para mejor hit area
-                                        onBlur={onBlur}
-                                        onChangeText={onChange}
-                                        value={value}
-                                    />
+                                <TextInput 
+                                    placeholder="••••••••"
+                                    placeholderTextColor="#888"
+                                    secureTextEntry={!showPassword}
+                                    className="flex-1 text-white text-lg py-3"
+                                    onBlur={onBlur}
+                                    onChangeText={onChange}
+                                    value={value}
+                                />
                                 )}
                             />
                             
@@ -120,7 +120,7 @@ export default function LoginScreen() {
                                 <Ionicons 
                                     name={showPassword ? "eye-off" : "eye"} 
                                     size={24} 
-                                    color="gray" 
+                                    color="#39FF14" 
                                 />
                             </TouchableOpacity>
                         </View>
@@ -132,26 +132,26 @@ export default function LoginScreen() {
                     <View className=" justify-center items-center">
                         {/* Botón de Ingresar */}
                         <TouchableOpacity
-                            className={`bg-[#0ED000] w-3/5 py-3 rounded-full items-center mt-7 shadow-lg shadow-green-900 ${isPending ? 'opacity-50' : ''}`}
+                            className={`bg-geo-green w-3/5 py-4 rounded-xl items-center mt-7 shadow-lg ${isPending ? 'opacity-50' : ''}`}
                             onPress={handleSubmit(handleLogin)}
                             disabled={isPending}
                         >
                             {isPending ? (
-                                <ActivityIndicator color="black" />
+                                <ActivityIndicator color="#0a0a0a" />
                             ) : (
-                                <Text className="text-black font-bold text-2xl">Ingresar</Text>
+                                <Text className="text-geo-black font-bold text-2xl tracking-wide">Ingresar</Text>
                             )}
                         </TouchableOpacity>
 
                         {/* Navegación (Links) */}
                         <TouchableOpacity className="mt-6" onPress={() => router.push('/(Auth)/RegisterView')}>
-                            <Text className=" text-[#0ED000] font-bold">
-                                ¿No tienes cuenta? Crear Una
+                            <Text className="text-geo-green font-bold">
+                                ¿No tienes cuenta? Crear una
                             </Text>
                         </TouchableOpacity>
                         
-                        <TouchableOpacity className="mt-6">
-                            <Text className=" text-[#0ED000] font-bold">
+                        <TouchableOpacity className="mt-6" onPress={() => router.push('/(Auth)/ForgotPasswordView')}>
+                            <Text className="text-geo-green font-bold">
                                 ¿Has olvidado tu contraseña?
                             </Text>
                         </TouchableOpacity>

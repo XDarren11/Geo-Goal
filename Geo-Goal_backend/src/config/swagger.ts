@@ -1,28 +1,14 @@
-import swaggerJsdoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
-import { Express } from 'express';
+import swaggerUi from "swagger-ui-express";
+import type { Express } from "express";
+import { openApiSpec } from "./openapi";
 
-const options = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'Geo-Goal API',
-      version: '1.0.0',
-      description: 'Documentación de la API Geo-Goal',
-    },
-    servers: [
-      {
-        //ajustar direccion
-        url: 'http://localhost:4000',
-      },
-    ],
-  },
-  apis: ['./src/controllers/*.ts'], // Rutas de los controladores
-};
-
-const swaggerSpec = swaggerJsdoc(options);
-
-export function setupSwagger(app: Express) {
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+export function setupSwagger(app: Express): void {
+  app.use(
+    "/api/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(openApiSpec, {
+      customCss: ".swagger-ui .topbar { display: none }",
+      customSiteTitle: "Geo-Goal API Docs",
+    })
+  );
 }
-

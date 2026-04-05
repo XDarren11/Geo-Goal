@@ -8,7 +8,7 @@ const db = new Sequelize(process.env.DATABASE_URL!, {
     models: [__dirname + '/../models/**/*.ts']
 })
 
-export const connetDB = async () => {
+export const connectDB = async () => {
     try {
         await db.authenticate()
         await db.sync({ alter: true }); //para crear tablas nuevas sin borrar datos

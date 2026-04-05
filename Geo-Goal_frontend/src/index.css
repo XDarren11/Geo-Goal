@@ -1,3 +1,178 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --geo-green: #39FF14;
+    --geo-green-hover: #2de00f;
+    --geo-green-dim: rgba(57, 255, 20, 0.12);
+    --geo-black: #0a0a0a;
+    --geo-bg: #f0fdf4;
+    --geo-bg-card: #ffffff;
+    --geo-text: #0a0a0a;
+    --geo-text-muted: #374151;
+    --geo-border: #d1d5db;
+    --geo-pitch-line: rgba(57, 255, 20, 0.25);
+    --geo-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 8px 48px -8px rgba(0, 0, 0, 0.06);
+    --geo-shadow-hover: 0 12px 40px -8px rgba(57, 255, 20, 0.2), 0 20px 60px -12px rgba(0, 0, 0, 0.1);
+  }
+
+  .dark {
+    --geo-bg: #0a0a0a;
+    --geo-bg-card: #141414;
+    --geo-text: #fafafa;
+    --geo-text-muted: #9ca3af;
+    --geo-border: #262626;
+    --geo-pitch-line: rgba(57, 255, 20, 0.2);
+    --geo-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.4);
+    --geo-shadow-hover: 0 12px 40px -8px rgba(57, 255, 20, 0.15), 0 20px 60px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  body {
+    @apply antialiased;
+    font-family: 'Oswald', system-ui, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .font-geo {
+    font-family: 'Bebas Neue', 'Oswald', system-ui, sans-serif;
+  }
+
+  .pitch-stripes {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 40px,
+      var(--geo-pitch-line) 40px,
+      var(--geo-pitch-line) 41px
+    );
+  }
+
+  .pitch-stripes-strong {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 24px,
+      rgba(57, 255, 20, 0.08) 24px,
+      rgba(57, 255, 20, 0.08) 25px
+    );
+  }
+
+  .dark .pitch-stripes-strong {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 24px,
+      rgba(57, 255, 20, 0.12) 24px,
+      rgba(57, 255, 20, 0.12) 25px
+    );
+  }
+
+  /* Tarjeta elegante con animación y hover refinado */
+  .card-pitch {
+    @apply rounded-2xl border-2 transition-all duration-300 ease-out;
+    border-color: var(--geo-border);
+    background-color: var(--geo-bg-card);
+    box-shadow: var(--geo-shadow);
+  }
+
+  .card-pitch:hover {
+    border-color: var(--geo-green);
+    box-shadow: var(--geo-shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  .dark .card-pitch:hover {
+    box-shadow: var(--geo-shadow-hover);
+  }
+
+  .btn-pitch {
+    @apply rounded-xl font-bold tracking-wide transition-all duration-300 ease-out;
+    background-color: var(--geo-green);
+    color: var(--geo-black);
+  }
+
+  .btn-pitch:hover:not(:disabled) {
+    filter: brightness(1.06);
+    box-shadow: 0 0 24px rgba(57, 255, 20, 0.35);
+    transform: translateY(-1px);
+  }
+
+  .btn-pitch:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .input-pitch {
+    @apply rounded-xl border-2 bg-[var(--geo-bg)] px-4 py-3 transition-all duration-200;
+    border-color: var(--geo-border);
+    color: var(--geo-text);
+  }
+
+  .input-pitch::placeholder {
+    color: var(--geo-text-muted);
+    opacity: 0.8;
+  }
+
+  .input-pitch:focus {
+    outline: none;
+    border-color: var(--geo-green);
+    box-shadow: 0 0 0 3px var(--geo-green-dim);
+  }
+
+  /* Utilidades de entrada animada */
+  .animate-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  .animate-in-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+
+  .animate-in-scale {
+    animation: scaleIn 0.4s ease-out forwards;
+  }
+
+  /* Retrasos para stagger */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.1s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.2s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.3s; }
+  .stagger-7 { animation-delay: 0.35s; }
+  .stagger-8 { animation-delay: 0.4s; }
+  .stagger-9 { animation-delay: 0.45s; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
