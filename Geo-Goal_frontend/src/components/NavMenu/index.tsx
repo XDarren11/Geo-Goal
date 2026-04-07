@@ -1,133 +1,139 @@
-import { Fragment } from "react";
-import { Popover, Transition } from "@headlessui/react";
-import { Bars3Icon } from "@heroicons/react/20/solid";
-import { Link } from "react-router-dom";
+import {
+  ChartBarIcon,
+  ClipboardDocumentListIcon,
+  DocumentTextIcon,
+  KeyIcon,
+  MapPinIcon,
+  PlusCircleIcon,
+  ShieldCheckIcon,
+  TrophyIcon,
+  UserGroupIcon,
+  CalendarDaysIcon,
+} from "@heroicons/react/24/outline";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import type { ComponentType } from "react";
 import type { User, Role } from "@/types";
 import { useQueryClient } from "@tanstack/react-query";
 
-type NavMenuProps = { name: User["name"]; role?: string };
+type NavMenuProps = {
+  name: User["name"];
+  role?: string;
+  onNavigate?: () => void;
+};
 
-export default function NavMenu({ name, role }: NavMenuProps) {
+type NavLinkItem = {
+  to: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const r = (role as Role) || "player";
 
   const logout = () => {
     localStorage.removeItem("AUTH_TOKEN");
     queryClient.invalidateQueries({ queryKey: ["user"] });
+    onNavigate?.();
+    navigate("/public", { replace: true });
   };
 
-  return (
-    <Popover className="relative">
-      <Popover.Button className="inline-flex items-center gap-x-1 rounded-xl border-2 border-geo-green bg-geo-green p-2 font-bold text-geo-black transition-all duration-200 hover:scale-105 hover:brightness-110 hover:shadow-[0_0_16px_rgba(57,255,20,0.3)]">
-        <Bars3Icon className="w-6 h-6" />
-      </Popover.Button>
+  const adminLinks: NavLinkItem[] = [
+    { to: "/leagues", label: "Mis ligas", icon: TrophyIcon },
+    { to: "/leagues/new", label: "Crear liga", icon: PlusCircleIcon },
+    { to: "/leagues/admins", label: "Administradores", icon: UserGroupIcon },
+    { to: "/admin/users", label: "Usuarios", icon: UserGroupIcon },
+    { to: "/admin/fields", label: "Campos", icon: MapPinIcon },
+    { to: "/admin/seasons", label: "Temporadas", icon: CalendarDaysIcon },
+    { to: "/admin/audit-logs", label: "Auditoría", icon: ClipboardDocumentListIcon },
+    { to: "/admin/referee", label: "Centro de árbitro", icon: ShieldCheckIcon },
+  ];
 
-      <Transition
-        as={Fragment}
-        enter="transition ease-out duration-300"
-        enterFrom="opacity-0 translate-y-2 scale-95"
-        enterTo="opacity-100 translate-y-0 scale-100"
-        leave="transition ease-in duration-200"
-        leaveFrom="opacity-100 translate-y-0 scale-100"
-        leaveTo="opacity-0 translate-y-2 scale-95"
+  const coachLinks: NavLinkItem[] = [
+    { to: "/leagues/join", label: "Ingresar código de liga", icon: KeyIcon },
+    { to: "/teams", label: "Mis equipos", icon: TrophyIcon },
+    { to: "/teams/new", label: "Crear equipo", icon: PlusCircleIcon },
+  ];
+
+  const playerLinks: NavLinkItem[] = [
+    { to: "/teams/join", label: "Unirse a equipo", icon: KeyIcon },
+    { to: "/my-teams", label: "Mis equipos", icon: UserGroupIcon },
+  ];
+
+  const refereeLinks: NavLinkItem[] = [
+    { to: "/leagues/join", label: "Ingresar código de liga", icon: KeyIcon },
+    { to: "/admin/referee", label: "Centro de árbitro", icon: ShieldCheckIcon },
+  ];
+
+  const commonLinks: NavLinkItem[] = [
+    { to: "/dashboard", label: "Dashboard", icon: ChartBarIcon },
+    { to: "/standings", label: "Tabla de posiciones", icon: ChartBarIcon },
+    { to: "/results", label: "Resultados", icon: TrophyIcon },
+    { to: "/news", label: "Noticias", icon: DocumentTextIcon },
+  ];
+
+  const roleLinks =
+    r === "admin"
+      ? adminLinks
+      : r === "coach"
+        ? coachLinks
+        : r === "referee"
+          ? refereeLinks
+          : playerLinks;
+
+  const isActive = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+
+  const linkClass = (to: string) =>
+    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+      isActive(to)
+        ? "bg-geo-green/20 text-geo-green border border-geo-green/40"
+        : "text-[var(--geo-text)] hover:bg-geo-green/10 hover:text-geo-green border border-transparent"
+    }`;
+
+  return (
+    <aside className="h-full flex flex-col rounded-2xl border border-geo-green/20 bg-[var(--geo-bg-card)] p-4">
+      <div className="border-b border-geo-green/20 pb-3">
+        <p className="font-geo text-lg tracking-wide text-[var(--geo-text)]">Hola, {name}</p>
+        <p className="text-xs uppercase tracking-wider text-[var(--geo-text-muted)]">Rol: {r}</p>
+      </div>
+
+      <nav className="mt-4 flex-1 space-y-5 overflow-y-auto pr-1">
+        <div className="space-y-1">
+          <p className="px-1 text-[10px] uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">General</p>
+          {commonLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.to} to={item.to} onClick={onNavigate} className={linkClass(item.to)}>
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="space-y-1">
+          <p className="px-1 text-[10px] uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Mis opciones</p>
+          {roleLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.to} to={item.to} onClick={onNavigate} className={linkClass(item.to)}>
+                <Icon className="h-4 w-4" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
+      <button
+        type="button"
+        onClick={logout}
+        className="mt-4 rounded-xl border border-red-500/40 px-3 py-2 text-left text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10"
       >
-        <Popover.Panel className="absolute right-0 z-20 mt-3 w-56 shrink rounded-2xl border-2 border-geo-green/30 bg-[var(--geo-bg-card)] p-3 shadow-xl backdrop-blur-sm">
-          <p className="border-b-2 border-geo-green/20 pb-2.5 text-center font-geo text-lg tracking-wide text-[var(--geo-text)]">
-            Hola, {name}
-          </p>
-          <Link
-            to="/"
-            className="mt-2 block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-          >
-            Inicio
-          </Link>
-          {r === "admin" && (
-            <>
-              <Link
-                to="/leagues"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Mis ligas
-              </Link>
-              <Link
-                to="/leagues/new"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Crear liga
-              </Link>
-              <Link
-                to="/leagues/admins"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Administradores
-              </Link>
-            </>
-          )}
-          {r === "coach" && (
-            <>
-              <Link
-                to="/leagues/join"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Unirse a liga
-              </Link>
-              <Link
-                to="/teams"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Mis equipos
-              </Link>
-              <Link
-                to="/teams/new"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Crear equipo
-              </Link>
-            </>
-          )}
-          {r === "player" && (
-            <>
-              <Link
-                to="/teams/join"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Unirse a equipo
-              </Link>
-              <Link
-                to="/my-teams"
-                className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-              >
-                Mis equipos
-              </Link>
-            </>
-          )}
-          <Link
-            to="/standings"
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-          >
-            Tabla de posiciones
-          </Link>
-          <Link
-            to="/results"
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-          >
-            Resultados
-          </Link>
-          <Link
-            to="/news"
-            className="block rounded-xl px-3 py-2.5 text-sm font-medium text-[var(--geo-text)] transition-colors duration-200 hover:bg-geo-green/10 hover:text-geo-green"
-          >
-            Noticias
-          </Link>
-          <button
-            type="button"
-            onClick={logout}
-            className="mt-2 block w-full rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
-          >
-            Cerrar sesión
-          </button>
-        </Popover.Panel>
-      </Transition>
-    </Popover>
+        Cerrar sesión
+      </button>
+    </aside>
   );
 }

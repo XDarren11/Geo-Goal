@@ -4,11 +4,51 @@ import { Team } from "../models/Team";
 import { League } from "../models/League";
 import { TeamLeagueStat } from "../models/TeamLeagueStat";
 import { Match } from "../models/Match";
+import { TeamMember } from "../models/TeamMember";
+import { AuditService } from "../services/AuditService";
 
 /**
  * Handlers de ligas: extraen params/body y user, llaman al servicio, envían respuesta.
  */
 export class LeagueController {
+  private static async canUserAccessLeague(
+    userId: number,
+    role: string,
+    leagueId: number
+  ): Promise<boolean> {
+    if (role === "admin") return true;
+
+    if (role === "coach") {
+      const team = await Team.findOne({
+        where: { trainerId: userId, leagueId },
+        attributes: ["id"],
+      });
+      return !!team;
+    }
+
+    if (role === "player") {
+      const leagueTeams = await Team.findAll({
+        where: { leagueId },
+        attributes: ["id"],
+      });
+
+      const leagueTeamIds = leagueTeams.map((team) => team.id);
+      if (!leagueTeamIds.length) return false;
+
+      const member = await TeamMember.findOne({
+        where: {
+          userId,
+          teamId: leagueTeamIds,
+        },
+        attributes: ["userId"],
+      });
+
+      return !!member;
+    }
+
+    return false;
+  }
+
   static createLeague = async (req: Request, res: Response): Promise<void> => {
     const result = await LeagueService.createLeague(req.user!.id, req.body);
     res.send(result);
@@ -64,6 +104,24 @@ export class LeagueController {
                 return res.status(404).json({ error: 'Equipo o Liga no encontrados' });
             }
 
+            if (team.leagueId && team.leagueId !== league.id) {
+              return res.status(409).json({ error: 'Este equipo ya pertenece a otra liga' });
+            }
+
+            const coachTeamInLeague = await Team.findOne({
+              where: {
+                trainerId: team.trainerId,
+                leagueId: league.id,
+              },
+              attributes: ['id', 'name'],
+            });
+
+            if (coachTeamInLeague && coachTeamInLeague.id !== team.id) {
+              return res.status(409).json({
+                error: `El entrenador ya dirige otro equipo en esta liga (${coachTeamInLeague.name})`,
+              });
+            }
+
             team.leagueId = league.id;
             await team.save();
 
@@ -110,8 +168,12 @@ export class LeagueController {
 
   static generateFixture = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { type } = req.body;
-    const data = await LeagueService.generateFixture(id, req.user!.id, type);
+    const { type, scheduleStartDate, matchTime, daysBetweenRounds } = req.body;
+    const data = await LeagueService.generateFixture(id, req.user!.id, type, {
+      scheduleStartDate,
+      matchTime,
+      daysBetweenRounds,
+    });
     res.json(data);
   };
 
@@ -130,6 +192,24 @@ export class LeagueController {
   static getStandings = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const leagueId = Number(id);
+        const user = req.user;
+
+        if (!user) {
+          res.status(401).json({ error: 'No autorizado' });
+          return;
+        }
+
+        const canAccess = await LeagueController.canUserAccessLeague(
+          user.id,
+          user.role,
+          leagueId
+        );
+
+        if (!canAccess) {
+          res.status(403).json({ error: 'No tienes acceso a la tabla de esta liga' });
+          return;
+        }
 
         const standings = await TeamLeagueStat.findAll({
           where: { leagueId: id },
@@ -168,6 +248,24 @@ export class LeagueController {
   static getLeagueMatches = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const leagueId = Number(id);
+        const user = req.user;
+
+        if (!user) {
+          res.status(401).json({ error: 'No autorizado' });
+          return;
+        }
+
+        const canAccess = await LeagueController.canUserAccessLeague(
+          user.id,
+          user.role,
+          leagueId
+        );
+
+        if (!canAccess) {
+          res.status(403).json({ error: 'No tienes acceso a los resultados de esta liga' });
+          return;
+        }
 
         const matches = await Match.findAll({
             where: { leagueId: id },
@@ -291,6 +389,23 @@ export class LeagueController {
         if (newMatchesToSave.length > 0) {
             await Match.bulkCreate(newMatchesToSave);
         }
+
+        await AuditService.log({
+          actorUserId: req.user?.id ?? null,
+          leagueId: Number(id),
+          entityType: 'fixture',
+          entityId: String(id),
+          action: 'manual_fix',
+          beforeData: {
+            previouslyPlayedMatches: playedMatches.length,
+          },
+          afterData: {
+            newMatchesGenerated: newMatchesToSave.length,
+          },
+          reason: req.body?.reason ?? 'Reestructuración de fixture',
+          ip: req.ip,
+          userAgent: req.get('user-agent') ?? null,
+        });
 
         res.json({ 
             message: 'Calendario reestructurado exitosamente', 

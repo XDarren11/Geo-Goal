@@ -11,11 +11,15 @@ import {
 import { useState } from "react";
 import { toast } from "react-toastify";
 import { UserGroupIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { TeamInvitationMenu } from "@/components/InvitationMenus/TeamInvitationMenu";
+import { useAuth } from "@/hooks/useAuth";
+import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 
 export default function TeamDetailView() {
   const { teamId } = useParams<{ teamId: string }>();
   const id = Number(teamId);
   const queryClient = useQueryClient();
+  const { data: currentUser } = useAuth();
   const [playerEmail, setPlayerEmail] = useState("");
   const [foundPlayer, setFoundPlayer] = useState<{ id: number; name: string; email: string } | null>(null);
   const [searching, setSearching] = useState(false);
@@ -40,7 +44,7 @@ export default function TeamDetailView() {
       setPlayerEmail("");
       toast.success("Jugador agregado");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo agregar el jugador")),
   });
 
   const removePlayerMutation = useMutation({
@@ -49,7 +53,7 @@ export default function TeamDetailView() {
       queryClient.invalidateQueries({ queryKey: ["team-players", id] });
       toast.success("Jugador eliminado");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo quitar el jugador")),
   });
 
   async function handleFindPlayer() {
@@ -60,7 +64,7 @@ export default function TeamDetailView() {
       const p = await findPlayer(id, playerEmail.trim());
       setFoundPlayer(p);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Jugador no encontrado");
+      toast.error(getApiErrorMessage(e, "Jugador no encontrado"));
     } finally {
       setSearching(false);
     }
@@ -103,10 +107,16 @@ export default function TeamDetailView() {
       </div>
 
       <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
-        <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
-          <UserGroupIcon className="h-5 w-5 text-geo-green" />
-          Jugadores ({players?.length ?? 0})
-        </h2>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
+            <UserGroupIcon className="h-5 w-5 text-geo-green" />
+            Jugadores ({players?.length ?? 0})
+          </h2>
+          <TeamInvitationMenu
+            teamId={id}
+            userIsTrainer={team?.trainerId === currentUser?.id}
+          />
+        </div>
 
         <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
           <p className="text-sm font-semibold text-[var(--geo-text)]">

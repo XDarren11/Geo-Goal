@@ -158,6 +158,18 @@ function MatchCard({ match }: { match: any }) {
           </span>
         </div>
       </div>
+
+      <div className="mt-4 flex justify-end">
+        <span className="mr-auto text-[11px] text-[var(--geo-text-muted)]">
+          {match.date ? new Date(match.date).toLocaleString() : "Sin programar"}
+        </span>
+        <Link
+          to={`/public/matches/${match.id}/detail`}
+          className="text-xs font-bold uppercase tracking-wider text-geo-green hover:underline"
+        >
+          Ver detalle del partido
+        </Link>
+      </div>
     </div>
   );
 }

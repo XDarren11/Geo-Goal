@@ -6,6 +6,7 @@ import { createTeam } from "@/api/teamAPI";
 import { toast } from "react-toastify";
 import ErrorMessage from "@/components/ErrorMessage";
 import { Link } from "react-router-dom";
+import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 
 type Form = {
   name: string;
@@ -29,7 +30,7 @@ export default function CreateTeamView() {
 
   const { mutate, isPending } = useMutation({
     mutationFn: createTeam,
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo crear el equipo")),
     onSuccess: () => {
       toast.success("Equipo creado");
       navigate("/teams");

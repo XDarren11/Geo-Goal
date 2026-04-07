@@ -1,13 +1,17 @@
 import React from 'react';
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, FlatList } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getTeamById, getPlayersTeam } from '@/Api/teamAPI';
 import { Ionicons } from '@expo/vector-icons';
+import Loader from '@/components/Loader';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function TeamDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { data: user } = useAuth();
+  const isCoach = user?.role === 'coach';
 
   const teamId = typeof id === 'string' ? parseInt(id, 10) : typeof id === 'number' ? id : 0;
 
@@ -24,11 +28,7 @@ export default function TeamDetailScreen() {
   });
 
   if (teamLoading) {
-    return (
-      <View className="flex-1 bg-geo-black justify-center items-center">
-        <ActivityIndicator size="large" color="#39FF14" />
-      </View>
-    );
+    return <Loader fullScreen label="Cargando equipo..." />;
   }
 
   if (!team) {
@@ -69,13 +69,15 @@ export default function TeamDetailScreen() {
         <View className="bg-gray-900 border border-geo-green/30 rounded-lg p-4">
           <View className="flex-row items-center justify-between mb-3">
             <Text className="text-geo-green font-bold">Jugadores</Text>
-            <TouchableOpacity className="bg-geo-green/10 p-2 rounded-lg">
-              <Ionicons name="add" size={20} color="#39FF14" />
-            </TouchableOpacity>
+            {isCoach ? (
+              <TouchableOpacity className="bg-geo-green/10 p-2 rounded-lg">
+                <Ionicons name="add" size={20} color="#39FF14" />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {playersLoading ? (
-            <ActivityIndicator size="small" color="#39FF14" />
+            <Loader label="Cargando jugadores..." />
           ) : players && players.length > 0 ? (
             <FlatList
               scrollEnabled={false}
@@ -87,9 +89,11 @@ export default function TeamDetailScreen() {
                     <Text className="text-white font-bold">{item.name}</Text>
                     <Text className="text-gray-400 text-xs">{item.email}</Text>
                   </View>
-                  <TouchableOpacity className="p-2">
-                    <Ionicons name="trash" size={16} color="#ff6b6b" />
-                  </TouchableOpacity>
+                  {isCoach ? (
+                    <TouchableOpacity className="p-2">
+                      <Ionicons name="trash" size={16} color="#ff6b6b" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               )}
             />
@@ -99,9 +103,11 @@ export default function TeamDetailScreen() {
         </View>
 
         {/* Add Player Button */}
-        <TouchableOpacity className="bg-geo-green rounded-lg p-4 mt-4 items-center">
-          <Text className="text-geo-black font-bold">Agregar Jugador</Text>
-        </TouchableOpacity>
+        {isCoach ? (
+          <TouchableOpacity className="bg-geo-green rounded-lg p-4 mt-4 items-center">
+            <Text className="text-geo-black font-bold">Agregar Jugador</Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </View>
   );

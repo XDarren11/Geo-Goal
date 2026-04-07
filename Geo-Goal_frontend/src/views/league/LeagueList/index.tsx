@@ -59,7 +59,7 @@ export default function LeagueListView() {
   return (
     <div className="opacity-0 animate-in-up">
       <Link
-        to="/"
+          to="/dashboard"
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Inicio

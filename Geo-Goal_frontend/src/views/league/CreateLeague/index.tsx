@@ -6,6 +6,7 @@ import { createLeague } from "@/api/leagueAPI";
 import { toast } from "react-toastify";
 import ErrorMessage from "@/components/ErrorMessage";
 import { Link } from "react-router-dom";
+import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 
 type Form = { name: string; description: string };
 
@@ -19,7 +20,7 @@ export default function CreateLeagueView() {
 
   const { mutate, isPending } = useMutation({
     mutationFn: createLeague,
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo crear la liga")),
     onSuccess: (msg) => {
       toast.success(typeof msg === "string" ? msg : "Liga creada");
       navigate("/leagues");

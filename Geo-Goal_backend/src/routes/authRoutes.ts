@@ -20,7 +20,7 @@ router.post(
   body("email").isEmail().withMessage("E-mail no válido"),
   body("role")
     .notEmpty().withMessage("El rol es obligatorio")
-    .isIn(["coach", "player", "admin"])
+    .isIn(["coach", "player", "admin", "referee"])
     .withMessage("Rol no válido"),
   handleInputError,
   asyncHandler(AuthController.createAccount)

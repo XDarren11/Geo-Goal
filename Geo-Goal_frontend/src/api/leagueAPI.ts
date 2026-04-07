@@ -62,11 +62,21 @@ export async function removeTeamFromLeague(
 
 export async function generateFixture(
   leagueId: number,
-  type: "round-robin" | "knockout"
+  type: "round-robin" | "knockout",
+  options?: {
+    scheduleStartDate?: string;
+    matchTime?: string;
+    daysBetweenRounds?: number;
+  }
 ): Promise<{ message: string; totalMatches: number }> {
   const { data } = await api.post<{ message: string; totalMatches: number }>(
     `${BASE}/${leagueId}/calculate-fixture`,
-    { type }
+    {
+      type,
+      ...(options?.scheduleStartDate ? { scheduleStartDate: options.scheduleStartDate } : {}),
+      ...(options?.matchTime ? { matchTime: options.matchTime } : {}),
+      ...(options?.daysBetweenRounds != null ? { daysBetweenRounds: options.daysBetweenRounds } : {}),
+    }
   );
   return data;
 }
@@ -103,6 +113,14 @@ export const updateMatchScore = async (
     payload.awayPenaltiesScore = Number(awayPenaltiesScore);
   }
   const { data } = await api.post(`/league/matches/${matchId}/result`, payload);
+  return data;
+};
+
+export const updateMatchSchedule = async (
+  matchId: number,
+  date: string
+) => {
+  const { data } = await api.patch(`/league/matches/${matchId}/schedule`, { date });
   return data;
 };
 

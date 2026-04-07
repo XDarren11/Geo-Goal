@@ -2,6 +2,7 @@ import { Table, Column, Model, DataType, Default, HasMany, BelongsToMany } from 
 import { League } from './League';
 import { Team } from './Team';
 import { TeamMember } from './TeamMember';
+import { LeagueAdmin } from './LeagueAdmin';
 
 @Table({ tableName: 'users' })
 export class User extends Model {
@@ -21,7 +22,7 @@ export class User extends Model {
     @Column({ type: DataType.STRING })
     declare token: string;
 
-    @Default('jugador')
+    @Default('player')
     @Column({ type: DataType.STRING, allowNull: false })
     declare role: string;
 
@@ -38,4 +39,11 @@ export class User extends Model {
     // 3. JUGADOR: Equipos donde juega
     @BelongsToMany(() => Team, () => TeamMember)
     declare teamsPlaying: Team[];
+
+    // 4. ADMIN DE LIGA: asignaciones por liga
+    @HasMany(() => LeagueAdmin, 'userId')
+    declare leagueAdminAssignments: LeagueAdmin[];
+
+    @HasMany(() => LeagueAdmin, 'assignedBy')
+    declare adminAssignmentsMade: LeagueAdmin[];
 }

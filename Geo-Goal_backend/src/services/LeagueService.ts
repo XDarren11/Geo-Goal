@@ -4,8 +4,26 @@ import { User } from "../models/User";
 import { Match } from "../models/Match";
 import { MatchGenerator } from "../utils/MatchGenerator";
 import { AppError } from "../types/errors";
+import { NotificationService } from "./NotificationService";
 
 export class LeagueService {
+  private static buildRoundDate(
+    scheduleStartDate: string,
+    matchTime: string | undefined,
+    roundIndex: number,
+    daysBetweenRounds: number
+  ): Date {
+    const base = new Date(scheduleStartDate);
+    if (Number.isNaN(base.getTime())) {
+      throw new AppError(400, "Fecha inicial inválida para programación");
+    }
+
+    const [hh, mm] = (matchTime || "20:00").split(":").map(Number);
+    base.setHours(hh ?? 20, mm ?? 0, 0, 0);
+    base.setDate(base.getDate() + roundIndex * daysBetweenRounds);
+    return base;
+  }
+
   static async createLeague(
     managerId: number,
     data: { name: string; description: string }
@@ -158,7 +176,12 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
   static async generateFixture(
     leagueId: string,
     managerId: number,
-    type: "round-robin" | "knockout"
+    type: "round-robin" | "knockout",
+    options?: {
+      scheduleStartDate?: string;
+      matchTime?: string;
+      daysBetweenRounds?: number;
+    }
   ): Promise<{ message: string; totalMatches: number }> {
     const league = await League.findOne({
       where: { id: leagueId, managerId },
@@ -183,16 +206,50 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     } else {
       throw new AppError(400, "Tipo de torneo no válido");
     }
+
+    const shouldSchedule = Boolean(options?.scheduleStartDate);
+    const daysBetweenRounds = options?.daysBetweenRounds ?? 7;
+
+    const uniqueRoundsInOrder: string[] = [];
+    generatedMatches.forEach((m) => {
+      if (!uniqueRoundsInOrder.includes(m.round)) {
+        uniqueRoundsInOrder.push(m.round);
+      }
+    });
+
     const matchesToSave = generatedMatches.map((m) => ({
+      ...(shouldSchedule
+        ? {
+            date: LeagueService.buildRoundDate(
+              options!.scheduleStartDate!,
+              options?.matchTime,
+              uniqueRoundsInOrder.indexOf(m.round),
+              daysBetweenRounds
+            ),
+          }
+        : {}),
       leagueId: league.id,
       homeTeamId: m.home,
       awayTeamId: m.away,
       roundName: m.round,
       played: false,
     }));
-    await Match.bulkCreate(matchesToSave);
+
+    const createdMatches = await Match.bulkCreate(matchesToSave, { returning: true });
+
+    if (shouldSchedule) {
+      await Promise.all(
+        createdMatches.map((m) => {
+          if (!m.date) return Promise.resolve();
+          return NotificationService.notifyMatchScheduled(m.id, new Date(m.date));
+        })
+      );
+    }
+
     return {
-      message: "Pareos generado exitosamente",
+      message: shouldSchedule
+        ? "Pareos y calendario generados exitosamente"
+        : "Pareos generado exitosamente",
       totalMatches: matchesToSave.length,
     };
   }

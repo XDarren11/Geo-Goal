@@ -23,10 +23,16 @@ export const openApiSpec = {
   },
   tags: [
     { name: "Auth", description: "Registro, login, confirmación y contraseña" },
+    { name: "Público", description: "Datos visibles sin sesión" },
     { name: "Ligas", description: "CRUD de ligas (admin)" },
     { name: "Ligas - Equipos", description: "Equipos en una liga" },
     { name: "Ligas - Fixture", description: "Calendario de partidos" },
     { name: "Equipos", description: "CRUD equipos y jugadores (coach)" },
+    { name: "Admin - Usuarios", description: "Gestión completa de usuarios (admin)" },
+    { name: "Admin - Liga Admins", description: "Asignación de admin principal/asistente por liga" },
+    { name: "Admin - Campos", description: "Gestión logística de campos de juego" },
+    { name: "Admin - Temporadas", description: "Gestión formal de temporadas por liga" },
+    { name: "Admin - Auditoría", description: "Bitácora y trazabilidad de cambios oficiales" },
   ],
   paths: {
     // ----- AUTH -----
@@ -46,7 +52,7 @@ export const openApiSpec = {
                   email: { type: "string", format: "email", example: "juan@example.com" },
                   password: { type: "string", minLength: 8 },
                   password_confirmation: { type: "string" },
-                  role: { type: "string", enum: ["coach", "player", "admin"] },
+                  role: { type: "string", enum: ["coach", "player", "admin", "referee"] },
                 },
               },
             },
@@ -235,6 +241,73 @@ export const openApiSpec = {
             },
           },
           "401": { description: "No autorizado" },
+        },
+      },
+    },
+    "/api/public/leagues": {
+      get: {
+        tags: ["Público"],
+        summary: "Listar ligas públicas",
+        responses: {
+          "200": { description: "Listado público de ligas" },
+        },
+      },
+    },
+    "/api/public/leagues/{leagueId}": {
+      get: {
+        tags: ["Público"],
+        summary: "Obtener detalle público de una liga",
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Detalle público de la liga" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+    },
+    "/api/public/leagues/{leagueId}/standings": {
+      get: {
+        tags: ["Público"],
+        summary: "Obtener tabla pública de una liga",
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Tabla pública de posiciones" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+    },
+    "/api/public/leagues/{leagueId}/fixture": {
+      get: {
+        tags: ["Público"],
+        summary: "Obtener fixture público de una liga",
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Calendario público agrupado por jornada" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+    },
+    "/api/public/leagues/{leagueId}/fixture/locations": {
+      get: {
+        tags: ["Público"],
+        summary: "Obtener fixture público con ubicaciones",
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Partidos con ubicación para el mapa" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+    },
+    "/api/public/leagues/{leagueId}/teams/{teamId}/profile": {
+      get: {
+        tags: ["Público"],
+        summary: "Obtener perfil público de un equipo",
+        parameters: [
+          { in: "path", name: "leagueId", required: true, schema: { type: "integer" } },
+          { in: "path", name: "teamId", required: true, schema: { type: "integer" } },
+        ],
+        responses: {
+          "200": { description: "Perfil público del equipo" },
+          "404": { description: "Liga o equipo no encontrado" },
         },
       },
     },
@@ -441,6 +514,449 @@ export const openApiSpec = {
         security: [{ bearerAuth: [] }],
         parameters: [{ in: "path", name: "id", required: true, schema: { type: "integer" } }],
         responses: { "200": { description: "Partidos agrupados por jornada (objeto por nombre de jornada)" } },
+      },
+    },
+    // ----- ADMIN -----
+    "/api/admin/users": {
+      get: {
+        tags: ["Admin - Usuarios"],
+        summary: "Listar usuarios",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Lista de usuarios" },
+          "401": { description: "No autorizado" },
+          "403": { description: "Solo admin" },
+        },
+      },
+      post: {
+        tags: ["Admin - Usuarios"],
+        summary: "Crear usuario",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "email", "password", "role"],
+                properties: {
+                  name: { type: "string" },
+                  email: { type: "string", format: "email" },
+                  password: { type: "string", minLength: 8 },
+                  role: { type: "string", enum: ["coach", "player", "admin", "referee"] },
+                  confirmed: { type: "boolean", default: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Usuario creado" },
+          "400": { description: "Validación fallida" },
+          "409": { description: "Email ya registrado" },
+        },
+      },
+    },
+    "/api/admin/users/{userId}": {
+      put: {
+        tags: ["Admin - Usuarios"],
+        summary: "Actualizar usuario",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "userId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  email: { type: "string", format: "email" },
+                  password: { type: "string", minLength: 8 },
+                  role: { type: "string", enum: ["coach", "player", "admin", "referee"] },
+                  confirmed: { type: "boolean" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Usuario actualizado" },
+          "404": { description: "Usuario no encontrado" },
+          "409": { description: "Email ya en uso" },
+        },
+      },
+      delete: {
+        tags: ["Admin - Usuarios"],
+        summary: "Eliminar usuario",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "userId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Usuario eliminado" },
+          "400": { description: "No puedes eliminar tu propia cuenta" },
+          "404": { description: "Usuario no encontrado" },
+        },
+      },
+    },
+    "/api/admin/leagues/{leagueId}/users": {
+      get: {
+        tags: ["Admin - Usuarios"],
+        summary: "Listar usuarios vinculados a una liga",
+        description:
+          "Devuelve solo usuarios que pertenecen a la liga: admin dueño, admins asignados, coaches con equipos en la liga y jugadores de esos equipos.",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Lista de usuarios de la liga" },
+          "403": { description: "No tienes acceso a esta liga" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+    },
+    "/api/admin/leagues/{leagueId}/admins": {
+      get: {
+        tags: ["Admin - Liga Admins"],
+        summary: "Listar admins asignados a una liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Listado de admins de la liga" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+      post: {
+        tags: ["Admin - Liga Admins"],
+        summary: "Asignar admin a una liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["userId", "leagueRole"],
+                properties: {
+                  userId: { type: "integer" },
+                  leagueRole: { type: "string", enum: ["principal", "assistant"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Admin asignado o actualizado" },
+          "400": { description: "Usuario no tiene rol admin" },
+          "404": { description: "Liga o usuario no encontrado" },
+          "409": { description: "La liga ya tiene admin principal" },
+        },
+      },
+    },
+    "/api/admin/leagues/{leagueId}/admins/{userId}": {
+      put: {
+        tags: ["Admin - Liga Admins"],
+        summary: "Cambiar rol de admin de liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { in: "path", name: "leagueId", required: true, schema: { type: "integer" } },
+          { in: "path", name: "userId", required: true, schema: { type: "integer" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["leagueRole"],
+                properties: {
+                  leagueRole: { type: "string", enum: ["principal", "assistant"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Rol actualizado" },
+          "404": { description: "Asignación no encontrada" },
+          "409": { description: "La liga ya tiene admin principal" },
+        },
+      },
+      delete: {
+        tags: ["Admin - Liga Admins"],
+        summary: "Remover admin de una liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { in: "path", name: "leagueId", required: true, schema: { type: "integer" } },
+          { in: "path", name: "userId", required: true, schema: { type: "integer" } },
+        ],
+        responses: {
+          "200": { description: "Admin removido" },
+          "404": { description: "Asignación no encontrada" },
+        },
+      },
+    },
+    "/api/admin/fields": {
+      get: {
+        tags: ["Admin - Campos"],
+        summary: "Listar campos",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Listado de campos" },
+          "401": { description: "No autorizado" },
+          "403": { description: "Solo admin" },
+        },
+      },
+      post: {
+        tags: ["Admin - Campos"],
+        summary: "Crear campo",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "address", "lat", "lng"],
+                properties: {
+                  name: { type: "string" },
+                  address: { type: "string" },
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  city: { type: "string", nullable: true },
+                  state: { type: "string", nullable: true },
+                  country: { type: "string", nullable: true },
+                  capacity: { type: "integer", minimum: 0, nullable: true },
+                  isActive: { type: "boolean", default: true },
+                  notes: { type: "string", nullable: true },
+                  leagueId: { type: "integer", nullable: true },
+                  teamId: { type: "integer", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Campo creado" },
+          "404": { description: "Liga o equipo no encontrado" },
+        },
+      },
+    },
+    "/api/admin/fields/{fieldId}": {
+      get: {
+        tags: ["Admin - Campos"],
+        summary: "Obtener campo por ID",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "fieldId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Detalle del campo" },
+          "404": { description: "Campo no encontrado" },
+        },
+      },
+      put: {
+        tags: ["Admin - Campos"],
+        summary: "Actualizar campo",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "fieldId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  address: { type: "string" },
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  city: { type: "string", nullable: true },
+                  state: { type: "string", nullable: true },
+                  country: { type: "string", nullable: true },
+                  capacity: { type: "integer", minimum: 0, nullable: true },
+                  isActive: { type: "boolean" },
+                  notes: { type: "string", nullable: true },
+                  leagueId: { type: "integer", nullable: true },
+                  teamId: { type: "integer", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Campo actualizado" },
+          "404": { description: "Campo, liga o equipo no encontrado" },
+        },
+      },
+      delete: {
+        tags: ["Admin - Campos"],
+        summary: "Eliminar campo",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "fieldId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Campo eliminado" },
+          "404": { description: "Campo no encontrado" },
+        },
+      },
+    },
+    "/api/admin/leagues/{leagueId}/seasons": {
+      get: {
+        tags: ["Admin - Temporadas"],
+        summary: "Listar temporadas de una liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Lista de temporadas" },
+          "403": { description: "No tienes acceso a esta liga" },
+          "404": { description: "Liga no encontrada" },
+        },
+      },
+      post: {
+        tags: ["Admin - Temporadas"],
+        summary: "Crear temporada en liga",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "leagueId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "year", "startDate", "endDate"],
+                properties: {
+                  name: { type: "string", example: "Temporada Apertura" },
+                  year: { type: "integer", example: 2026 },
+                  startDate: { type: "string", format: "date", example: "2026-01-15" },
+                  endDate: { type: "string", format: "date", example: "2026-06-30" },
+                  status: { type: "string", enum: ["draft", "active", "finished", "archived"] },
+                  isCurrent: { type: "boolean", default: false },
+                  reason: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Temporada creada" },
+          "400": { description: "Fechas inválidas o validación fallida" },
+          "403": { description: "No tienes acceso a esta liga" },
+          "404": { description: "Liga no encontrada" },
+          "409": { description: "La liga ya tiene una temporada activa" },
+        },
+      },
+    },
+    "/api/admin/seasons/{seasonId}": {
+      get: {
+        tags: ["Admin - Temporadas"],
+        summary: "Obtener detalle de temporada",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "seasonId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Detalle de temporada" },
+          "403": { description: "No tienes acceso a la liga de esta temporada" },
+          "404": { description: "Temporada no encontrada" },
+        },
+      },
+      put: {
+        tags: ["Admin - Temporadas"],
+        summary: "Actualizar temporada",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "seasonId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  year: { type: "integer" },
+                  startDate: { type: "string", format: "date" },
+                  endDate: { type: "string", format: "date" },
+                  status: { type: "string", enum: ["draft", "active", "finished", "archived"] },
+                  isCurrent: { type: "boolean" },
+                  reason: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Temporada actualizada" },
+          "400": { description: "Datos inválidos" },
+          "403": { description: "No autorizado sobre esta liga" },
+          "404": { description: "Temporada no encontrada" },
+          "409": { description: "Conflicto de temporada activa" },
+        },
+      },
+      delete: {
+        tags: ["Admin - Temporadas"],
+        summary: "Eliminar temporada",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "seasonId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Temporada eliminada" },
+          "403": { description: "No autorizado sobre esta liga" },
+          "404": { description: "Temporada no encontrada" },
+          "409": { description: "No se puede eliminar si tiene partidos asociados" },
+        },
+      },
+    },
+    "/api/admin/seasons/{seasonId}/status": {
+      patch: {
+        tags: ["Admin - Temporadas"],
+        summary: "Cambiar estado de temporada",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "seasonId", required: true, schema: { type: "integer" } }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["status"],
+                properties: {
+                  status: { type: "string", enum: ["draft", "active", "finished", "archived"] },
+                  reason: { type: "string", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Estado actualizado" },
+          "403": { description: "No autorizado sobre esta liga" },
+          "404": { description: "Temporada no encontrada" },
+          "409": { description: "Conflicto de temporada activa" },
+        },
+      },
+    },
+    "/api/admin/audit-logs": {
+      get: {
+        tags: ["Admin - Auditoría"],
+        summary: "Listar registros de auditoría",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { in: "query", name: "leagueId", required: false, schema: { type: "integer" } },
+          { in: "query", name: "seasonId", required: false, schema: { type: "integer" } },
+          { in: "query", name: "actorUserId", required: false, schema: { type: "integer" } },
+          { in: "query", name: "entityType", required: false, schema: { type: "string" } },
+          { in: "query", name: "action", required: false, schema: { type: "string", enum: ["create", "update", "delete", "status_change", "manual_fix"] } },
+          { in: "query", name: "from", required: false, schema: { type: "string", format: "date-time" } },
+          { in: "query", name: "to", required: false, schema: { type: "string", format: "date-time" } },
+        ],
+        responses: {
+          "200": { description: "Listado de auditoría" },
+          "401": { description: "No autorizado" },
+          "403": { description: "Solo admin" },
+        },
+      },
+    },
+    "/api/admin/audit-logs/{logId}": {
+      get: {
+        tags: ["Admin - Auditoría"],
+        summary: "Obtener registro de auditoría por ID",
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: "path", name: "logId", required: true, schema: { type: "integer" } }],
+        responses: {
+          "200": { description: "Detalle del registro" },
+          "404": { description: "Registro no encontrado" },
+        },
       },
     },
     // ----- TEAMS -----

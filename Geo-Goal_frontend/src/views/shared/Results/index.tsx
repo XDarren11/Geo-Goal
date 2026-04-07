@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getLeagues } from "@/api/leagueAPI";
 import { useAuth } from "@/hooks/useAuth";
-import type { Role } from "@/types";
-import { getActiveLeagues } from "@/api/teamAPI"; 
+import type { League, Role } from "@/types";
+import { getActiveLeagues, getMyPlayerTeams } from "@/api/teamAPI"; 
 import { CalendarDaysIcon, TrophyIcon } from "@heroicons/react/24/outline";
 
 export default function ResultsView() {
@@ -13,12 +13,30 @@ export default function ResultsView() {
 
   const { data: leagues, isLoading, isError } = useQuery({
     queryKey: ["leagues", "results", role], 
-    queryFn: () => {
+    queryFn: async () => {
       if (role === "coach") {
         return getActiveLeagues();
       }
+
+      if (role === "player") {
+        const teams = await getMyPlayerTeams();
+        const byLeague = new Map<number, League>();
+
+        teams.forEach((team) => {
+          if (!team.leagueId) return;
+          if (byLeague.has(team.leagueId)) return;
+          byLeague.set(team.leagueId, {
+            id: team.leagueId,
+            name: team.league?.name || `Liga ${team.leagueId}`,
+          });
+        });
+
+        return Array.from(byLeague.values());
+      }
+
       return getLeagues();
     },
+    enabled: !!role,
   });
 
   if (isLoading) {
@@ -40,7 +58,7 @@ export default function ResultsView() {
   return (
     <div className="opacity-0 animate-in-up">
       <Link
-        to="/"
+        to="/dashboard"
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
       >
         ← Inicio

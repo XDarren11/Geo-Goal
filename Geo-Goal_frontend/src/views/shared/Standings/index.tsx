@@ -2,8 +2,10 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getLeagues } from "@/api/leagueAPI";
 import { getActiveLeagues } from "@/api/teamAPI"; // Importamos la API del coach
+import { getMyPlayerTeams } from "@/api/teamAPI";
 import { ChartBarIcon, TrophyIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/hooks/useAuth"; 
+import type { League } from "@/types";
 
 
 export default function StandingsView() {
@@ -12,10 +14,27 @@ export default function StandingsView() {
   
   const { data: leagues, isLoading, isError } = useQuery({
     queryKey: ["leagues", "standings", role],
-    queryFn: () => {
+    queryFn: async () => {
       if (role === "coach") {
         return getActiveLeagues();
       }
+
+      if (role === "player") {
+        const teams = await getMyPlayerTeams();
+        const byLeague = new Map<number, League>();
+
+        teams.forEach((team) => {
+          if (!team.leagueId) return;
+          if (byLeague.has(team.leagueId)) return;
+          byLeague.set(team.leagueId, {
+            id: team.leagueId,
+            name: team.league?.name || `Liga ${team.leagueId}`,
+          });
+        });
+
+        return Array.from(byLeague.values());
+      }
+
       return getLeagues();
     },
     
@@ -41,7 +60,7 @@ export default function StandingsView() {
   return (
     <div className="opacity-0 animate-in-up">
       <Link
-        to="/"
+        to="/dashboard"
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
       >
         ← Inicio
