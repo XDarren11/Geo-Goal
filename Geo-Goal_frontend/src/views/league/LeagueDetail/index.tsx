@@ -21,11 +21,16 @@ import {
   ExclamationTriangleIcon
 } from "@heroicons/react/24/outline";
 import UpdateScoreModal from "@/components/Modals/UpdateScoreModal";
+import UpdateScheduleModal from "@/components/Modals/UpdateScheduleModal";
+import { LeagueInvitationMenu } from "@/components/InvitationMenus/LeagueInvitationMenu";
+import { useAuth } from "@/hooks/useAuth";
+import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 
 export default function LeagueDetailView() {
   const { leagueId } = useParams<{ leagueId: string }>();
   const id = Number(leagueId);
   const queryClient = useQueryClient();
+  const { data: currentUser } = useAuth();
 
   const [trainerEmail, setTrainerEmail] = useState("");
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -33,7 +38,11 @@ export default function LeagueDetailView() {
   const [searchingTrainer, setSearchingTrainer] = useState(false);
   const [, setSelectedTeamId] = useState<number | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
+  const [selectedScheduleMatch, setSelectedScheduleMatch] = useState<any>(null);
   const [needsRestructure, setNeedsRestructure] = useState(false);
+  const [scheduleStartDate, setScheduleStartDate] = useState("");
+  const [matchTime, setMatchTime] = useState("20:00");
+  const [daysBetweenRounds, setDaysBetweenRounds] = useState(7);
 
   const { data: league, isLoading } = useQuery({
     queryKey: ["league", id],
@@ -59,7 +68,7 @@ export default function LeagueDetailView() {
       toast.success("Equipo agregado a la liga");
       setNeedsRestructure(true);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo agregar el equipo")),
   });
 
   const removeTeamMutation = useMutation({
@@ -69,17 +78,22 @@ export default function LeagueDetailView() {
       toast.success("Equipo quitado de la liga");
       setNeedsRestructure(true);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo quitar el equipo")),
   });
 
   const generateFixtureMutation = useMutation({
-    mutationFn: (type: "round-robin" | "knockout") => generateFixture(id, type),
+    mutationFn: (type: "round-robin" | "knockout") =>
+      generateFixture(id, type, {
+        ...(scheduleStartDate ? { scheduleStartDate } : {}),
+        ...(matchTime ? { matchTime } : {}),
+        ...(Number.isFinite(daysBetweenRounds) ? { daysBetweenRounds } : {}),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fixture", id] });
       toast.success("Fixture generado");
       setNeedsRestructure(false)
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo generar el fixture")),
   });
 
   const restructureMutation = useMutation({
@@ -89,7 +103,7 @@ export default function LeagueDetailView() {
       toast.success("Calendario reestructurado exitosamente");
       setNeedsRestructure(false); 
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo reestructurar el calendario")),
   });
 
   async function handleSearchTrainer() {
@@ -99,7 +113,7 @@ export default function LeagueDetailView() {
       const res = await getTrainerTeams(id, trainerEmail.trim());
       setTrainerTeams(res);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al buscar");
+      toast.error(getApiErrorMessage(e, "Error al buscar"));
     } finally {
       setSearchingTrainer(false);
     }
@@ -148,14 +162,20 @@ export default function LeagueDetailView() {
             <UserGroupIcon className="h-5 w-5 text-geo-green" />
             Equipos ({teams.length})
           </h2>
-          <button
-            type="button"
-            onClick={() => setShowAddTeam(!showAddTeam)}
-            className="inline-flex items-center gap-2 rounded-lg bg-geo-green px-4 py-2 font-bold text-geo-black hover:bg-geo-green-hover"
-          >
-            <PlusIcon className="h-5 w-5" />
-            Agregar equipo
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddTeam(!showAddTeam)}
+              className="inline-flex items-center gap-2 rounded-lg bg-geo-green px-4 py-2 font-bold text-geo-black hover:bg-geo-green-hover"
+            >
+              <PlusIcon className="h-5 w-5" />
+              Agregar equipo
+            </button>
+            <LeagueInvitationMenu
+              leagueId={id}
+              userIsManager={league?.managerId === currentUser?.id}
+            />
+          </div>
         </div>
 
         {showAddTeam && (
@@ -264,6 +284,35 @@ export default function LeagueDetailView() {
         ) : (
           <>
             <div className="mt-4 flex gap-2">
+              <input
+                type="date"
+                value={scheduleStartDate}
+                onChange={(e) => setScheduleStartDate(e.target.value)}
+                className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]"
+                title="Fecha inicial del fixture"
+              />
+              <input
+                type="time"
+                value={matchTime}
+                onChange={(e) => setMatchTime(e.target.value)}
+                className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]"
+                title="Hora base de partidos"
+              />
+              <input
+                type="number"
+                min={0}
+                max={30}
+                value={daysBetweenRounds}
+                onChange={(e) => setDaysBetweenRounds(Number(e.target.value || 0))}
+                className="w-28 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]"
+                title="Días entre jornadas"
+              />
+            </div>
+            <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
+              Si defines fecha/hora, el sistema programa jornadas automáticamente y notifica a entrenadores, jugadores y árbitros asignados.
+            </p>
+
+            <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => generateFixtureMutation.mutate("round-robin")}
@@ -318,6 +367,17 @@ export default function LeagueDetailView() {
                             >
                               <PencilSquareIcon className="h-5 w-5" />
                             </button>
+
+                            <button
+                              onClick={() => {
+                                if (m.date && new Date(m.date).getTime() < Date.now()) return;
+                                setSelectedScheduleMatch(m);
+                              }}
+                              className="text-zinc-400 hover:text-geo-green transition-colors"
+                              title={m.date && new Date(m.date).getTime() < Date.now() ? "Partido vencido: no editable" : "Programar fecha/hora"}
+                            >
+                              <CalendarDaysIcon className="h-5 w-5" />
+                            </button>
                           </div>
                         </li>
                       ))}
@@ -340,6 +400,13 @@ export default function LeagueDetailView() {
         match={selectedMatch}
         leagueId={id}
         onClose={() => setSelectedMatch(null)}
+      />
+
+      <UpdateScheduleModal
+        isOpen={!!selectedScheduleMatch}
+        match={selectedScheduleMatch}
+        leagueId={id}
+        onClose={() => setSelectedScheduleMatch(null)}
       />
     </div>
   );

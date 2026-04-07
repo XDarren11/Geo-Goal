@@ -3,40 +3,75 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, FlatList, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { getLeagues } from '@/Api/leagueAPI';
-import { getMyTeams } from '@/Api/teamAPI';
+import { getActiveLeagues, getMyPlayerTeams, getMyTeams } from '@/Api/teamAPI';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/hooks/useAuth';
+import type { League } from '@/types';
+import Loader from '@/components/Loader';
 
 export default function ExploreScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'leagues' | 'teams'>('leagues');
   const params = useLocalSearchParams();
+  const { data: user } = useAuth();
 
   const { data: leagues = [], isLoading: leaguesLoading, refetch: refetchLeagues } = useQuery({
-    queryKey: ['leagues'],
-    queryFn: getLeagues,
+    queryKey: ['leagues', 'mobile-explore', user?.role],
+    queryFn: async () => {
+      if (user?.role === 'coach') {
+        return getActiveLeagues();
+      }
+
+      if (user?.role === 'player') {
+        const teams = await getMyPlayerTeams();
+        const byLeague = new Map<number, League>();
+
+        teams.forEach((team) => {
+          if (!team.leagueId) return;
+          if (byLeague.has(team.leagueId)) return;
+          byLeague.set(team.leagueId, {
+            id: team.leagueId,
+            name: team.league?.name || `Liga ${team.leagueId}`,
+          });
+        });
+
+        return Array.from(byLeague.values());
+      }
+
+      return getLeagues();
+    },
+    enabled: !!user,
   });
 
   const { data: teams = [], isLoading: teamsLoading, refetch: refetchTeams } = useQuery({
-    queryKey: ['myTeams'],
-    queryFn: getMyTeams,
+    queryKey: ['myTeams', 'mobile-explore', user?.role],
+    queryFn: async () => {
+      if (user?.role === 'player') return getMyPlayerTeams();
+      if (user?.role === 'coach') return getMyTeams();
+      return [];
+    },
+    enabled: !!user,
   });
 
   const handleRefresh = async () => {
     await Promise.all([refetchLeagues(), refetchTeams()]);
   };
 
-  const handleLeaguePress = (leagueId: string) => {
+  const handleLeaguePress = (leagueId: string | number, leagueName?: string) => {
     router.push({
       pathname: '/(tabs)/leagueDetail',
-      params: { id: leagueId },
+      params: { id: String(leagueId), name: leagueName || '' },
     });
   };
 
-  const handleTeamPress = (teamId: string) => {
-    router.push({
-      pathname: '/(tabs)/teamDetail',
-      params: { id: teamId },
-    });
+  const handleTeamPress = (team: any) => {
+    if (user?.role === 'coach' || user?.role === 'player') {
+      router.push({
+        pathname: '/(tabs)/teamDetail',
+        params: { id: String(team.id) },
+      });
+      return;
+    }
   };
 
   return (
@@ -70,9 +105,7 @@ export default function ExploreScreen() {
       {/* Content */}
       {activeTab === 'leagues' ? (
         leaguesLoading ? (
-          <View className="flex-1 justify-center items-center">
-            <ActivityIndicator size="large" color="#39FF14" />
-          </View>
+          <Loader fullScreen label="Cargando ligas..." />
         ) : (
           <ScrollView
             refreshControl={<RefreshControl refreshing={false} onRefresh={handleRefresh} tintColor="#39FF14" />}
@@ -82,10 +115,10 @@ export default function ExploreScreen() {
               <FlatList
                 scrollEnabled={false}
                 data={leagues}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    onPress={() => handleLeaguePress(item.id)}
+                    onPress={() => handleLeaguePress(item.id, item.name)}
                     className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-3"
                   >
                     <View className="flex-row justify-between items-start">
@@ -107,9 +140,7 @@ export default function ExploreScreen() {
           </ScrollView>
         )
       ) : teamsLoading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#39FF14" />
-        </View>
+        <Loader fullScreen label="Cargando equipos..." />
       ) : (
         <ScrollView
           refreshControl={<RefreshControl refreshing={false} onRefresh={handleRefresh} tintColor="#39FF14" />}
@@ -119,17 +150,18 @@ export default function ExploreScreen() {
             <FlatList
               scrollEnabled={false}
               data={teams}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  onPress={() => handleTeamPress(item.id)}
+                  onPress={() => handleTeamPress(item)}
                   className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-3"
                 >
                   <View className="flex-row justify-between items-start">
                     <View className="flex-1">
                       <Text className="text-geo-green font-bold text-lg">{item.name}</Text>
-                      <Text className="text-gray-400 text-sm mt-1">{item.players?.length || 0} jugadores</Text>
-                      <Text className="text-gray-500 text-xs mt-2">{item.description}</Text>
+                      <Text className="text-gray-400 text-sm mt-1">
+                        {item.league?.name || (item.leagueId ? `Liga ${item.leagueId}` : 'Sin liga')}
+                      </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#39FF14" />
                   </View>

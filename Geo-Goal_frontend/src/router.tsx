@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "@/layouts/AppLayout";
 import AuthLayout from "@/layouts/AuthLayout";
 import DashboardView from "@/views/Dashboard";
@@ -9,6 +9,9 @@ import RequestNewCode from "@/views/Auth/RequestNewCode";
 import ForgotPasswordView from "@/views/Auth/ForgotPassword";
 import NewPasswordView from "@/views/Auth/NewPassword";
 import { RoleGuard } from "@/components/RoleGuard";
+import PublicHomeView from "@/views/public/Home";
+import PublicLeagueView from "@/views/public/League";
+import PublicMatchDetailView from "@/views/public/MatchDetail";
 
 import LeagueListView from "@/views/league/LeagueList";
 import CreateLeagueView from "@/views/league/CreateLeague";
@@ -28,13 +31,23 @@ import NewsView from "@/views/shared/News";
 import StandingsTableView from "./views/shared/Standings/StandingsTableView";
 import LeagueMatchesView from "./views/shared/Results/LeagueMatchesView";
 import TeamDashboardView from "./views/league/JoinLeague/TeamDashboardView";
+import UserManagementView from "@/views/admin/UserManagement";
+import FieldManagementView from "@/views/admin/FieldManagement";
+import SeasonManagementView from "@/views/admin/SeasonManagement";
+import AuditLogsView from "@/views/admin/AuditLogs";
+import RefereeCenterView from "@/views/admin/RefereeCenter";
 
 export default function Router() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/public" replace />} />
+        <Route path="/public" element={<PublicHomeView />} />
+        <Route path="/public/leagues/:leagueId" element={<PublicLeagueView />} />
+        <Route path="/public/matches/:matchId/detail" element={<PublicMatchDetailView />} />
+
         <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardView />} index />
+          <Route path="/dashboard" element={<DashboardView />} />
 
           <Route
             path="/leagues"
@@ -61,6 +74,46 @@ export default function Router() {
             }
           />
           <Route
+            path="/admin/users"
+            element={
+              <RoleGuard allowedRoles={["admin"]}>
+                <UserManagementView />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/admin/fields"
+            element={
+              <RoleGuard allowedRoles={["admin"]}>
+                <FieldManagementView />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/admin/seasons"
+            element={
+              <RoleGuard allowedRoles={["admin"]}>
+                <SeasonManagementView />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/admin/audit-logs"
+            element={
+              <RoleGuard allowedRoles={["admin"]}>
+                <AuditLogsView />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/admin/referee"
+            element={
+              <RoleGuard allowedRoles={["admin", "referee"]}>
+                <RefereeCenterView />
+              </RoleGuard>
+            }
+          />
+          <Route
             path="/leagues/:leagueId"
             element={
               <RoleGuard allowedRoles={["admin"]}>
@@ -71,7 +124,7 @@ export default function Router() {
           <Route
             path="/leagues/join"
             element={
-              <RoleGuard allowedRoles={["coach"]}>
+              <RoleGuard allowedRoles={["coach", "referee"]}>
                 <JoinLeagueView />
               </RoleGuard>
             }
