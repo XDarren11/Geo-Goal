@@ -3,7 +3,24 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('notifications', {
+    const tableName = 'notifications';
+
+    const tableExists = async () => {
+      try {
+        await queryInterface.describeTable(tableName);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const hasIndex = async (indexName) => {
+      const indexes = await queryInterface.showIndex(tableName);
+      return indexes.some((idx) => idx.name === indexName);
+    };
+
+    if (!(await tableExists())) {
+      await queryInterface.createTable(tableName, {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -48,11 +65,18 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.NOW,
       },
-    });
+      });
+    }
 
-    await queryInterface.addIndex('notifications', ['userId']);
-    await queryInterface.addIndex('notifications', ['readAt']);
-    await queryInterface.addIndex('notifications', ['createdAt']);
+    if (!(await hasIndex('idx_notifications_user_id'))) {
+      await queryInterface.addIndex(tableName, ['userId'], { name: 'idx_notifications_user_id' });
+    }
+    if (!(await hasIndex('idx_notifications_read_at'))) {
+      await queryInterface.addIndex(tableName, ['readAt'], { name: 'idx_notifications_read_at' });
+    }
+    if (!(await hasIndex('idx_notifications_created_at'))) {
+      await queryInterface.addIndex(tableName, ['createdAt'], { name: 'idx_notifications_created_at' });
+    }
   },
 
   async down(queryInterface) {

@@ -3,7 +3,22 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('match_referee_assignments', {
+    const tableExists = async (tableName) => {
+      try {
+        await queryInterface.describeTable(tableName);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const hasIndex = async (tableName, indexName) => {
+      const indexes = await queryInterface.showIndex(tableName);
+      return indexes.some((idx) => idx.name === indexName);
+    };
+
+    if (!(await tableExists('match_referee_assignments'))) {
+      await queryInterface.createTable('match_referee_assignments', {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -53,18 +68,28 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.NOW,
       },
-    });
+      });
 
-    await queryInterface.addConstraint('match_referee_assignments', {
-      fields: ['matchId', 'refereeUserId'],
-      type: 'unique',
-      name: 'ux_match_referee_assignments_match_referee',
-    });
+      await queryInterface.addConstraint('match_referee_assignments', {
+        fields: ['matchId', 'refereeUserId'],
+        type: 'unique',
+        name: 'ux_match_referee_assignments_match_referee',
+      });
+    }
 
-    await queryInterface.addIndex('match_referee_assignments', ['refereeUserId']);
-    await queryInterface.addIndex('match_referee_assignments', ['leagueId']);
+    if (!(await hasIndex('match_referee_assignments', 'idx_match_referee_assignments_referee_user_id'))) {
+      await queryInterface.addIndex('match_referee_assignments', ['refereeUserId'], {
+        name: 'idx_match_referee_assignments_referee_user_id',
+      });
+    }
+    if (!(await hasIndex('match_referee_assignments', 'idx_match_referee_assignments_league_id'))) {
+      await queryInterface.addIndex('match_referee_assignments', ['leagueId'], {
+        name: 'idx_match_referee_assignments_league_id',
+      });
+    }
 
-    await queryInterface.createTable('match_events', {
+    if (!(await tableExists('match_events'))) {
+      await queryInterface.createTable('match_events', {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -133,14 +158,24 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.NOW,
       },
-    });
+      });
+    }
 
-    await queryInterface.addIndex('match_events', ['matchId']);
-    await queryInterface.addIndex('match_events', ['leagueId']);
-    await queryInterface.addIndex('match_events', ['eventType']);
-    await queryInterface.addIndex('match_events', ['minute']);
+    if (!(await hasIndex('match_events', 'idx_match_events_match_id'))) {
+      await queryInterface.addIndex('match_events', ['matchId'], { name: 'idx_match_events_match_id' });
+    }
+    if (!(await hasIndex('match_events', 'idx_match_events_league_id'))) {
+      await queryInterface.addIndex('match_events', ['leagueId'], { name: 'idx_match_events_league_id' });
+    }
+    if (!(await hasIndex('match_events', 'idx_match_events_event_type'))) {
+      await queryInterface.addIndex('match_events', ['eventType'], { name: 'idx_match_events_event_type' });
+    }
+    if (!(await hasIndex('match_events', 'idx_match_events_minute'))) {
+      await queryInterface.addIndex('match_events', ['minute'], { name: 'idx_match_events_minute' });
+    }
 
-    await queryInterface.createTable('match_tracking_frames', {
+    if (!(await tableExists('match_tracking_frames'))) {
+      await queryInterface.createTable('match_tracking_frames', {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -203,11 +238,20 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.NOW,
       },
-    });
+      });
+    }
 
-    await queryInterface.addIndex('match_tracking_frames', ['matchId']);
-    await queryInterface.addIndex('match_tracking_frames', ['leagueId']);
-    await queryInterface.addIndex('match_tracking_frames', ['timestampMs']);
+    if (!(await hasIndex('match_tracking_frames', 'idx_match_tracking_frames_match_id'))) {
+      await queryInterface.addIndex('match_tracking_frames', ['matchId'], { name: 'idx_match_tracking_frames_match_id' });
+    }
+    if (!(await hasIndex('match_tracking_frames', 'idx_match_tracking_frames_league_id'))) {
+      await queryInterface.addIndex('match_tracking_frames', ['leagueId'], { name: 'idx_match_tracking_frames_league_id' });
+    }
+    if (!(await hasIndex('match_tracking_frames', 'idx_match_tracking_frames_timestamp_ms'))) {
+      await queryInterface.addIndex('match_tracking_frames', ['timestampMs'], {
+        name: 'idx_match_tracking_frames_timestamp_ms',
+      });
+    }
   },
 
   async down(queryInterface) {

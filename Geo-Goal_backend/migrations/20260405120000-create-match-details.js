@@ -3,7 +3,24 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('match_details', {
+    const tableName = 'match_details';
+
+    const tableExists = async () => {
+      try {
+        await queryInterface.describeTable(tableName);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const hasIndex = async (indexName) => {
+      const indexes = await queryInterface.showIndex(tableName);
+      return indexes.some((idx) => idx.name === indexName);
+    };
+
+    if (!(await tableExists())) {
+      await queryInterface.createTable(tableName, {
       id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -134,12 +151,18 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.NOW,
       },
-    });
+      });
+    }
 
-    await queryInterface.addIndex('match_details', ['matchId']);
-    await queryInterface.addIndex('match_details', ['fieldId']);
-    await queryInterface.addIndex('match_details', ['homeCoachId']);
-    await queryInterface.addIndex('match_details', ['awayCoachId']);
+    if (!(await hasIndex('idx_match_details_field_id'))) {
+      await queryInterface.addIndex(tableName, ['fieldId'], { name: 'idx_match_details_field_id' });
+    }
+    if (!(await hasIndex('idx_match_details_home_coach_id'))) {
+      await queryInterface.addIndex(tableName, ['homeCoachId'], { name: 'idx_match_details_home_coach_id' });
+    }
+    if (!(await hasIndex('idx_match_details_away_coach_id'))) {
+      await queryInterface.addIndex(tableName, ['awayCoachId'], { name: 'idx_match_details_away_coach_id' });
+    }
   },
 
   async down(queryInterface) {
