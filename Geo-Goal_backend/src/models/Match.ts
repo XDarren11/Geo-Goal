@@ -1,6 +1,8 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasOne } from 'sequelize-typescript';
 import { League } from './League';
 import { Team } from './Team';
+import { Season } from './Season';
+import { MatchDetail } from './MatchDetail';
 
 @Table({ tableName: 'matches' })
 export class Match extends Model {
@@ -11,6 +13,13 @@ export class Match extends Model {
 
     @BelongsTo(() => League)
     declare league: League;
+
+    @ForeignKey(() => Season)
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare seasonId: number | null;
+
+    @BelongsTo(() => Season)
+    declare season: Season;
 
     // Equipo Local
     @ForeignKey(() => Team)
@@ -49,4 +58,7 @@ export class Match extends Model {
 
     @Column({ type: DataType.BOOLEAN, defaultValue: false })
     declare played: boolean;
+
+    @HasOne(() => MatchDetail)
+    declare detail: MatchDetail;
 }

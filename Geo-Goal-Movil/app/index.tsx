@@ -2,33 +2,18 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from 'expo-status-bar';
-import { checkAuthToken } from "@/hooks/useAuth";
 
 export default function index() {
   const [isReady, setIsReady] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const hasToken = await checkAuthToken();
-      setIsAuthenticated(hasToken);
-      
-      const timer = setTimeout(() => {
-        setIsReady(true);
-      }, 1300);
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 900);
 
-      return () => clearTimeout(timer);
-    };
-
-    checkAuth();
+    return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (isReady && isAuthenticated) {
-      router.replace("/(tabs)/home");
-    }
-  }, [isReady, isAuthenticated]);
 
   return (
     <>
@@ -44,7 +29,7 @@ export default function index() {
             Geo-Goal
           </Text>
         </View>
-      ) : !isAuthenticated ? (
+      ) : (
         <View className="flex-1 bg-geo-black justify-center items-center">
           <View className="items-center mt-10">
             <Image
@@ -82,7 +67,7 @@ export default function index() {
             </Text>
           </TouchableOpacity>
         </View>
-      ) : null}
+      )}
     </>
   );
 }

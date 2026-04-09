@@ -6,7 +6,7 @@ import { generateJWT } from "../utils/jwt";
 import { AuthEmail } from "../emails/AuthEmail";
 import { AppError } from "../types/errors";
 
-const VALID_ROLES = ["coach", "player", "admin"] as const;
+const VALID_ROLES = ["coach", "player", "admin", "referee"] as const;
 
 export type CreateAccountInput = {
   name: string;

@@ -5,7 +5,7 @@ export default function NewsView() {
   return (
     <div>
       <Link
-        to="/"
+        to="/dashboard"
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Inicio

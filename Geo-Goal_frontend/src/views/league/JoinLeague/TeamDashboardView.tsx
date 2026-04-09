@@ -39,7 +39,7 @@ export default function TeamDashboardView() {
   return (
     <div className="animate-in fade-in duration-300">
       <Link
-        to="/results"
+        to="/leagues/join"
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
       >
         ← Volver a mis torneos

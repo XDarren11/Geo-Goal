@@ -28,7 +28,7 @@ export const userSchema = authSchema.pick({
 })
 
 export type User = z.infer<typeof userSchema>
-export type Role = 'admin' | 'coach' | 'player'
+export type Role = 'admin' | 'coach' | 'player' | 'referee'
 
 // League
 export interface League {
@@ -49,6 +49,7 @@ export interface Team {
   logoUrl?: string | null
   leagueId?: number | null
   trainerId?: number
+  league?: Pick<League, 'id' | 'name'>
 }
 
 // Match
@@ -72,4 +73,16 @@ export interface Player {
   id: number
   name: string
   email: string
+}
+
+export interface NotificationItem {
+  id: number
+  userId: number
+  type: string
+  title: string
+  message: string
+  payload?: Record<string, unknown>
+  readAt?: string | null
+  createdAt?: string
+  updatedAt?: string
 }

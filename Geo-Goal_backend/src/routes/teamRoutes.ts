@@ -4,6 +4,7 @@ import { hasRole } from "../middleware/role";
 import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { TeamController } from "../controllers/TeamController";
+import { TeamInvitationController } from "../controllers/TeamInvitationController";
 import { upload } from "../middleware/upload";
 import { asyncHandler } from "../middleware/asyncHandler";
 
@@ -11,11 +12,16 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get("/coach/dashboard", hasRole("coach"), asyncHandler(TeamController.getCoachDashboard));
+router.get("/player/dashboard", hasRole("player"), asyncHandler(TeamController.getPlayerDashboard));
+
 router.get("/", hasRole("coach"), asyncHandler(TeamController.getMyTeams));
+
+router.get("/player/me", hasRole("player"), asyncHandler(TeamController.getPlayerTeams));
 
 router.get(
   "/:id",
-  hasRole("coach"),
+  hasRole("coach", "player"),
   param("id").isInt().withMessage("ID no válido"),
   handleInputError,
   asyncHandler(TeamController.getTeamById)
@@ -69,7 +75,7 @@ router.post(
 
 router.get(
   "/:id/player",
-  hasRole("coach"),
+  hasRole("coach", "player"),
   param("id").isInt().withMessage("ID no válido"),
   handleInputError,
   asyncHandler(TeamController.getPlayersTeam)
@@ -97,6 +103,119 @@ router.get('/leagues/:leagueId/teams/:teamId/dashboard',
     param('teamId').isInt(),
     handleInputError,
     TeamController.getTeamDashboard
+);
+
+/**
+ * @swagger
+ * /api/teams/:teamId/invitation:
+ *   post:
+ *     summary: Generar código de invitación para un equipo
+ *     tags: [Invitaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               expiresIn:
+ *                 type: integer
+ *                 description: Minutos hasta que expire el código
+ *     responses:
+ *       200:
+ *         description: Código generado exitosamente
+ */
+router.post('/:teamId/invitation',
+    authenticate,
+  hasRole('coach'),
+    param('teamId').isInt().withMessage('El ID del equipo no es válido'),
+    handleInputError,
+    asyncHandler(TeamInvitationController.generateInvitation)
+);
+
+/**
+ * @swagger
+ * /api/teams/:teamId/invitation:
+ *   get:
+ *     summary: Obtener código de invitación actual
+ *     tags: [Invitaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
+router.get('/:teamId/invitation',
+    authenticate,
+  hasRole('coach'),
+    param('teamId').isInt().withMessage('El ID del equipo no es válido'),
+    handleInputError,
+    asyncHandler(TeamInvitationController.getInvitation)
+);
+
+/**
+ * @swagger
+ * /api/teams/:teamId/invitation:
+ *   delete:
+ *     summary: Revocar código de invitación
+ *     tags: [Invitaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: integer
+ */
+router.delete('/:teamId/invitation',
+    authenticate,
+  hasRole('coach'),
+    param('teamId').isInt().withMessage('El ID del equipo no es válido'),
+    handleInputError,
+    asyncHandler(TeamInvitationController.revokeInvitation)
+);
+
+/**
+ * @swagger
+ * /api/teams/join-by-code:
+ *   post:
+ *     summary: Unir jugador a equipo usando código
+ *     tags: [Invitaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 example: ABC123XY
+ *     responses:
+ *       200:
+ *         description: Jugador unido al equipo
+ */
+router.post('/join-by-code',
+    authenticate,
+  hasRole('player'),
+    body('code').notEmpty().withMessage('El código es obligatorio'),
+    handleInputError,
+    asyncHandler(TeamInvitationController.joinByCode)
 );
 
 export default router;

@@ -9,14 +9,29 @@ import { Op } from 'sequelize';
  * Handlers de equipos: extraen params/body y user (y file si hay upload), llaman al servicio.
  */
 export class TeamController {
+  static getPlayerDashboard = async (req: Request, res: Response): Promise<void> => {
+    const data = await TeamService.getPlayerDashboard(req.user!.id);
+    res.json(data);
+  };
+
+  static getCoachDashboard = async (req: Request, res: Response): Promise<void> => {
+    const data = await TeamService.getCoachDashboard(req.user!.id);
+    res.json(data);
+  };
+
   static getMyTeams = async (req: Request, res: Response): Promise<void> => {
     const data = await TeamService.getMyTeams(req.user!.id);
     res.json(data);
   };
 
+  static getPlayerTeams = async (req: Request, res: Response): Promise<void> => {
+    const data = await TeamService.getPlayerTeams(req.user!.id);
+    res.json(data);
+  };
+
   static getTeamById = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const data = await TeamService.getTeamById(id, req.user!.id);
+    const data = await TeamService.getTeamById(id, req.user!.id, req.user!.role);
     res.json(data);
   };
 
@@ -69,7 +84,7 @@ export class TeamController {
 
   static getPlayersTeam = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const data = await TeamService.getPlayersTeam(id, req.user!.id);
+    const data = await TeamService.getPlayersTeam(id, req.user!.id, req.user!.role);
     res.json(data);
   };
 

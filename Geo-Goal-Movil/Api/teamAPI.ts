@@ -8,6 +8,26 @@ export async function getMyTeams(): Promise<Team[]> {
   return data;
 }
 
+export async function getCoachDashboardSummary(): Promise<any> {
+  const { data } = await api.get(`${BASE}/coach/dashboard`);
+  return data;
+}
+
+export async function getPlayerDashboardSummary(): Promise<any> {
+  const { data } = await api.get(`${BASE}/player/dashboard`);
+  return data;
+}
+
+export async function getMyPlayerTeams(): Promise<Team[]> {
+  const { data } = await api.get<Team[]>(`${BASE}/player/me`);
+  return data;
+}
+
+export async function getActiveLeagues() {
+  const { data } = await api.get(`${BASE}/leagues/coach/active`);
+  return data;
+}
+
 export async function getTeamById(teamId: number): Promise<Team> {
   const { data } = await api.get<Team>(`${BASE}/${teamId}`);
   return data;

@@ -4,7 +4,12 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
-    "dev:api": "nodemon --exec ts-node src/index.ts --api"
+    "dev:api": "nodemon --exec ts-node src/index.ts --api",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:migrate:status": "sequelize-cli db:migrate:status",
+    "db:migration:create": "sequelize-cli migration:generate --name",
+    "db:seed:demo": "node scripts/seed-demo-data.js"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +45,7 @@
     "@types/nodemailer": "^7.0.4",
     "nodemailer": "^7.0.12",
     "nodemon": "^3.1.11",
+    "sequelize-cli": "^6.6.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
