@@ -69,7 +69,7 @@ export default function HomeScreen() {
           <>
             <Text className="text-white text-lg font-bold mb-2">Administrador</Text>
             <TouchableOpacity
-              onPress={() => router.push('/(tabs)/explore')}
+              onPress={() => router.push('/league/create')}
               className="bg-gradient-to-r from-geo-green/20 to-geo-green/5 border border-geo-green rounded-xl p-4 flex-row items-center justify-between"
             >
               <View className="flex-1">
