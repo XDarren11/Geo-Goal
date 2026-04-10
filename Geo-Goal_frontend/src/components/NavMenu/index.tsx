@@ -55,6 +55,8 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
     { to: "/leagues/join", label: "Ingresar código de liga", icon: KeyIcon },
     { to: "/teams", label: "Mis equipos", icon: TrophyIcon },
     { to: "/teams/new", label: "Crear equipo", icon: PlusCircleIcon },
+    // AQUÍ AGREGAMOS LA NUEVA SECCIÓN DE ESTADÍSTICAS
+    { to: "/coach/teams", label: "Estadísticas por equipo", icon: ChartBarIcon },
   ];
 
   const playerLinks: NavLinkItem[] = [

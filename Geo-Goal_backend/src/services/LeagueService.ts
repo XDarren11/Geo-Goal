@@ -181,6 +181,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       scheduleStartDate?: string;
       matchTime?: string;
       daysBetweenRounds?: number;
+      matchDuration?: number;
     }
   ): Promise<{ message: string; totalMatches: number }> {
     const league = await League.findOne({
@@ -209,6 +210,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
 
     const shouldSchedule = Boolean(options?.scheduleStartDate);
     const daysBetweenRounds = options?.daysBetweenRounds ?? 7;
+    const matchDuration = options?.matchDuration ?? 60;
 
     const uniqueRoundsInOrder: string[] = [];
     generatedMatches.forEach((m) => {
@@ -217,23 +219,42 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       }
     });
 
-    const matchesToSave = generatedMatches.map((m) => ({
-      ...(shouldSchedule
-        ? {
-            date: LeagueService.buildRoundDate(
-              options!.scheduleStartDate!,
-              options?.matchTime,
-              uniqueRoundsInOrder.indexOf(m.round),
-              daysBetweenRounds
-            ),
-          }
-        : {}),
+    const matchCounterPerRound: Record<string, number> = {};
+
+    const matchesToSave = generatedMatches.map((m) => {
+    // Inicializar o incrementar el contador para esta ronda específica
+    if (matchCounterPerRound[m.round] === undefined) {
+      matchCounterPerRound[m.round] = 0;
+    } else {
+      matchCounterPerRound[m.round]++;
+    }
+
+    let matchDate: Date | null = null;
+
+    if (shouldSchedule) {
+      // 1. Calculamos la fecha base de la jornada (Jornada 1, Jornada 2, etc.)
+      const baseDate = LeagueService.buildRoundDate(
+        options!.scheduleStartDate!,
+        options?.matchTime,
+        uniqueRoundsInOrder.indexOf(m.round),
+        daysBetweenRounds
+      );
+
+      // 2. Le sumamos los minutos correspondientes según el índice del partido
+      matchDate = new Date(baseDate);
+      const minutesToAdd = matchCounterPerRound[m.round] * matchDuration;
+      matchDate.setMinutes(matchDate.getMinutes() + minutesToAdd);
+    }
+
+    return {
+      date: matchDate,
       leagueId: league.id,
       homeTeamId: m.home,
       awayTeamId: m.away,
       roundName: m.round,
       played: false,
-    }));
+    };
+  });
 
     const createdMatches = await Match.bulkCreate(matchesToSave, { returning: true });
 

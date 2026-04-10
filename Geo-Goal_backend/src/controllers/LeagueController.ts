@@ -168,11 +168,12 @@ export class LeagueController {
 
   static generateFixture = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const { type, scheduleStartDate, matchTime, daysBetweenRounds } = req.body;
+    const { type, scheduleStartDate, matchTime, daysBetweenRounds, matchDuration } = req.body;
     const data = await LeagueService.generateFixture(id, req.user!.id, type, {
       scheduleStartDate,
       matchTime,
       daysBetweenRounds,
+      matchDuration,
     });
     res.json(data);
   };

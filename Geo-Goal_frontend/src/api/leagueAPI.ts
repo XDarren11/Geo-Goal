@@ -67,6 +67,7 @@ export async function generateFixture(
     scheduleStartDate?: string;
     matchTime?: string;
     daysBetweenRounds?: number;
+    matchDuration?: number
   }
 ): Promise<{ message: string; totalMatches: number }> {
   const { data } = await api.post<{ message: string; totalMatches: number }>(

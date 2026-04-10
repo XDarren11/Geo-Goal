@@ -15,6 +15,7 @@ export const connectDB = async () => {
             await db.sync()
             console.log(colors.yellow.bold('DB_SYNC=true: sincronización automática activada solo para desarrollo local.'))
         }
+        await db.sync({ alter: true });
         console.log(colors.magenta.bold(`Conexion exitosa a la BD`))
     } catch (error) {
         console.log(error)

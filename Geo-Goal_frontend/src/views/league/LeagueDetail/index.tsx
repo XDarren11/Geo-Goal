@@ -43,6 +43,7 @@ export default function LeagueDetailView() {
   const [scheduleStartDate, setScheduleStartDate] = useState("");
   const [matchTime, setMatchTime] = useState("20:00");
   const [daysBetweenRounds, setDaysBetweenRounds] = useState(7);
+  const [matchDuration, setMatchDuration] = useState<number>(60); 
 
   const { data: league, isLoading } = useQuery({
     queryKey: ["league", id],
@@ -82,19 +83,21 @@ export default function LeagueDetailView() {
   });
 
   const generateFixtureMutation = useMutation({
-    mutationFn: (type: "round-robin" | "knockout") =>
-      generateFixture(id, type, {
-        ...(scheduleStartDate ? { scheduleStartDate } : {}),
-        ...(matchTime ? { matchTime } : {}),
-        ...(Number.isFinite(daysBetweenRounds) ? { daysBetweenRounds } : {}),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["fixture", id] });
-      toast.success("Fixture generado");
-      setNeedsRestructure(false)
-    },
-    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo generar el fixture")),
-  });
+  mutationFn: (type: "round-robin" | "knockout") =>
+    generateFixture(id, type, {
+      ...(scheduleStartDate ? { scheduleStartDate } : {}),
+      ...(matchTime ? { matchTime } : {}),
+      ...(Number.isFinite(daysBetweenRounds) ? { daysBetweenRounds } : {}),
+      // AGREGA ESTA LÍNEA:
+      ...(Number.isFinite(matchDuration) ? { matchDuration } : {}),
+    }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["fixture", id] });
+    toast.success("Fixture generado");
+    setNeedsRestructure(false);
+  },
+  onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo generar el fixture")),
+});
 
   const restructureMutation = useMutation({
     mutationFn: () => restructureFixture(id),
@@ -307,6 +310,19 @@ export default function LeagueDetailView() {
                 className="w-28 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]"
                 title="Días entre jornadas"
               />
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={10}
+                  step={5}
+                  value={matchDuration}
+                  onChange={(e) => setMatchDuration(Number(e.target.value || 0))}
+                  className="w-24 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]"
+                  title="Duración del partido en minutos"
+                  placeholder="Minutos"
+                />
+                <span className="text-xs text-[var(--geo-text-secondary)]">min</span>
+              </div>
             </div>
             <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
               Si defines fecha/hora, el sistema programa jornadas automáticamente y notifica a entrenadores, jugadores y árbitros asignados.

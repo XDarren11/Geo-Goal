@@ -36,6 +36,7 @@ import FieldManagementView from "@/views/admin/FieldManagement";
 import SeasonManagementView from "@/views/admin/SeasonManagement";
 import AuditLogsView from "@/views/admin/AuditLogs";
 import RefereeCenterView from "@/views/admin/RefereeCenter";
+import CoachTeamsView from "./views/team/TeamView/CoachTeamsView";
 
 export default function Router() {
   return (
@@ -180,6 +181,8 @@ export default function Router() {
               <LeagueMatchesView />
             }
           />
+
+          <Route path="/coach/teams" element={<CoachTeamsView />} />
 
           <Route path="/leagues/:leagueId/teams/:teamId/dashboard" element={<TeamDashboardView />} />
 

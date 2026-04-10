@@ -372,6 +372,10 @@ router.post('/:id/calculate-fixture',
             .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
             .withMessage('Hora inválida (usa HH:mm)'),
         body('daysBetweenRounds').optional().isInt({ min: 0, max: 30 }).withMessage('Intervalo entre jornadas inválido'),
+        body('matchDuration')
+            .optional()
+            .isInt({ min: 10, max: 240 })
+            .withMessage('La duración debe ser entre 10 y 240 minutos'),
     handleInputError,
     asyncHandler(LeagueController.generateFixture)
 );
