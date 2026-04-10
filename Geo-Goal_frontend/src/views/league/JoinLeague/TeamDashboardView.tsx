@@ -244,7 +244,6 @@ function DashboardMatchCard({ match }: { match: any }) {
           }}
         />
       </div>
-
     </div>
   );
 }
