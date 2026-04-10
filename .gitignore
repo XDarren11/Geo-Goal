@@ -10,3 +10,4 @@ copilot.data.migration.ask2agent.xml
 vcs.xml
 workspace.xml
 Project_Default.xml
+.env

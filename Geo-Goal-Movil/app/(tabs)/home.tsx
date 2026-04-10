@@ -119,6 +119,17 @@ export default function HomeScreen() {
       <View className="px-4 py-6 gap-4">
         {user.role === 'admin' && (
           <>
+            <Text className="text-white text-lg font-bold mb-2">Administrador</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/league/create')}
+              className="bg-gradient-to-r from-geo-green/20 to-geo-green/5 border border-geo-green rounded-xl p-4 flex-row items-center justify-between"
+            >
+              <View className="flex-1">
+                <Text className="text-geo-green font-bold">Crear Liga</Text>
+                <Text className="text-gray-400 text-sm">Organiza torneo</Text>
+              </View>
+              <Ionicons name="add-circle" size={24} color="#39FF14" />
+            </TouchableOpacity>
             <Text className="text-white text-lg font-bold mb-2">Dashboard Admin</Text>
             <View className="flex-row gap-2">
               <KPI label="Ligas" value={adminDashboard?.stats?.leagues ?? 0} />
