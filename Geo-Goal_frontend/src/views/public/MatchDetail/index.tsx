@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getPublicMatchDetail } from "@/api/publicAPI";
-import type { MatchDetailLineupEntry } from "@/types";
+import type { MatchDetailLineupEntry, MatchSquadPlayerView } from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 
 function formatDateTime(value?: string | null) {
@@ -29,14 +29,29 @@ function listLabel(player: MatchDetailLineupEntry, index: number) {
   return [number, name, position].filter(Boolean).join(" ").trim();
 }
 
+function listLabelStructured(player: MatchSquadPlayerView, index: number) {
+  const name = typeof player.name === "string" && player.name.trim().length > 0
+    ? player.name
+    : `Jugador ${index + 1}`;
+  const number = typeof player.jerseyNumber === "number" ? `#${player.jerseyNumber}` : "";
+  const position = typeof player.position === "string" && player.position.trim().length > 0
+    ? `(${player.position})`
+    : "";
+  return [number, name, position].filter(Boolean).join(" ").trim();
+}
+
 function TeamLineupCard({
   title,
   starters,
   bench,
+  roster,
+  unavailable,
 }: {
   title: string;
   starters?: MatchDetailLineupEntry[];
   bench?: MatchDetailLineupEntry[];
+  roster?: MatchSquadPlayerView[];
+  unavailable?: MatchSquadPlayerView[];
 }) {
   const safeStarters = Array.isArray(starters) ? starters : [];
   const safeBench = Array.isArray(bench) ? bench : [];
@@ -74,6 +89,32 @@ function TeamLineupCard({
           <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin banca registrada.</p>
         )}
       </div>
+
+      {Array.isArray(roster) && roster.length ? (
+        <div className="mt-4">
+          <p className="text-sm font-bold text-geo-green">Plantilla disponible</p>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {roster.map((p, idx) => (
+              <li key={`r-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                {listLabelStructured(p, idx)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {Array.isArray(unavailable) && unavailable.length ? (
+        <div className="mt-4">
+          <p className="text-sm font-bold text-red-400">No disponibles</p>
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+            {unavailable.map((p, idx) => (
+              <li key={`u-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                {listLabelStructured(p, idx)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -112,6 +153,41 @@ export default function PublicMatchDetailView() {
   }
 
   const { match, detail } = data;
+  const homeStarters = detail.squads?.home?.starters?.length
+    ? detail.squads.home.starters.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail.homeStartingXI;
+
+  const homeBench = detail.squads?.home?.bench?.length
+    ? detail.squads.home.bench.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail.homeBench;
+
+  const awayStarters = detail.squads?.away?.starters?.length
+    ? detail.squads.away.starters.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail.awayStartingXI;
+
+  const awayBench = detail.squads?.away?.bench?.length
+    ? detail.squads.away.bench.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail.awayBench;
 
   return (
     <div className="min-h-screen bg-[var(--geo-bg)] pitch-stripes text-[var(--geo-text)]">
@@ -184,13 +260,17 @@ export default function PublicMatchDetailView() {
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           <TeamLineupCard
             title={`Alineación ${match.homeTeam?.name ?? "Local"}`}
-            starters={detail.homeStartingXI}
-            bench={detail.homeBench}
+            starters={homeStarters}
+            bench={homeBench}
+            roster={detail.squads?.home?.roster}
+            unavailable={detail.squads?.home?.unavailable}
           />
           <TeamLineupCard
             title={`Alineación ${match.awayTeam?.name ?? "Visitante"}`}
-            starters={detail.awayStartingXI}
-            bench={detail.awayBench}
+            starters={awayStarters}
+            bench={awayBench}
+            roster={detail.squads?.away?.roster}
+            unavailable={detail.squads?.away?.unavailable}
           />
         </section>
 

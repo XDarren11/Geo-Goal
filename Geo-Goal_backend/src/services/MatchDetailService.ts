@@ -1,9 +1,12 @@
 import { AppError } from "../types/errors";
+import { Op } from "sequelize";
 import { Match } from "../models/Match";
 import { MatchDetail } from "../models/MatchDetail";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { Field } from "../models/Field";
+import { TeamMember } from "../models/TeamMember";
+import { MatchSquadPlayer } from "../models/MatchSquadPlayer";
 import { NotificationService } from "./NotificationService";
 
 type LineupEntry = Record<string, unknown>;
@@ -20,10 +23,24 @@ type UpsertMatchDetailInput = {
   awayStartingXI?: LineupEntry[];
   homeBench?: LineupEntry[];
   awayBench?: LineupEntry[];
+  homeUnavailable?: LineupEntry[];
+  awayUnavailable?: LineupEntry[];
   referee?: string | null;
   weather?: string | null;
   attendance?: number | null;
   notes?: string | null;
+};
+
+type SquadRole = "starter" | "bench" | "roster" | "unavailable";
+
+type ParsedSquadEntry = {
+  playerId: number;
+  playerName: string | null;
+  jerseyNumber: number | null;
+  position: string | null;
+  isCaptain: boolean;
+  minutesPlanned: number | null;
+  notes: string | null;
 };
 
 export class MatchDetailService {
@@ -42,6 +59,8 @@ export class MatchDetailService {
     checkArray(input.awayStartingXI, "Titulares visitante", 11);
     checkArray(input.homeBench, "Banca local", 20);
     checkArray(input.awayBench, "Banca visitante", 20);
+    checkArray(input.homeUnavailable, "No disponibles local", 30);
+    checkArray(input.awayUnavailable, "No disponibles visitante", 30);
 
     if (
       input.durationMinutes !== undefined &&
@@ -74,6 +93,205 @@ export class MatchDetailService {
       const coach = await User.findByPk(input.awayCoachId);
       if (!coach) throw new AppError(404, "Entrenador visitante no encontrado");
     }
+  }
+
+  private static extractPlayerId(entry: LineupEntry): number | null {
+    const row = entry as Record<string, any>;
+    const maybeId =
+      row.playerId ??
+      row.userId ??
+      row.id ??
+      row.player?.id ??
+      row.user?.id;
+
+    const parsed = Number(maybeId);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+  }
+
+  private static parseSquadEntries(entries: LineupEntry[] | undefined, label: string): ParsedSquadEntry[] {
+    if (!entries) return [];
+
+    return entries.map((entry, idx) => {
+      const playerId = this.extractPlayerId(entry);
+      if (!playerId) {
+        throw new AppError(400, `${label}: jugador inválido en posición ${idx + 1}`);
+      }
+
+      const jerseyRaw = entry.jerseyNumber;
+      const jerseyNumber =
+        jerseyRaw === undefined || jerseyRaw === null || Number.isNaN(Number(jerseyRaw))
+          ? null
+          : Number(jerseyRaw);
+
+      const minutesRaw = entry.minutesPlanned;
+      const minutesPlanned =
+        minutesRaw === undefined || minutesRaw === null || Number.isNaN(Number(minutesRaw))
+          ? null
+          : Number(minutesRaw);
+
+      return {
+        playerId,
+        playerName: typeof entry.playerName === "string" ? entry.playerName.trim() || null : null,
+        jerseyNumber,
+        position: typeof entry.position === "string" ? entry.position : null,
+        isCaptain: Boolean(entry.isCaptain),
+        minutesPlanned,
+        notes: typeof entry.notes === "string" ? entry.notes : null,
+      };
+    });
+  }
+
+  private static async syncTeamSquad(params: {
+    matchId: number;
+    teamId: number;
+    actorUserId: number;
+    starters?: LineupEntry[];
+    bench?: LineupEntry[];
+    unavailable?: LineupEntry[];
+  }): Promise<void> {
+    const { matchId, teamId, actorUserId } = params;
+
+    const teamMembers = await TeamMember.findAll({
+      where: { teamId },
+      attributes: ["userId", "playerName", "jerseyNumber", "preferredPosition"],
+    });
+
+    const memberMap = new Map<number, TeamMember>();
+    teamMembers.forEach((member) => memberMap.set(Number(member.userId), member));
+
+    const rosterPlayerIds = Array.from(new Set(teamMembers.map((member) => Number(member.userId))));
+    const rosterSet = new Set<number>(rosterPlayerIds);
+
+    const starters = this.parseSquadEntries(params.starters, "Titulares");
+    const bench = this.parseSquadEntries(params.bench, "Banca");
+    const unavailable = this.parseSquadEntries(params.unavailable, "No disponibles");
+
+    const roleByPlayer = new Map<number, { role: SquadRole; data: ParsedSquadEntry }>();
+
+    const assignRole = (items: ParsedSquadEntry[], role: SquadRole, label: string) => {
+      for (const item of items) {
+        if (!rosterSet.has(item.playerId)) {
+          throw new AppError(400, `${label}: el jugador ${item.playerId} no pertenece al equipo ${teamId}`);
+        }
+        if (roleByPlayer.has(item.playerId)) {
+          throw new AppError(400, `Jugador ${item.playerId} repetido en distintas listas de convocatoria`);
+        }
+        roleByPlayer.set(item.playerId, { role, data: item });
+      }
+    };
+
+    assignRole(starters, "starter", "Titulares");
+    assignRole(bench, "bench", "Banca");
+    assignRole(unavailable, "unavailable", "No disponibles");
+
+    if (!rosterPlayerIds.length) {
+      await MatchSquadPlayer.destroy({ where: { matchId, teamId } });
+      return;
+    }
+
+    await MatchSquadPlayer.destroy({
+      where: {
+        matchId,
+        teamId,
+        playerId: { [Op.notIn]: rosterPlayerIds },
+      },
+    });
+
+    const rows = rosterPlayerIds.map((playerId) => {
+      const mapped = roleByPlayer.get(playerId);
+      const role: SquadRole = mapped?.role ?? "roster";
+      const meta = mapped?.data;
+      const membership = memberMap.get(playerId);
+
+      return {
+        matchId,
+        teamId,
+        playerId,
+        squadRole: role,
+        isAvailable: role !== "unavailable",
+        isCaptain: meta?.isCaptain ?? false,
+        jerseyNumber: meta?.jerseyNumber ?? membership?.jerseyNumber ?? null,
+        position: meta?.position ?? membership?.preferredPosition ?? null,
+        minutesPlanned: meta?.minutesPlanned ?? null,
+        notes: meta?.notes ?? meta?.playerName ?? membership?.playerName ?? null,
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      };
+    });
+
+    await MatchSquadPlayer.bulkCreate(rows, {
+      updateOnDuplicate: [
+        "squadRole",
+        "isAvailable",
+        "isCaptain",
+        "jerseyNumber",
+        "position",
+        "minutesPlanned",
+        "notes",
+        "updatedBy",
+        "updatedAt",
+      ],
+    });
+  }
+
+  private static async getStructuredSquads(match: Match) {
+    const squadRows = await MatchSquadPlayer.findAll({
+      where: { matchId: match.id },
+      include: [{ model: User, as: "player", attributes: ["id", "name", "email", "role"] }],
+      order: [["teamId", "ASC"], ["squadRole", "ASC"], ["id", "ASC"]],
+    });
+
+    const membershipRows = await TeamMember.findAll({
+      where: {
+        teamId: { [Op.in]: [match.homeTeamId, match.awayTeamId] },
+      },
+      attributes: ["teamId", "userId", "playerName", "jerseyNumber", "preferredPosition"],
+    });
+
+    const membershipMap = new Map<string, TeamMember>();
+    membershipRows.forEach((row) => {
+      membershipMap.set(`${row.teamId}:${row.userId}`, row);
+    });
+
+    const toPayload = (teamId: number) => {
+      const teamRows = squadRows.filter((row) => row.teamId === teamId);
+
+      const players = teamRows.map((row) => {
+        const membership = membershipMap.get(`${teamId}:${row.playerId}`);
+
+        return {
+          id: row.playerId,
+          name: membership?.playerName ?? row.player?.name ?? null,
+          email: row.player?.email ?? null,
+          role: row.player?.role ?? null,
+          squadRole: row.squadRole,
+          isAvailable: row.isAvailable,
+          isCaptain: row.isCaptain,
+          jerseyNumber: row.jerseyNumber ?? membership?.jerseyNumber ?? null,
+          position: row.position ?? membership?.preferredPosition ?? null,
+          minutesPlanned: row.minutesPlanned,
+          notes: row.notes,
+        };
+      });
+
+      return {
+        starters: players.filter((p) => p.squadRole === "starter"),
+        bench: players.filter((p) => p.squadRole === "bench"),
+        roster: players.filter((p) => p.squadRole === "roster"),
+        unavailable: players.filter((p) => p.squadRole === "unavailable"),
+        totals: {
+          totalRoster: players.length,
+          available: players.filter((p) => p.isAvailable).length,
+          unavailable: players.filter((p) => !p.isAvailable).length,
+        },
+      };
+    };
+
+    return {
+      home: toPayload(match.homeTeamId),
+      away: toPayload(match.awayTeamId),
+    };
   }
 
   static async getByMatchId(matchId: string) {
@@ -127,6 +345,8 @@ export class MatchDetailService {
         ? new Date(new Date(kickoff).getTime() + durationMinutes * 60 * 1000)
         : null);
 
+    const squads = await this.getStructuredSquads(match);
+
     return {
       match,
       detail: {
@@ -137,6 +357,7 @@ export class MatchDetailService {
         matchDay: detail?.matchDay ?? (match.date ? new Date(match.date).toISOString().slice(0, 10) : null),
         homeCoach: detail?.homeCoach ?? (match.homeTeam as Team)?.trainer ?? null,
         awayCoach: detail?.awayCoach ?? (match.awayTeam as Team)?.trainer ?? null,
+        squads,
       },
     };
   }
@@ -221,6 +442,40 @@ export class MatchDetailService {
       if (input.notes !== undefined) detail.notes = input.notes;
       detail.updatedBy = actorUserId;
       await detail.save();
+    }
+
+    const shouldSyncHomeSquad =
+      created ||
+      input.homeStartingXI !== undefined ||
+      input.homeBench !== undefined ||
+      input.homeUnavailable !== undefined;
+
+    const shouldSyncAwaySquad =
+      created ||
+      input.awayStartingXI !== undefined ||
+      input.awayBench !== undefined ||
+      input.awayUnavailable !== undefined;
+
+    if (shouldSyncHomeSquad) {
+      await this.syncTeamSquad({
+        matchId: match.id,
+        teamId: match.homeTeamId,
+        actorUserId,
+        starters: input.homeStartingXI ?? (detail.homeStartingXI as LineupEntry[]),
+        bench: input.homeBench ?? (detail.homeBench as LineupEntry[]),
+        unavailable: input.homeUnavailable ?? [],
+      });
+    }
+
+    if (shouldSyncAwaySquad) {
+      await this.syncTeamSquad({
+        matchId: match.id,
+        teamId: match.awayTeamId,
+        actorUserId,
+        starters: input.awayStartingXI ?? (detail.awayStartingXI as LineupEntry[]),
+        bench: input.awayBench ?? (detail.awayBench as LineupEntry[]),
+        unavailable: input.awayUnavailable ?? [],
+      });
     }
 
     if (parsedKickoff !== undefined) {

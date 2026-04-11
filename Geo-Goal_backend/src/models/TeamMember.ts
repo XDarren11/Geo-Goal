@@ -17,4 +17,22 @@ export class TeamMember extends Model {
         type: DataType.INTEGER
     })
     declare teamId: number;
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    declare playerName: string | null;
+
+    @Column({
+        type: DataType.INTEGER,
+        allowNull: true
+    })
+    declare jerseyNumber: number | null;
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    declare preferredPosition: string | null;
 }

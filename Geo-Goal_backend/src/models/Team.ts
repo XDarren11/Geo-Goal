@@ -5,6 +5,7 @@ import { TeamMember } from './TeamMember';
 import { TeamLeagueStat } from './TeamLeagueStat';
 import { Field } from './Field';
 import { TeamInvitation } from './TeamInvitation';
+import { MatchSquadPlayer } from './MatchSquadPlayer';
 
 @Table({ tableName: 'teams'})
 export class Team extends Model {
@@ -51,4 +52,7 @@ export class Team extends Model {
 
     @HasMany(() => TeamInvitation)
     declare invitations: TeamInvitation[];
+
+    @HasMany(() => MatchSquadPlayer)
+    declare matchSquadPlayers: MatchSquadPlayer[];
 }

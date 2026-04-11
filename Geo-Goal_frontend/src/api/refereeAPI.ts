@@ -1,4 +1,5 @@
 import api from "@/lib/axios";
+import type { PublicNewsItem } from "@/types";
 
 export type RefereeAssignment = {
   id: number;
@@ -60,6 +61,7 @@ export type RefereeDashboardSummary = {
     totalEventsLogged: number;
     totalTrackingFrames: number;
   };
+  news: PublicNewsItem[];
 };
 
 export async function assignRefereeToMatch(

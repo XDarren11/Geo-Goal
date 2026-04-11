@@ -1,8 +1,9 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasOne } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasOne, HasMany } from 'sequelize-typescript';
 import { League } from './League';
 import { Team } from './Team';
 import { Season } from './Season';
 import { MatchDetail } from './MatchDetail';
+import { MatchSquadPlayer } from './MatchSquadPlayer';
 
 @Table({ tableName: 'matches' })
 export class Match extends Model {
@@ -61,4 +62,7 @@ export class Match extends Model {
 
     @HasOne(() => MatchDetail)
     declare detail: MatchDetail;
+
+    @HasMany(() => MatchSquadPlayer)
+    declare squadPlayers: MatchSquadPlayer[];
 }

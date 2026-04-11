@@ -5,6 +5,7 @@ import type {
   PublicLeagueDetail,
   PublicLeagueSummary,
   PublicMatchDetailResponse,
+  PublicNewsItem,
   PublicStanding,
 } from "@/types";
 
@@ -12,6 +13,11 @@ const BASE = "/public";
 
 export async function getPublicLeagues(): Promise<PublicLeagueSummary[]> {
   const { data } = await api.get<PublicLeagueSummary[]>(`${BASE}/leagues`);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function getPublicNews(limit = 12): Promise<PublicNewsItem[]> {
+  const { data } = await api.get<PublicNewsItem[]>(`${BASE}/news`, { params: { limit } });
   return Array.isArray(data) ? data : [];
 }
 

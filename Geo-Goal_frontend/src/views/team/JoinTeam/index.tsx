@@ -10,10 +10,16 @@ import { getApiErrorMessage } from '@/utils/getApiErrorMessage';
 export default function JoinTeamView() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [jerseyNumber, setJerseyNumber] = useState('');
   const [localError, setLocalError] = useState('');
 
   const { mutate: joinTeam, isPending } = useMutation({
-    mutationFn: () => teamInvitationAPI.joinByCode(code.trim().toUpperCase()),
+    mutationFn: () => teamInvitationAPI.joinByCode({
+      code: code.trim().toUpperCase(),
+      playerName: playerName.trim(),
+      jerseyNumber: Number(jerseyNumber),
+    }),
     onSuccess: () => {
       toast.success('Te uniste al equipo correctamente');
       navigate('/my-teams');
@@ -29,6 +35,17 @@ export default function JoinTeamView() {
 
     if (!code.trim()) {
       setLocalError('El código es obligatorio');
+      return;
+    }
+
+    if (!playerName.trim()) {
+      setLocalError('El nombre de jugador es obligatorio');
+      return;
+    }
+
+    const parsedJersey = Number(jerseyNumber);
+    if (!Number.isInteger(parsedJersey) || parsedJersey < 1 || parsedJersey > 99) {
+      setLocalError('El dorsal debe ser un número entre 1 y 99');
       return;
     }
 
@@ -53,6 +70,35 @@ export default function JoinTeamView() {
         </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <div>
+            <label className="flex items-center gap-2 font-semibold text-[var(--geo-text)]">
+              Nombre de jugador
+            </label>
+            <input
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Ej. Mohamed Salah"
+              className="mt-2 w-full rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3 text-[var(--geo-text)] focus:border-geo-green focus:outline-none focus:ring-1 focus:ring-geo-green"
+              maxLength={80}
+            />
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 font-semibold text-[var(--geo-text)]">
+              Dorsal
+            </label>
+            <input
+              type="number"
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value)}
+              placeholder="10"
+              min={1}
+              max={99}
+              className="mt-2 w-full rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3 text-[var(--geo-text)] focus:border-geo-green focus:outline-none focus:ring-1 focus:ring-geo-green"
+            />
+          </div>
+
           <div>
             <label className="flex items-center gap-2 font-semibold text-[var(--geo-text)]">
               <KeyIcon className="h-5 w-5 text-geo-green" />

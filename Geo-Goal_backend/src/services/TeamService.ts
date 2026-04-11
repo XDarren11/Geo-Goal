@@ -11,6 +11,7 @@ import { MatchEvent } from "../models/MatchEvent";
 import { MatchDetail } from "../models/MatchDetail";
 import { Notification } from "../models/Notification";
 import { AppError } from "../types/errors";
+import { NewsService } from "./NewsService";
 
 const UPLOADS_DIR = "public/uploads";
 
@@ -58,6 +59,7 @@ export class TeamService {
         actionableNotifications: [],
         performanceTrend: [],
         achievements: [],
+        news: [],
       };
     }
 
@@ -320,6 +322,11 @@ export class TeamService {
       };
     }
 
+    const leagueIdsForNews = teams
+      .map((team) => Number(team.leagueId))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const news = await NewsService.getNewsForLeagues(leagueIdsForNews, 8);
+
     return {
       nextMatch: nextMatchPayload,
       recentTeamResults,
@@ -337,6 +344,7 @@ export class TeamService {
       actionableNotifications,
       performanceTrend,
       achievements,
+      news,
     };
   }
 
@@ -363,6 +371,7 @@ export class TeamService {
         preMatchChecklist: [],
         goalsByTeam: [],
         cardsByTeam: [],
+        news: [],
       };
     }
 
@@ -580,6 +589,11 @@ export class TeamService {
 
     const cardsByTeam = Array.from(cardsByTeamMap.values());
 
+    const leagueIdsForNews = teams
+      .map((team) => Number(team.leagueId))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const news = await NewsService.getNewsForLeagues(leagueIdsForNews, 8);
+
     const matchIds = upcomingMatches.map((match) => match.id);
     const detailRows = matchIds.length
       ? await MatchDetail.findAll({
@@ -655,6 +669,7 @@ export class TeamService {
       preMatchChecklist,
       goalsByTeam,
       cardsByTeam,
+      news,
     };
   }
 
@@ -685,10 +700,10 @@ export class TeamService {
   }
 
   static async getTeamById(teamId: string, userId: number, role: string) {
-    let team: Team | null = null;
+    let accessTeam: Team | null = null;
 
     if (role === "coach") {
-      team = await Team.findOne({
+      accessTeam = await Team.findOne({
         where: { id: teamId, trainerId: userId },
       });
     }
@@ -703,14 +718,91 @@ export class TeamService {
         throw new AppError(403, "No tienes acceso a este equipo");
       }
 
-      team = await Team.findByPk(teamId);
+      accessTeam = await Team.findByPk(teamId);
     }
+
+    if (!accessTeam) {
+      throw new AppError(404, "Equipo no encontrado");
+    }
+
+    const team = await Team.findByPk(teamId, {
+      include: [
+        {
+          model: User,
+          as: "trainer",
+          attributes: ["id", "name", "email"],
+        },
+        {
+          model: League,
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
+    });
 
     if (!team) {
       throw new AppError(404, "Equipo no encontrado");
     }
 
-    return team;
+    const statsRows = await TeamLeagueStat.findAll({
+      where: { teamId: Number(teamId) },
+      attributes: [
+        "gamesPlayed",
+        "wins",
+        "draws",
+        "losses",
+        "points",
+        "goalsFor",
+        "goalsAgainst",
+        "goalDifference",
+      ],
+    });
+
+    const stats = statsRows.reduce(
+      (acc, row) => {
+        acc.playedMatches += Number(row.gamesPlayed ?? 0);
+        acc.wins += Number(row.wins ?? 0);
+        acc.draws += Number(row.draws ?? 0);
+        acc.losses += Number(row.losses ?? 0);
+        acc.points += Number(row.points ?? 0);
+        acc.goalsFor += Number(row.goalsFor ?? 0);
+        acc.goalsAgainst += Number(row.goalsAgainst ?? 0);
+        acc.goalDifference += Number(row.goalDifference ?? 0);
+        return acc;
+      },
+      {
+        playedMatches: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        points: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+      }
+    );
+
+    const recentMatches = await Match.findAll({
+      where: {
+        played: true,
+        [Op.or]: [
+          { homeTeamId: Number(teamId) },
+          { awayTeamId: Number(teamId) },
+        ],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["date", "DESC"], ["updatedAt", "DESC"]],
+      limit: 5,
+    });
+
+    return {
+      ...team.toJSON(),
+      stats,
+      recentMatches,
+    };
   }
 
   static async createTeam(
@@ -888,14 +980,24 @@ export class TeamService {
           model: User,
           as: "players",
           attributes: ["id", "name", "email"],
-          through: { attributes: [] },
+          through: { attributes: ["playerName", "jerseyNumber", "preferredPosition"] },
         },
       ],
     });
     if (!team) {
       throw new AppError(404, "Equipo no encontrado");
     }
-    return team.players;
+    return team.players.map((player) => {
+      const membership = (player as any).TeamMember;
+      return {
+        id: player.id,
+        name: player.name,
+        email: player.email,
+        playerName: membership?.playerName ?? player.name,
+        jerseyNumber: membership?.jerseyNumber ?? null,
+        preferredPosition: membership?.preferredPosition ?? null,
+      };
+    });
   }
 
   static async removePlayerFromTeam(
