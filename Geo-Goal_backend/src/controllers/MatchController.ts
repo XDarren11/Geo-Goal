@@ -5,6 +5,7 @@ import { Op } from 'sequelize';
 import { Request, Response } from 'express';
 import { AuditService } from '../services/AuditService';
 import { NotificationService } from '../services/NotificationService';
+import { MatchAnalyticsService } from '../services/MatchAnalyticsService';
 
 export class MatchController {
 
@@ -186,6 +187,8 @@ export class MatchController {
                 MatchController.updateTeamStats(match.homeTeamId, match.leagueId),
                 MatchController.updateTeamStats(match.awayTeamId, match.leagueId)
             ]);
+
+            await MatchAnalyticsService.recalculateForMatch(match.id);
 
             res.json({ message: 'Marcador actualizado y tabla recalculada con regla de penales' });
 

@@ -11,12 +11,23 @@ import { User } from "../models/User";
 import { AuditService } from "./AuditService";
 import { NotificationService } from "./NotificationService";
 import { NewsService } from "./NewsService";
+import { MatchAnalyticsService } from "./MatchAnalyticsService";
 
 const ALLOWED_EVENTS = new Set([
   "goal",
   "own_goal",
   "penalty_scored",
   "penalty_missed",
+  "pass",
+  "key_pass",
+  "shot",
+  "tackle",
+  "recovery",
+  "interception",
+  "clearance",
+  "dribble",
+  "cross",
+  "corner_won",
   "yellow_card",
   "red_card",
   "substitution",
@@ -34,9 +45,22 @@ type RegisterEventInput = {
   eventType: string;
   minute: number;
   extraMinute?: number | null;
+  matchTimestampSec?: number | null;
   teamId?: number | null;
   playerId?: number | null;
+  relatedPlayerId?: number | null;
+  xStart?: number | null;
+  yStart?: number | null;
+  xEnd?: number | null;
+  yEnd?: number | null;
+  outcome?: string | null;
+  source?: "manual" | "inferred" | "video" | "simulated";
+  confidence?: number;
   metadata?: Record<string, unknown>;
+};
+
+type RegisterBulkEventsInput = {
+  events: RegisterEventInput[];
 };
 
 type RegisterTrackingInput = {
@@ -44,7 +68,18 @@ type RegisterTrackingInput = {
   period?: "pre" | "1H" | "HT" | "2H" | "ET" | "post" | null;
   ball?: { x?: number; y?: number; z?: number };
   players: Array<Record<string, unknown>>;
+  source?: "manual" | "inferred" | "video" | "simulated";
+  confidence?: number;
 };
+
+function normalizeCoordinate(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return Number(n.toFixed(3));
+}
 
 export class RefereeService {
   private static async ensureLeagueAdmin(leagueId: number, userId: number) {
@@ -90,8 +125,28 @@ export class RefereeService {
     if (!match) throw new AppError(404, "Partido no encontrado");
 
     const refereeUser = await User.findByPk(userId, { attributes: ["id", "role"] });
-    if (!refereeUser || refereeUser.role !== "referee") {
-      throw new AppError(403, "Solo usuarios con rol referee pueden registrar datos arbitrales");
+    if (!refereeUser) {
+      throw new AppError(403, "Usuario no autorizado para registrar datos arbitrales");
+    }
+
+    if (refereeUser.role === "admin") {
+      const isManager = (await League.findOne({
+        where: { id: match.leagueId, managerId: userId },
+        attributes: ["id"],
+      })) != null;
+
+      if (isManager) return match;
+
+      const leagueAdmin = await LeagueAdmin.findOne({
+        where: {
+          leagueId: match.leagueId,
+          userId,
+          leagueRole: { [Op.in]: ["principal", "assistant"] },
+        },
+        attributes: ["id"],
+      });
+
+      if (leagueAdmin) return match;
     }
 
     const refAssignment = await MatchRefereeAssignment.findOne({
@@ -120,16 +175,39 @@ export class RefereeService {
     await this.ensureLeagueAdmin(match.leagueId, actorUserId);
 
     const referee = await User.findByPk(input.refereeUserId);
-    if (!referee) throw new AppError(404, "Árbitro no encontrado");
-    if (referee.role !== "referee") {
-      throw new AppError(400, "El árbitro debe tener rol referee");
+    if (!referee) throw new AppError(404, "Usuario designado no encontrado");
+    if (!['referee', 'admin'].includes(referee.role)) {
+      throw new AppError(400, "El usuario designado debe tener rol referee o admin");
+    }
+
+    if (referee.role === 'admin') {
+      const isLeagueAdmin = await LeagueAdmin.findOne({
+        where: {
+          leagueId: match.leagueId,
+          userId: input.refereeUserId,
+          leagueRole: { [Op.in]: ['principal', 'assistant'] },
+        },
+      });
+
+      const isManager = await League.findOne({
+        where: {
+          id: match.leagueId,
+          managerId: input.refereeUserId,
+        },
+      });
+
+      if (!isLeagueAdmin && !isManager) {
+        throw new AppError(409, "El admin designado no pertenece a esta liga");
+      }
+    }
+
+    if (referee.role === 'referee') {
+      await this.ensureRefereeBelongsToLeague(match.leagueId, input.refereeUserId);
     }
 
     if (!match.date || new Date(match.date).getTime() <= Date.now()) {
       throw new AppError(409, "Solo puedes asignar árbitro a partidos próximos");
     }
-
-    await this.ensureRefereeBelongsToLeague(match.leagueId, input.refereeUserId);
 
     const conflictingAssignment = await MatchRefereeAssignment.findOne({
       where: {
@@ -498,9 +576,21 @@ export class RefereeService {
       leagueId: match.leagueId,
       teamId: input.teamId ?? null,
       playerId: input.playerId ?? null,
+      relatedPlayerId: input.relatedPlayerId ?? null,
       eventType: input.eventType as MatchEvent["eventType"],
       minute: Number(input.minute),
       extraMinute: input.extraMinute ?? null,
+      matchTimestampSec:
+        input.matchTimestampSec != null && !Number.isNaN(Number(input.matchTimestampSec))
+          ? Number(input.matchTimestampSec)
+          : Number(input.minute) * 60 + Number(input.extraMinute ?? 0),
+      xStart: normalizeCoordinate(input.xStart),
+      yStart: normalizeCoordinate(input.yStart),
+      xEnd: normalizeCoordinate(input.xEnd),
+      yEnd: normalizeCoordinate(input.yEnd),
+      outcome: input.outcome ?? null,
+      source: input.source ?? "manual",
+      confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
       metadata: input.metadata ?? {},
       recordedBy: userId,
     });
@@ -515,7 +605,82 @@ export class RefereeService {
       afterData: event.toJSON() as Record<string, unknown>,
     });
 
+    await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+
     return event;
+  }
+
+  static async registerBulkEvents(matchId: string, userId: number, input: RegisterBulkEventsInput) {
+    const events = Array.isArray(input.events) ? input.events : [];
+    if (!events.length) {
+      throw new AppError(400, "events debe contener al menos un evento");
+    }
+
+    const match = await this.ensureRefereeOnMatch(Number(matchId), userId);
+    const created: MatchEvent[] = [];
+
+    for (const eventInput of events) {
+      if (!ALLOWED_EVENTS.has(String(eventInput.eventType))) {
+        throw new AppError(400, `Tipo de evento no permitido: ${eventInput.eventType}`);
+      }
+
+      if (eventInput.minute == null || Number(eventInput.minute) < 0 || Number(eventInput.minute) > 130) {
+        throw new AppError(400, `Minuto inválido en evento: ${eventInput.minute}`);
+      }
+
+      if (eventInput.teamId != null) {
+        const validTeam = [match.homeTeamId, match.awayTeamId].includes(Number(eventInput.teamId));
+        if (!validTeam) {
+          throw new AppError(400, `teamId inválido en evento: ${eventInput.teamId}`);
+        }
+      }
+
+      const createdEvent = await MatchEvent.create({
+        matchId: Number(matchId),
+        leagueId: match.leagueId,
+        teamId: eventInput.teamId ?? null,
+        playerId: eventInput.playerId ?? null,
+        relatedPlayerId: eventInput.relatedPlayerId ?? null,
+        eventType: eventInput.eventType as MatchEvent["eventType"],
+        minute: Number(eventInput.minute),
+        extraMinute: eventInput.extraMinute ?? null,
+        matchTimestampSec:
+          eventInput.matchTimestampSec != null && !Number.isNaN(Number(eventInput.matchTimestampSec))
+            ? Number(eventInput.matchTimestampSec)
+            : Number(eventInput.minute) * 60 + Number(eventInput.extraMinute ?? 0),
+        xStart: normalizeCoordinate(eventInput.xStart),
+        yStart: normalizeCoordinate(eventInput.yStart),
+        xEnd: normalizeCoordinate(eventInput.xEnd),
+        yEnd: normalizeCoordinate(eventInput.yEnd),
+        outcome: eventInput.outcome ?? null,
+        source: eventInput.source ?? "manual",
+        confidence:
+          eventInput.confidence != null
+            ? Math.max(0, Math.min(1, Number(eventInput.confidence)))
+            : 1,
+        metadata: eventInput.metadata ?? {},
+        recordedBy: userId,
+      });
+
+      created.push(createdEvent);
+    }
+
+    await AuditService.log({
+      actorUserId: userId,
+      leagueId: match.leagueId,
+      seasonId: match.seasonId ?? null,
+      entityType: "match_event_bulk",
+      entityId: Number(matchId),
+      action: "create",
+      afterData: { createdEvents: created.length } as Record<string, unknown>,
+    });
+
+    const analytics = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+
+    return {
+      created: created.length,
+      analyticsRows: analytics.rows,
+    };
   }
 
   static async registerTrackingFrame(matchId: string, userId: number, input: RegisterTrackingInput) {
@@ -542,9 +707,15 @@ export class RefereeService {
       ballY: input.ball?.y ?? null,
       ballZ: input.ball?.z ?? null,
       players: input.players,
+      source: input.source ?? "manual",
+      confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
       recordedBy: userId,
     });
 
     return frame;
+  }
+
+  static async getMatchAnalytics(matchId: number) {
+    return MatchAnalyticsService.getMatchAnalytics(matchId);
   }
 }

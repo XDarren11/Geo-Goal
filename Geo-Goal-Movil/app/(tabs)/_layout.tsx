@@ -61,6 +61,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="matchDetail"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="referee"
         options={{
           href: user.role === 'referee' ? undefined : null,

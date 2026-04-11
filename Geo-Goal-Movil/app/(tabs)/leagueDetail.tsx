@@ -225,20 +225,35 @@ export default function LeagueDetailScreen() {
                     </View>
 
                     {user?.role === 'admin' ? (
+                      <View className="mt-3 flex-row justify-end gap-2">
+                        <TouchableOpacity
+                          onPress={() => router.push(`/(tabs)/matchDetail?id=${item.id}`)}
+                          className="rounded-lg border border-geo-green px-3 py-1"
+                        >
+                          <Text className="text-geo-green text-xs font-bold">Ver detalle táctico</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (item.date && new Date(item.date).getTime() < Date.now()) {
+                              Alert.alert('Partido vencido', 'No se puede cambiar la fecha de un partido cuya fecha/hora ya pasó.');
+                              return;
+                            }
+                            setSelectedMatchId(item.id);
+                            setScheduleInput(item.date ? new Date(item.date).toISOString().slice(0, 16) : '');
+                          }}
+                          className="rounded-lg border border-geo-green px-3 py-1"
+                        >
+                          <Text className="text-geo-green text-xs font-bold">Programar fecha/hora</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
                       <TouchableOpacity
-                        onPress={() => {
-                          if (item.date && new Date(item.date).getTime() < Date.now()) {
-                            Alert.alert('Partido vencido', 'No se puede cambiar la fecha de un partido cuya fecha/hora ya pasó.');
-                            return;
-                          }
-                          setSelectedMatchId(item.id);
-                          setScheduleInput(item.date ? new Date(item.date).toISOString().slice(0, 16) : '');
-                        }}
+                        onPress={() => router.push(`/(tabs)/matchDetail?id=${item.id}`)}
                         className="mt-3 self-end rounded-lg border border-geo-green px-3 py-1"
                       >
-                        <Text className="text-geo-green text-xs font-bold">Programar fecha/hora</Text>
+                        <Text className="text-geo-green text-xs font-bold">Ver detalle táctico</Text>
                       </TouchableOpacity>
-                    ) : null}
+                    )}
                   </View>
                 )}
               />

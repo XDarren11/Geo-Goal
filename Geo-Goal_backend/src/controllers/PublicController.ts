@@ -42,4 +42,10 @@ export class PublicController {
     const data = await PublicService.getTeamProfile(leagueId, teamId);
     res.json(data);
   };
+
+  static getMatchAnalytics = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const data = await PublicService.getMatchAnalytics(matchId);
+    res.json(data);
+  };
 }

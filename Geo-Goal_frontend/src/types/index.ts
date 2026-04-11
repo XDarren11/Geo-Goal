@@ -482,3 +482,97 @@ export interface NotificationItem {
   createdAt?: string
   updatedAt?: string
 }
+
+export interface MatchAnalyticsPlayerStat {
+  id: number
+  matchId: number
+  teamId: number
+  playerId: number
+  minutesPlayed: number
+  passes: number
+  passesCompleted: number
+  keyPasses: number
+  shots: number
+  shotsOnTarget: number
+  goals: number
+  assists: number
+  yellowCards: number
+  redCards: number
+  distanceMeters: number
+  rating: number
+  player?: Pick<User, 'id' | 'name' | 'email'>
+  team?: Pick<Team, 'id' | 'name'>
+}
+
+export interface MatchAnalyticsTeamStat {
+  id: number
+  matchId: number
+  teamId: number
+  minutesPlayed: number
+  passes: number
+  passesCompleted: number
+  keyPasses: number
+  shots: number
+  shotsOnTarget: number
+  goals: number
+  assists: number
+  yellowCards: number
+  redCards: number
+  distanceMeters: number
+  avgRating: number
+  team?: Pick<Team, 'id' | 'name'>
+}
+
+export interface MatchAnalyticsResponse {
+  match: Match
+  summary: {
+    totalPlayersWithStats: number
+    totalPassEdges: number
+    totalSpatialEvents: number
+  }
+  topPlayers: MatchAnalyticsPlayerStat[]
+  playerStats: MatchAnalyticsPlayerStat[]
+  teamStats: MatchAnalyticsTeamStat[]
+  passNetwork: Array<{
+    teamId: number
+    fromPlayerId: number
+    toPlayerId: number
+    count: number
+  }>
+  heatmaps: Array<{
+    teamId: number
+    playerId: number
+    cells: Record<string, number>
+  }>
+  timelineEvents: Array<{
+    id: number
+    teamId?: number | null
+    playerId?: number | null
+    relatedPlayerId?: number | null
+    eventType: string
+    minute: number
+    extraMinute?: number | null
+    matchTimestampSec?: number | null
+    xStart?: number | null
+    yStart?: number | null
+    xEnd?: number | null
+    yEnd?: number | null
+    outcome?: string | null
+    source?: string
+    confidence?: number
+    metadata?: Record<string, unknown>
+    createdAt?: string
+  }>
+  trackingFrames: Array<{
+    id: number
+    timestampMs: number
+    period?: string | null
+    ballX?: number | null
+    ballY?: number | null
+    ballZ?: number | null
+    players: Array<Record<string, unknown>>
+    source?: string
+    confidence?: number
+    createdAt?: string
+  }>
+}

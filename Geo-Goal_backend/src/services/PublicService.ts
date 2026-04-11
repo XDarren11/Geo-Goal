@@ -7,6 +7,7 @@ import { TeamLeagueStat } from "../models/TeamLeagueStat";
 import { Season } from "../models/Season";
 import { User } from "../models/User";
 import { NewsService } from "./NewsService";
+import { MatchAnalyticsService } from "./MatchAnalyticsService";
 
 export class PublicService {
   private static async ensureLeagueExists(leagueId: string): Promise<League> {
@@ -414,5 +415,13 @@ export class PublicService {
     return items
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 8);
+  }
+
+  static async getMatchAnalytics(matchId: string) {
+    const id = Number(matchId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError(400, "ID de partido no válido");
+    }
+    return MatchAnalyticsService.getMatchAnalytics(id);
   }
 }

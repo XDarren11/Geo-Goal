@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { League, Team, FixtureByRound } from "@/types";
+import type { League, Team, FixtureByRound, MatchAnalyticsResponse } from "@/types";
 
 const BASE = "/league";
 
@@ -139,3 +139,8 @@ export const getLeagueMatches = async (leagueId: number) => {
   const { data } = await api.get(`${BASE}/${leagueId}/matches`);
   return data;
 };
+
+export async function getMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
+  const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
+  return data;
+}

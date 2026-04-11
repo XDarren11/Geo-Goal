@@ -15,6 +15,26 @@ const STARTERS_PER_MATCH = Number(process.env.SEED_STARTERS_PER_MATCH || 7);
 
 const POSITIONS = ['POR', 'DFC', 'LTD', 'LTI', 'MC', 'MCO', 'ED', 'EI', 'DC'];
 
+function randomBetween(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function randomInt(min, max) {
+  return Math.floor(randomBetween(min, max + 1));
+}
+
+function clampCoord(value) {
+  if (!Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 100) return 100;
+  return Number(value.toFixed(3));
+}
+
+function pickRandom(arr) {
+  if (!Array.isArray(arr) || !arr.length) return null;
+  return arr[randomInt(0, arr.length - 1)];
+}
+
 async function findOrCreateUser(client, { name, email, role, passwordHash }) {
   const result = await client.query(
     `
@@ -349,38 +369,106 @@ async function ensureTeamInvitation(client, { code, teamId, createdBy, expiresAt
   );
 }
 
-async function ensureMatchEvent(client, { matchId, leagueId, teamId, playerId, eventType, minute, extraMinute, metadata, recordedBy }) {
+async function ensureMatchEvent(client, {
+  matchId,
+  leagueId,
+  teamId,
+  playerId,
+  eventType,
+  minute,
+  extraMinute,
+  matchTimestampSec = null,
+  relatedPlayerId = null,
+  xStart = null,
+  yStart = null,
+  xEnd = null,
+  yEnd = null,
+  outcome = null,
+  source = 'simulated',
+  confidence = 0.9,
+  metadata,
+  recordedBy,
+}) {
   await client.query(
     `
     INSERT INTO "match_events" (
-      "matchId", "leagueId", "teamId", "playerId", "eventType", "minute", "extraMinute", "metadata", "recordedBy", "createdAt", "updatedAt"
+      "matchId", "leagueId", "teamId", "playerId", "eventType", "minute", "extraMinute", "matchTimestampSec", "relatedPlayerId",
+      "xStart", "yStart", "xEnd", "yEnd", "outcome", "source", "confidence", "metadata", "recordedBy", "createdAt", "updatedAt"
     )
-    SELECT $1::int, $2::int, $3::int, $4::int, $5::varchar, $6::int, $7::int, $8::jsonb, $9::int, NOW(), NOW()
+    SELECT
+      $1::int, $2::int, $3::int, $4::int, $5::varchar, $6::int, $7::int, $8::int, $9::int,
+      $10::float, $11::float, $12::float, $13::float, $14::varchar, $15::varchar, $16::float, $17::jsonb, $18::int, NOW(), NOW()
     WHERE NOT EXISTS (
       SELECT 1
       FROM "match_events"
       WHERE "matchId" = $1
         AND "eventType" = $5::varchar
         AND "minute" = $6::int
+        AND COALESCE("teamId", -1) = COALESCE($3::int, -1)
         AND COALESCE("playerId", -1) = COALESCE($4::int, -1)
+        AND COALESCE("relatedPlayerId", -1) = COALESCE($9::int, -1)
+        AND COALESCE("matchTimestampSec", -1) = COALESCE($8::int, -1)
     );
     `,
-    [matchId, leagueId, teamId, playerId, eventType, minute, extraMinute, JSON.stringify(metadata ?? {}), recordedBy]
+    [
+      matchId,
+      leagueId,
+      teamId,
+      playerId,
+      eventType,
+      minute,
+      extraMinute,
+      matchTimestampSec,
+      relatedPlayerId,
+      xStart,
+      yStart,
+      xEnd,
+      yEnd,
+      outcome,
+      source,
+      Math.max(0, Math.min(1, Number(confidence))),
+      JSON.stringify(metadata ?? {}),
+      recordedBy,
+    ]
   );
 }
 
-async function ensureTrackingFrame(client, { matchId, leagueId, timestampMs, period, ballX, ballY, ballZ, players, recordedBy }) {
+async function ensureTrackingFrame(client, {
+  matchId,
+  leagueId,
+  timestampMs,
+  period,
+  ballX,
+  ballY,
+  ballZ,
+  players,
+  source = 'simulated',
+  confidence = 0.9,
+  recordedBy,
+}) {
   await client.query(
     `
     INSERT INTO "match_tracking_frames" (
-      "matchId", "leagueId", "timestampMs", "period", "ballX", "ballY", "ballZ", "players", "recordedBy", "createdAt", "updatedAt"
+      "matchId", "leagueId", "timestampMs", "period", "ballX", "ballY", "ballZ", "players", "source", "confidence", "recordedBy", "createdAt", "updatedAt"
     )
-    SELECT $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, NOW(), NOW()
+    SELECT $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, NOW(), NOW()
     WHERE NOT EXISTS (
       SELECT 1 FROM "match_tracking_frames" WHERE "matchId" = $1 AND "timestampMs" = $3
     );
     `,
-    [matchId, leagueId, timestampMs, period, ballX, ballY, ballZ, JSON.stringify(players ?? []), recordedBy]
+    [
+      matchId,
+      leagueId,
+      timestampMs,
+      period,
+      ballX,
+      ballY,
+      ballZ,
+      JSON.stringify(players ?? []),
+      source,
+      Math.max(0, Math.min(1, Number(confidence))),
+      recordedBy,
+    ]
   );
 }
 
@@ -804,6 +892,8 @@ async function run() {
 
           const homeScorers = homeStartingXI.length ? homeStartingXI : homeBench;
           const awayScorers = awayStartingXI.length ? awayStartingXI : awayBench;
+          const homePool = [...homeStartingXI, ...homeBench].filter((p) => p?.userId);
+          const awayPool = [...awayStartingXI, ...awayBench].filter((p) => p?.userId);
 
           for (let g = 0; g < homeScore; g++) {
             const scorer = homeScorers[g % Math.max(homeScorers.length, 1)] || null;
@@ -816,6 +906,14 @@ async function run() {
               eventType: g % 4 === 0 ? 'penalty_scored' : 'goal',
               minute: 8 + g * 11,
               extraMinute: null,
+              matchTimestampSec: (8 + g * 11) * 60,
+              outcome: 'goal',
+              xStart: clampCoord(randomBetween(70, 100)),
+              yStart: clampCoord(randomBetween(20, 80)),
+              xEnd: 100,
+              yEnd: 50,
+              source: 'simulated',
+              confidence: randomBetween(0.78, 0.98),
               metadata: { origin: 'seed_massive' },
               recordedBy: refereeId,
             });
@@ -832,9 +930,126 @@ async function run() {
               eventType: 'goal',
               minute: 14 + g * 13,
               extraMinute: null,
+              matchTimestampSec: (14 + g * 13) * 60,
+              outcome: 'goal',
+              xStart: clampCoord(randomBetween(70, 100)),
+              yStart: clampCoord(randomBetween(20, 80)),
+              xEnd: 100,
+              yEnd: 50,
+              source: 'simulated',
+              confidence: randomBetween(0.78, 0.98),
               metadata: { origin: 'seed_massive' },
               recordedBy: refereeId,
             });
+          }
+
+          const passSequencesPerTeam = 20;
+          for (let p = 0; p < passSequencesPerTeam; p++) {
+            const fromHome = pickRandom(homePool);
+            const toHome = pickRandom(homePool.filter((row) => row.userId !== fromHome?.userId));
+            if (fromHome?.userId && toHome?.userId) {
+              const minute = randomInt(2, 88);
+              const completed = Math.random() > 0.14;
+              await ensureMatchEvent(client, {
+                matchId,
+                leagueId,
+                teamId: homeTeamId,
+                playerId: fromHome.userId,
+                relatedPlayerId: completed ? toHome.userId : null,
+                eventType: Math.random() > 0.82 ? 'key_pass' : 'pass',
+                minute,
+                extraMinute: null,
+                matchTimestampSec: minute * 60 + randomInt(0, 59),
+                xStart: clampCoord(randomBetween(8, 85)),
+                yStart: clampCoord(randomBetween(5, 95)),
+                xEnd: clampCoord(randomBetween(15, 98)),
+                yEnd: clampCoord(randomBetween(5, 95)),
+                outcome: completed ? 'complete' : 'incomplete',
+                source: 'simulated',
+                confidence: randomBetween(0.62, 0.96),
+                metadata: { completed, origin: 'seed_massive', isKeyPass: Math.random() > 0.84 },
+                recordedBy: refereeId,
+              });
+            }
+
+            const fromAway = pickRandom(awayPool);
+            const toAway = pickRandom(awayPool.filter((row) => row.userId !== fromAway?.userId));
+            if (fromAway?.userId && toAway?.userId) {
+              const minute = randomInt(2, 88);
+              const completed = Math.random() > 0.16;
+              await ensureMatchEvent(client, {
+                matchId,
+                leagueId,
+                teamId: awayTeamId,
+                playerId: fromAway.userId,
+                relatedPlayerId: completed ? toAway.userId : null,
+                eventType: Math.random() > 0.84 ? 'key_pass' : 'pass',
+                minute,
+                extraMinute: null,
+                matchTimestampSec: minute * 60 + randomInt(0, 59),
+                xStart: clampCoord(randomBetween(8, 85)),
+                yStart: clampCoord(randomBetween(5, 95)),
+                xEnd: clampCoord(randomBetween(15, 98)),
+                yEnd: clampCoord(randomBetween(5, 95)),
+                outcome: completed ? 'complete' : 'incomplete',
+                source: 'simulated',
+                confidence: randomBetween(0.62, 0.96),
+                metadata: { completed, origin: 'seed_massive', isKeyPass: Math.random() > 0.86 },
+                recordedBy: refereeId,
+              });
+            }
+          }
+
+          for (let s = 0; s < 4; s++) {
+            const homeShooter = pickRandom(homePool);
+            if (homeShooter?.userId) {
+              const minute = randomInt(5, 89);
+              const onTarget = Math.random() > 0.42;
+              await ensureMatchEvent(client, {
+                matchId,
+                leagueId,
+                teamId: homeTeamId,
+                playerId: homeShooter.userId,
+                eventType: 'shot',
+                minute,
+                extraMinute: null,
+                matchTimestampSec: minute * 60 + randomInt(0, 59),
+                xStart: clampCoord(randomBetween(62, 100)),
+                yStart: clampCoord(randomBetween(18, 82)),
+                xEnd: 100,
+                yEnd: 50,
+                outcome: onTarget ? 'on_target' : 'off_target',
+                source: 'simulated',
+                confidence: randomBetween(0.7, 0.96),
+                metadata: { origin: 'seed_massive' },
+                recordedBy: refereeId,
+              });
+            }
+
+            const awayShooter = pickRandom(awayPool);
+            if (awayShooter?.userId) {
+              const minute = randomInt(5, 89);
+              const onTarget = Math.random() > 0.45;
+              await ensureMatchEvent(client, {
+                matchId,
+                leagueId,
+                teamId: awayTeamId,
+                playerId: awayShooter.userId,
+                eventType: 'shot',
+                minute,
+                extraMinute: null,
+                matchTimestampSec: minute * 60 + randomInt(0, 59),
+                xStart: clampCoord(randomBetween(62, 100)),
+                yStart: clampCoord(randomBetween(18, 82)),
+                xEnd: 100,
+                yEnd: 50,
+                outcome: onTarget ? 'on_target' : 'off_target',
+                source: 'simulated',
+                confidence: randomBetween(0.7, 0.96),
+                metadata: { origin: 'seed_massive' },
+                recordedBy: refereeId,
+              });
+            }
           }
 
           const cardTargetHome = homeStartingXI[0] || homeBench[0];
@@ -849,6 +1064,9 @@ async function run() {
               eventType: 'yellow_card',
               minute: 62,
               extraMinute: null,
+              matchTimestampSec: 62 * 60,
+              source: 'manual',
+              confidence: 1,
               metadata: { reason: 'foul' },
               recordedBy: refereeId,
             });
@@ -863,40 +1081,51 @@ async function run() {
               eventType: round % 4 === 0 ? 'red_card' : 'yellow_card',
               minute: 74,
               extraMinute: null,
+              matchTimestampSec: 74 * 60,
+              source: 'manual',
+              confidence: 1,
               metadata: { reason: 'late_tackle' },
               recordedBy: refereeId,
             });
           }
 
-          await ensureTrackingFrame(client, {
-            matchId,
-            leagueId,
-            timestampMs: 10000 + i + round,
-            period: '1H',
-            ballX: 11.2 + i * 0.1 + round * 0.05,
-            ballY: 5.8 + i * 0.1 + round * 0.05,
-            ballZ: 0.2,
-            players: [
-              { userId: homeAStarting[0]?.userId ?? playerA1Id, x: 12.1, y: 9.2, speed: 6.4 },
-              { userId: awayBStarting[0]?.userId ?? playerB1Id, x: 18.5, y: 11.4, speed: 5.7 },
-            ],
-            recordedBy: refereeId,
-          });
+          const trackedHome = homePool.slice(0, Math.min(7, homePool.length));
+          const trackedAway = awayPool.slice(0, Math.min(7, awayPool.length));
+          for (let frameIndex = 0; frameIndex < 10; frameIndex++) {
+            const inFirstHalf = frameIndex < 5;
+            const ballX = clampCoord(8 + frameIndex * 8 + i * 0.12 + round * 0.1);
+            const ballY = clampCoord(20 + ((frameIndex * 7) % 45));
+            const playersFrame = [
+              ...trackedHome.map((p, idx) => ({
+                userId: p.userId,
+                teamId: homeTeamId,
+                x: clampCoord(15 + idx * 7 + frameIndex * 1.5 + randomBetween(-2, 2)),
+                y: clampCoord(10 + idx * 5 + randomBetween(-3, 3)),
+                speed: Number(randomBetween(3.5, 8.6).toFixed(2)),
+              })),
+              ...trackedAway.map((p, idx) => ({
+                userId: p.userId,
+                teamId: awayTeamId,
+                x: clampCoord(85 - idx * 7 - frameIndex * 1.3 + randomBetween(-2, 2)),
+                y: clampCoord(88 - idx * 5 + randomBetween(-3, 3)),
+                speed: Number(randomBetween(3.4, 8.3).toFixed(2)),
+              })),
+            ];
 
-          await ensureTrackingFrame(client, {
-            matchId,
-            leagueId,
-            timestampMs: 20000 + i + round,
-            period: '2H',
-            ballX: 15.2 + i * 0.1 + round * 0.05,
-            ballY: 8.1 + i * 0.1 + round * 0.05,
-            ballZ: 0.1,
-            players: [
-              { userId: homeAStarting[1]?.userId ?? playerA2Id, x: 15.9, y: 9.9, speed: 7.1 },
-              { userId: awayBStarting[1]?.userId ?? playerB2Id, x: 20.3, y: 14.0, speed: 6.2 },
-            ],
-            recordedBy: refereeId,
-          });
+            await ensureTrackingFrame(client, {
+              matchId,
+              leagueId,
+              timestampMs: 10000 + frameIndex * 7500 + i + round,
+              period: inFirstHalf ? '1H' : '2H',
+              ballX,
+              ballY,
+              ballZ: Number(randomBetween(0, 1.2).toFixed(2)),
+              players: playersFrame,
+              source: 'simulated',
+              confidence: Number(randomBetween(0.7, 0.97).toFixed(3)),
+              recordedBy: refereeId,
+            });
+          }
         } else {
           await client.query(
             `

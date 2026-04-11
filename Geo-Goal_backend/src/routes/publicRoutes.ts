@@ -54,4 +54,11 @@ router.get(
   asyncHandler(MatchDetailController.getByMatchId)
 );
 
+router.get(
+  "/matches/:matchId/analytics",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchAnalytics)
+);
+
 export default router;
