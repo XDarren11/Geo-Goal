@@ -73,7 +73,7 @@ export default function CoachTeamsView() {
                                     {league.teams.map((team: Team) => (
                                         <Link 
                                             key={team.id}
-                                            to={`/leagues/${league.id}/teams/${team.id}/dashboard`}
+                                            to={`/teams/${team.id}`}
                                             className="group flex flex-col p-3 rounded-xl hover:bg-green-50/50 transition-colors border border-transparent hover:border-green-100"
                                         >
                                             <div className="flex items-center">
@@ -87,7 +87,7 @@ export default function CoachTeamsView() {
                                             </div>
                                             
                                             <span className="text-green-500 font-bold text-xs mt-3 flex items-center group-hover:translate-x-1 transition-transform">
-                                                Ver estadísticas &rarr;
+                                                Ver detalle del equipo &rarr;
                                             </span>
                                         </Link>
                                     ))}

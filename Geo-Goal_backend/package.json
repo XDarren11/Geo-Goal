@@ -9,7 +9,10 @@
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:migrate:status": "sequelize-cli db:migrate:status",
     "db:migration:create": "sequelize-cli migration:generate --name",
-    "db:seed:demo": "node scripts/seed-demo-data.js"
+    "db:seed:demo": "node scripts/seed-demo-data.js",
+    "seed:check": "node scripts/check-seed-coverage.js",
+    "db:backfill:squads": "node scripts/backfill-team-member-and-match-squads.js"
+
   },
   "keywords": [],
   "author": "",

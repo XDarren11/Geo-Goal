@@ -61,6 +61,7 @@ export default function MyTeamsView() {
               key={team.id}
               className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5"
             >
+              <Link to={`/teams/${team.id}`} className="group block">
               <div className="flex items-center gap-4">
                 {team.logoUrl ? (
                   <img
@@ -75,7 +76,7 @@ export default function MyTeamsView() {
                 )}
 
                 <div className="min-w-0">
-                  <h2 className="truncate text-lg font-bold text-[var(--geo-text)]">{team.name}</h2>
+                  <h2 className="truncate text-lg font-bold text-[var(--geo-text)] group-hover:text-geo-green">{team.name}</h2>
                   {team.fieldAddress && (
                     <p className="truncate text-sm text-[var(--geo-text-muted)]">{team.fieldAddress}</p>
                   )}
@@ -90,6 +91,7 @@ export default function MyTeamsView() {
                   ) : null}
                 </div>
               </div>
+              </Link>
             </li>
           ))}
         </ul>

@@ -16,11 +16,19 @@ export function JoinTeamByCodeModal({
   onClose,
 }: JoinTeamByCodeModalProps) {
   const [code, setCode] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [jerseyNumber, setJerseyNumber] = useState('');
 
   const { mutate: joinTeam, isPending } = useMutation({
-    mutationFn: () => teamInvitationAPI.joinByCode(code),
+    mutationFn: () => teamInvitationAPI.joinByCode({
+      code: code.trim().toUpperCase(),
+      playerName: playerName.trim(),
+      jerseyNumber: Number(jerseyNumber),
+    }),
     onSuccess: () => {
       setCode('');
+      setPlayerName('');
+      setJerseyNumber('');
       toast.success('¡Te uniste al equipo exitosamente!');
       onPlayerAdded?.();
       onClose();
@@ -42,6 +50,35 @@ export function JoinTeamByCodeModal({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-semibold mb-2 text-[var(--geo-text)]">
+              Nombre de jugador
+            </label>
+            <input
+              type="text"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Ej: Kevin Atilano"
+              className="input-pitch w-full"
+              maxLength={80}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-[var(--geo-text)]">
+              Dorsal
+            </label>
+            <input
+              type="number"
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value)}
+              placeholder="10"
+              min={1}
+              max={99}
+              className="input-pitch w-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-2 text-[var(--geo-text)]">
               Código de Invitación
             </label>
             <input
@@ -56,7 +93,7 @@ export function JoinTeamByCodeModal({
 
           <button
             onClick={() => joinTeam()}
-            disabled={isPending || !code}
+            disabled={isPending || !code.trim() || !playerName.trim() || !jerseyNumber.trim()}
             className="btn-pitch w-full py-3 disabled:opacity-60"
           >
             {isPending ? 'Uniéndose...' : 'Unir a Equipo'}

@@ -214,6 +214,8 @@ router.post('/join-by-code',
     authenticate,
   hasRole('player'),
     body('code').notEmpty().withMessage('El código es obligatorio'),
+    body('playerName').isString().trim().notEmpty().withMessage('El nombre de jugador es obligatorio'),
+    body('jerseyNumber').isInt({ min: 1, max: 99 }).withMessage('El dorsal debe ser un número entre 1 y 99'),
     handleInputError,
     asyncHandler(TeamInvitationController.joinByCode)
 );

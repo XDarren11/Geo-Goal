@@ -3,6 +3,7 @@ import { League } from './League';
 import { Team } from './Team';
 import { TeamMember } from './TeamMember';
 import { LeagueAdmin } from './LeagueAdmin';
+import { MatchSquadPlayer } from './MatchSquadPlayer';
 
 @Table({ tableName: 'users' })
 export class User extends Model {
@@ -46,4 +47,7 @@ export class User extends Model {
 
     @HasMany(() => LeagueAdmin, 'assignedBy')
     declare adminAssignmentsMade: LeagueAdmin[];
+
+    @HasMany(() => MatchSquadPlayer, 'playerId')
+    declare matchSquadEntries: MatchSquadPlayer[];
 }

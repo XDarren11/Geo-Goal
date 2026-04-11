@@ -3,8 +3,27 @@ import { Team } from "../models/Team";
 import { TeamMember } from "../models/TeamMember";
 import { User } from "../models/User";
 import { AppError } from "../types/errors";
+import { Op } from "sequelize";
 
 export class TeamInvitationService {
+  private static normalizePlayerName(playerName: string): string {
+    const normalized = playerName.trim();
+    if (!normalized) {
+      throw new AppError(400, "El nombre de jugador es obligatorio");
+    }
+    if (normalized.length > 80) {
+      throw new AppError(400, "El nombre de jugador supera el límite de 80 caracteres");
+    }
+    return normalized;
+  }
+
+  private static normalizeJerseyNumber(jerseyNumber: number): number {
+    const parsed = Number(jerseyNumber);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 99) {
+      throw new AppError(400, "El dorsal debe ser un entero entre 1 y 99");
+    }
+    return parsed;
+  }
   /**
    * Genera un código de invitación único para un equipo
    */
@@ -79,7 +98,15 @@ export class TeamInvitationService {
   /**
    * Permite que un jugador se una a un equipo usando un código
    */
-  static async joinTeamByCode(code: string, userId: number): Promise<string> {
+  static async joinTeamByCode(
+    code: string,
+    userId: number,
+    playerName: string,
+    jerseyNumber: number
+  ): Promise<string> {
+    const normalizedPlayerName = this.normalizePlayerName(playerName);
+    const normalizedJerseyNumber = this.normalizeJerseyNumber(jerseyNumber);
+
     // Buscar la invitación
     const invitation = await TeamInvitation.findOne({
       where: { code },
@@ -115,7 +142,35 @@ export class TeamInvitationService {
     });
 
     if (sameTeamMembership) {
+      const sameTeamJerseyConflict = await TeamMember.findOne({
+        where: {
+          teamId: invitation.teamId,
+          jerseyNumber: normalizedJerseyNumber,
+          userId: { [Op.ne]: userId },
+        },
+        attributes: ["userId"],
+      });
+
+      if (sameTeamJerseyConflict) {
+        throw new AppError(409, `El dorsal ${normalizedJerseyNumber} ya está en uso en este equipo`);
+      }
+
+      sameTeamMembership.playerName = normalizedPlayerName;
+      sameTeamMembership.jerseyNumber = normalizedJerseyNumber;
+      await sameTeamMembership.save();
       return `Ya perteneces al equipo ${invitation.team.name}`;
+    }
+
+    const jerseyConflict = await TeamMember.findOne({
+      where: {
+        teamId: invitation.teamId,
+        jerseyNumber: normalizedJerseyNumber,
+      },
+      attributes: ["userId"],
+    });
+
+    if (jerseyConflict) {
+      throw new AppError(409, `El dorsal ${normalizedJerseyNumber} ya está en uso en este equipo`);
     }
 
     // Regla de negocio: puede estar en varios equipos, pero no en la misma liga
@@ -149,6 +204,8 @@ export class TeamInvitationService {
     await TeamMember.create({
       userId,
       teamId: invitation.teamId,
+      playerName: normalizedPlayerName,
+      jerseyNumber: normalizedJerseyNumber,
     });
 
     // Incrementar contador de usos

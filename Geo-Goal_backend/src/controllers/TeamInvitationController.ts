@@ -48,11 +48,13 @@ export class TeamInvitationController {
    * POST /api/teams/join-by-code
    */
   static joinByCode = async (req: Request, res: Response): Promise<void> => {
-    const { code } = req.body;
+    const { code, playerName, jerseyNumber } = req.body;
 
     const result = await TeamInvitationService.joinTeamByCode(
       code,
-      req.user!.id
+      req.user!.id,
+      playerName,
+      Number(jerseyNumber)
     );
 
     res.send(result);

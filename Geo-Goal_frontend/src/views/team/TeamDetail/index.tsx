@@ -78,10 +78,12 @@ export default function TeamDetailView() {
     );
   }
 
+  const canManagePlayers = team.trainerId === currentUser?.id;
+
   return (
     <div>
       <Link
-        to="/teams"
+        to={currentUser?.role === 'player' ? '/my-teams' : '/teams'}
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Volver a equipos
@@ -106,6 +108,48 @@ export default function TeamDetailView() {
         </div>
       </div>
 
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Coach</p>
+          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.trainer?.name ?? '—'}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Cancha</p>
+          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.fieldAddress ?? '—'}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Liga</p>
+          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.league?.name ?? 'Sin liga'}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Puntos</p>
+          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.stats?.points ?? 0}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+          <p className="text-xs text-[var(--geo-text-muted)]">PJ</p>
+          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.playedMatches ?? 0}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+          <p className="text-xs text-[var(--geo-text-muted)]">G</p>
+          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.wins ?? 0}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+          <p className="text-xs text-[var(--geo-text-muted)]">E</p>
+          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.draws ?? 0}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+          <p className="text-xs text-[var(--geo-text-muted)]">P</p>
+          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.losses ?? 0}</p>
+        </div>
+        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+          <p className="text-xs text-[var(--geo-text-muted)]">DG</p>
+          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.goalDifference ?? 0}</p>
+        </div>
+      </div>
+
       <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
@@ -118,6 +162,7 @@ export default function TeamDetailView() {
           />
         </div>
 
+        {canManagePlayers ? (
         <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
           <p className="text-sm font-semibold text-[var(--geo-text)]">
             Buscar jugador por email para agregar
@@ -155,6 +200,7 @@ export default function TeamDetailView() {
             </div>
           )}
         </div>
+        ) : null}
 
         {players && players.length > 0 ? (
           <ul className="mt-4 space-y-2">
@@ -164,7 +210,12 @@ export default function TeamDetailView() {
                 className="flex items-center justify-between rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3"
               >
                 <span className="font-medium text-[var(--geo-text)]">
-                  {p.name}
+                  {p.playerName || p.name}
+                  {p.jerseyNumber ? (
+                    <span className="ml-2 rounded bg-geo-green/15 px-2 py-0.5 text-xs font-bold text-geo-green">
+                      #{p.jerseyNumber}
+                    </span>
+                  ) : null}
                   <span className="ml-2 text-sm text-[var(--geo-text-muted)]">
                     {p.email}
                   </span>
@@ -172,6 +223,8 @@ export default function TeamDetailView() {
                 <button
                   type="button"
                   onClick={() => removePlayerMutation.mutate(p.id)}
+                  disabled={!canManagePlayers}
+                  hidden={!canManagePlayers}
                   className="text-red-500 hover:text-red-400"
                   title="Quitar del equipo"
                 >

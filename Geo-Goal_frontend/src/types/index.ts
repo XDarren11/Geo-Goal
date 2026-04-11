@@ -64,6 +64,18 @@ export interface Team {
   leagueId?: number | null
   trainerId?: number
   league?: Pick<League, 'id' | 'name'>
+  trainer?: Pick<User, 'id' | 'name' | 'email'>
+  stats?: {
+    playedMatches: number
+    wins: number
+    draws: number
+    losses: number
+    points: number
+    goalsFor: number
+    goalsAgainst: number
+    goalDifference: number
+  }
+  recentMatches?: Match[]
 }
 
 export interface Match {
@@ -93,6 +105,32 @@ export interface MatchDetailLineupEntry {
   [key: string]: unknown
 }
 
+export interface MatchSquadPlayerView {
+  id: number
+  name: string | null
+  email: string | null
+  role: string | null
+  squadRole: 'starter' | 'bench' | 'roster' | 'unavailable'
+  isAvailable: boolean
+  isCaptain: boolean
+  jerseyNumber: number | null
+  position: string | null
+  minutesPlanned: number | null
+  notes: string | null
+}
+
+export interface MatchSquadTeamView {
+  starters: MatchSquadPlayerView[]
+  bench: MatchSquadPlayerView[]
+  roster: MatchSquadPlayerView[]
+  unavailable: MatchSquadPlayerView[]
+  totals: {
+    totalRoster: number
+    available: number
+    unavailable: number
+  }
+}
+
 export interface PublicMatchDetail {
   id?: number
   matchId?: number
@@ -117,6 +155,10 @@ export interface PublicMatchDetail {
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]
   awayBench?: MatchDetailLineupEntry[]
+  squads?: {
+    home: MatchSquadTeamView
+    away: MatchSquadTeamView
+  }
   referee?: string | null
   weather?: string | null
   attendance?: number | null
@@ -164,6 +206,9 @@ export interface Player {
   id: number
   name: string
   email: string
+  playerName?: string | null
+  jerseyNumber?: number | null
+  preferredPosition?: string | null
 }
 
 export interface AdminUser {

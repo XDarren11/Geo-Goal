@@ -67,8 +67,12 @@ export const teamInvitationAPI = {
   /**
    * Unir jugador a equipo con código
    */
-  joinByCode: async (code: string) => {
-    const { data } = await api.post('/teams/join-by-code', { code });
+  joinByCode: async (input: { code: string; playerName: string; jerseyNumber: number }) => {
+    const { data } = await api.post('/teams/join-by-code', {
+      code: input.code,
+      playerName: input.playerName,
+      jerseyNumber: input.jerseyNumber,
+    });
     return data;
   },
 
