@@ -646,7 +646,7 @@ export default function DashboardView() {
               )}
             </section>
 
-            <section className="card-pitch p-5">
+            <section className="card-pitch min-w-0 overflow-hidden p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-geo text-xl text-[var(--geo-text)]">Rendimiento personal</h2>
                 <UserGroupIcon className="h-5 w-5 text-geo-green" />
@@ -670,6 +670,7 @@ export default function DashboardView() {
                     </div>
                   </div>
                   {playerRadarData.length ? (
+                    <div className="w-full overflow-hidden [&_svg]:!w-full [&_svg]:max-w-full">
                     <VictoryChart polar height={280} domain={{ y: [0, 100] }}>
                       <VictoryPolarAxis
                         tickValues={playerRadarData.slice(0, -1).map((point) => point.x)}
@@ -694,6 +695,7 @@ export default function DashboardView() {
                         }}
                       />
                     </VictoryChart>
+                    </div>
                   ) : (
                     <p className="text-sm text-[var(--geo-text-muted)]">Sin datos de rendimiento.</p>
                   )}
@@ -701,7 +703,7 @@ export default function DashboardView() {
               )}
             </section>
 
-            <section className="card-pitch p-5">
+            <section className="card-pitch min-w-0 overflow-hidden p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-geo text-xl text-[var(--geo-text)]">Evolución y logros</h2>
                 <TrophyIcon className="h-5 w-5 text-geo-green" />
@@ -711,6 +713,7 @@ export default function DashboardView() {
               ) : (
                 <>
                   {playerTrendData.length ? (
+                    <div className="w-full overflow-hidden [&_svg]:!w-full [&_svg]:max-w-full">
                     <VictoryChart domainPadding={{ x: 16, y: 10 }} height={220}>
                       <VictoryAxis
                         style={{
@@ -729,24 +732,25 @@ export default function DashboardView() {
                       <VictoryBar data={playerTrendData} x="x" y="contributions" barWidth={10} style={{ data: { fill: "rgba(57,255,20,0.35)" } }} />
                       <VictoryLine data={playerTrendData} x="x" y="rating" style={{ data: { stroke: "#39FF14", strokeWidth: 2 } }} />
                     </VictoryChart>
+                    </div>
                   ) : (
                     <p className="text-sm text-[var(--geo-text-muted)]">Aún no hay suficientes partidos para evolución.</p>
                   )}
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {playerAchievements.map((badge) => (
                       <div
                         key={badge.key}
-                        className={`rounded-lg border p-2 ${
+                        className={`h-full rounded-lg border p-3 ${
                           badge.unlocked
                             ? "border-geo-green/40 bg-geo-green/10"
                             : "border-white/10 bg-white/5"
                         }`}
                       >
-                        <p className={`text-xs font-bold ${badge.unlocked ? "text-geo-green" : "text-[var(--geo-text)]"}`}>
+                        <p className={`text-sm font-bold leading-tight ${badge.unlocked ? "text-geo-green" : "text-[var(--geo-text)]"}`}>
                           {badge.title}
                         </p>
-                        <p className="text-[10px] text-[var(--geo-text-muted)]">{badge.description}</p>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--geo-text-muted)]">{badge.description}</p>
                       </div>
                     ))}
                   </div>
