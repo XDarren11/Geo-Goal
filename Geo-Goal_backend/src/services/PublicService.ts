@@ -6,6 +6,7 @@ import { Match } from "../models/Match";
 import { TeamLeagueStat } from "../models/TeamLeagueStat";
 import { Season } from "../models/Season";
 import { User } from "../models/User";
+import { NewsService } from "./NewsService";
 
 export class PublicService {
   private static async ensureLeagueExists(leagueId: string): Promise<League> {
@@ -21,6 +22,10 @@ export class PublicService {
       attributes: ["id", "name", "description", "createdAt"],
       order: [["createdAt", "DESC"], ["id", "DESC"]],
     });
+  }
+
+  static async getNews(limit = 12) {
+    return NewsService.getPublicNews(limit);
   }
 
   static async getLeagueDetail(leagueId: string) {
@@ -82,7 +87,7 @@ export class PublicService {
         }),
       ]);
 
-    const news = this.buildPublicNews({ league, currentSeason, recentMatches });
+    const news = await NewsService.getNewsForLeagues([Number(leagueId)], 8);
 
     return {
       league,

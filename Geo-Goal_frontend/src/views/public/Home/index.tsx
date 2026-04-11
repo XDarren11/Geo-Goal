@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/context/ThemeContext";
-import { getPublicFixture, getPublicLeagues, getPublicStandings } from "@/api/publicAPI";
+import { getPublicFixture, getPublicLeagues, getPublicNews, getPublicStandings } from "@/api/publicAPI";
 import Logo from "@/components/Logo";
 import {
   ArrowRightIcon,
@@ -42,6 +42,11 @@ export default function PublicHomeView() {
     queryKey: ["public-fixture", selectedLeagueId],
     queryFn: () => getPublicFixture(selectedLeagueId as number),
     enabled: selectedLeagueId != null,
+  });
+
+  const { data: publicNews, isLoading: newsLoading } = useQuery({
+    queryKey: ["public-news", "home"],
+    queryFn: () => getPublicNews(8),
   });
 
   const standingsChartData = (standings ?? [])
@@ -430,6 +435,37 @@ export default function PublicHomeView() {
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="mt-10 rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-geo text-2xl tracking-wide">Noticias destacadas</h2>
+            <span className="text-xs uppercase tracking-[0.2em] text-geo-green">Tiempo real</span>
+          </div>
+          {newsLoading ? (
+            <p className="text-sm text-[var(--geo-text-muted)]">Cargando noticias…</p>
+          ) : publicNews?.length ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {publicNews.map((item) => (
+                <article key={item.id} className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
+                  <p className="text-xs text-[var(--geo-text-muted)]">{new Date(item.createdAt).toLocaleString()} · {item.leagueName || "Geo-Goal"}</p>
+                  <p className="mt-1 font-bold text-[var(--geo-text)]">{item.title}</p>
+                  <p className="mt-1 text-sm text-[var(--geo-text-muted)]">{item.summary}</p>
+                  {item.matchId ? (
+                    <Link className="mt-2 inline-block text-xs font-semibold text-geo-green hover:underline" to={`/public/matches/${item.matchId}/detail`}>
+                      Ir al partido
+                    </Link>
+                  ) : item.leagueId ? (
+                    <Link className="mt-2 inline-block text-xs font-semibold text-geo-green hover:underline" to={`/public/leagues/${item.leagueId}`}>
+                      Ir a la liga
+                    </Link>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[var(--geo-text-muted)]">No hay noticias disponibles por ahora.</p>
+          )}
         </section>
       </main>
     </div>

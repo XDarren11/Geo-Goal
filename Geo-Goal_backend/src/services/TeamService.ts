@@ -11,6 +11,7 @@ import { MatchEvent } from "../models/MatchEvent";
 import { MatchDetail } from "../models/MatchDetail";
 import { Notification } from "../models/Notification";
 import { AppError } from "../types/errors";
+import { NewsService } from "./NewsService";
 
 const UPLOADS_DIR = "public/uploads";
 
@@ -58,6 +59,7 @@ export class TeamService {
         actionableNotifications: [],
         performanceTrend: [],
         achievements: [],
+        news: [],
       };
     }
 
@@ -320,6 +322,11 @@ export class TeamService {
       };
     }
 
+    const leagueIdsForNews = teams
+      .map((team) => Number(team.leagueId))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const news = await NewsService.getNewsForLeagues(leagueIdsForNews, 8);
+
     return {
       nextMatch: nextMatchPayload,
       recentTeamResults,
@@ -337,6 +344,7 @@ export class TeamService {
       actionableNotifications,
       performanceTrend,
       achievements,
+      news,
     };
   }
 
@@ -363,6 +371,7 @@ export class TeamService {
         preMatchChecklist: [],
         goalsByTeam: [],
         cardsByTeam: [],
+        news: [],
       };
     }
 
@@ -580,6 +589,11 @@ export class TeamService {
 
     const cardsByTeam = Array.from(cardsByTeamMap.values());
 
+    const leagueIdsForNews = teams
+      .map((team) => Number(team.leagueId))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const news = await NewsService.getNewsForLeagues(leagueIdsForNews, 8);
+
     const matchIds = upcomingMatches.map((match) => match.id);
     const detailRows = matchIds.length
       ? await MatchDetail.findAll({
@@ -655,6 +669,7 @@ export class TeamService {
       preMatchChecklist,
       goalsByTeam,
       cardsByTeam,
+      news,
     };
   }
 

@@ -7,6 +7,8 @@ import { MatchDetailController } from "../controllers/MatchDetailController";
 
 const router = Router();
 
+router.get("/news", asyncHandler(PublicController.getNews));
+
 router.get("/leagues", asyncHandler(PublicController.getLeagues));
 
 router.get(

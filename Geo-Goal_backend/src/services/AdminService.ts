@@ -11,6 +11,7 @@ import { Season } from "../models/Season";
 import { Match } from "../models/Match";
 import { MatchEvent } from "../models/MatchEvent";
 import { AuditLog } from "../models/AuditLog";
+import { NewsService } from "./NewsService";
 import { hashPassword } from "../utils/auth";
 
 const VALID_ROLES = ["coach", "player", "admin", "referee"] as const;
@@ -105,6 +106,9 @@ export class AdminService {
         nextMatches: [],
         adminsByLeague: [],
         recentResults: [],
+        goalStatsByTeam: [],
+        disciplineByTeam: [],
+        news: [],
       };
     }
 
@@ -304,6 +308,8 @@ export class AdminService {
       };
     });
 
+    const news = await NewsService.getNewsForLeagues(leagueIds, 8);
+
     return {
       stats: {
         leagues: leagues.length,
@@ -323,6 +329,7 @@ export class AdminService {
       recentResults,
       goalStatsByTeam,
       disciplineByTeam,
+      news,
     };
   }
 

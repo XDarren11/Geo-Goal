@@ -10,6 +10,7 @@ import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { AuditService } from "./AuditService";
 import { NotificationService } from "./NotificationService";
+import { NewsService } from "./NewsService";
 
 const ALLOWED_EVENTS = new Set([
   "goal",
@@ -447,6 +448,15 @@ export class RefereeService {
       closedMatches: weekAssignments.filter((a) => a.status === "closed" || a.match?.played).length,
     };
 
+    const leagueIdsForNews = Array.from(
+      new Set(
+        statusAssignments
+          .map((a) => Number(a.leagueId ?? a.match?.leagueId ?? 0))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      )
+    );
+    const news = await NewsService.getNewsForLeagues(leagueIdsForNews, 8);
+
     return {
       stats,
       upcomingAssignedMatches: upcomingAssignments,
@@ -461,6 +471,7 @@ export class RefereeService {
         totalEventsLogged: events.length,
         totalTrackingFrames: trackingFrames.length,
       },
+      news,
     };
   }
 

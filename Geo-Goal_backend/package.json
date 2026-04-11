@@ -13,7 +13,8 @@
     "db:seed:massive": "SEED_TARGET_LEAGUES=36 SEED_TARGET_ADMINS=8 SEED_TARGET_COACHES=30 SEED_TARGET_PLAYERS=320 SEED_TARGET_REFEREES=16 SEED_TEAM_ROSTER_SIZE=16 SEED_PLAYED_MATCHES_PER_LEAGUE=10 SEED_FUTURE_MATCHES_PER_LEAGUE=4 SEED_STARTERS_PER_MATCH=11 node scripts/seed-demo-data.js",
     "db:seed:repair": "node scripts/repair-seed-coverage.js",
     "seed:check": "node scripts/check-seed-coverage.js",
-    "db:backfill:squads": "node scripts/backfill-team-member-and-match-squads.js"
+    "db:backfill:squads": "node scripts/backfill-team-member-and-match-squads.js",
+    "db:backfill:news": "node scripts/backfill-news.js"
 
   },
   "keywords": [],

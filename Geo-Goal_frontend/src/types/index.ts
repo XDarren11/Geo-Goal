@@ -52,6 +52,9 @@ export interface PublicNewsItem {
   summary: string
   type: 'match' | 'season' | 'league'
   createdAt: string
+  leagueId?: number
+  leagueName?: string
+  matchId?: number
 }
 
 export interface Team {
@@ -337,6 +340,7 @@ export interface AdminDashboardSummary {
   recentResults: AdminDashboardMatch[]
   goalStatsByTeam: AdminDashboardGoalStat[]
   disciplineByTeam: AdminDashboardDisciplineStat[]
+  news: PublicNewsItem[]
 }
 
 export interface CoachDashboardUpcomingMatch extends Match {
@@ -409,6 +413,7 @@ export interface CoachDashboardSummary {
   preMatchChecklist: CoachDashboardChecklistItem[]
   goalsByTeam: CoachDashboardGoalsByTeam[]
   cardsByTeam: CoachDashboardCardsByTeam[]
+  news: PublicNewsItem[]
 }
 
 export interface PlayerDashboardRecentEvent {
@@ -463,6 +468,7 @@ export interface PlayerDashboardSummary {
     description: string
     unlocked: boolean
   }>
+  news: PublicNewsItem[]
 }
 
 export interface NotificationItem {
