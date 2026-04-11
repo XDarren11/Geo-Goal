@@ -470,29 +470,72 @@ router.get('/referee/dashboard',
 );
 
 router.post('/matches/:matchId/referee/events',
-    hasRole('referee'),
+    hasRole('referee', 'admin'),
     param('matchId').isInt().withMessage('ID de partido no válido'),
     body('eventType')
-      .isIn(['goal', 'own_goal', 'penalty_scored', 'penalty_missed', 'yellow_card', 'red_card', 'substitution', 'foul', 'offside', 'var_review'])
+            .isIn(['goal', 'own_goal', 'penalty_scored', 'penalty_missed', 'pass', 'key_pass', 'shot', 'tackle', 'recovery', 'interception', 'clearance', 'dribble', 'cross', 'corner_won', 'yellow_card', 'red_card', 'substitution', 'foul', 'offside', 'var_review'])
       .withMessage('Tipo de evento inválido'),
     body('minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inválido'),
     body('extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inválido'),
+        body('matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inválido'),
     body('teamId').optional({ nullable: true }).isInt().withMessage('teamId inválido'),
     body('playerId').optional({ nullable: true }).isInt().withMessage('playerId inválido'),
+        body('relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inválido'),
+        body('xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inválido'),
+        body('yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inválido'),
+        body('xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inválido'),
+        body('yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inválido'),
+        body('outcome').optional({ nullable: true }).isString().withMessage('outcome inválido'),
+        body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido'),
+        body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido'),
     body('metadata').optional().isObject().withMessage('metadata debe ser objeto'),
     handleInputError,
     asyncHandler(MatchDetailController.registerEvent)
 );
 
+router.post('/matches/:matchId/referee/events/bulk',
+    hasRole('referee', 'admin'),
+        param('matchId').isInt().withMessage('ID de partido no válido'),
+        body('events').isArray({ min: 1 }).withMessage('events debe ser arreglo con elementos'),
+        body('events.*.eventType')
+            .isIn(['goal', 'own_goal', 'penalty_scored', 'penalty_missed', 'pass', 'key_pass', 'shot', 'tackle', 'recovery', 'interception', 'clearance', 'dribble', 'cross', 'corner_won', 'yellow_card', 'red_card', 'substitution', 'foul', 'offside', 'var_review'])
+            .withMessage('Tipo de evento inválido en events'),
+        body('events.*.minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inválido en events'),
+        body('events.*.extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inválido en events'),
+        body('events.*.matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inválido en events'),
+        body('events.*.teamId').optional({ nullable: true }).isInt().withMessage('teamId inválido en events'),
+        body('events.*.playerId').optional({ nullable: true }).isInt().withMessage('playerId inválido en events'),
+        body('events.*.relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inválido en events'),
+        body('events.*.xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inválido en events'),
+        body('events.*.yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inválido en events'),
+        body('events.*.xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inválido en events'),
+        body('events.*.yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inválido en events'),
+        body('events.*.outcome').optional({ nullable: true }).isString().withMessage('outcome inválido en events'),
+        body('events.*.source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido en events'),
+        body('events.*.confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido en events'),
+        body('events.*.metadata').optional().isObject().withMessage('metadata debe ser objeto en events'),
+        handleInputError,
+        asyncHandler(MatchDetailController.registerBulkEvents)
+);
+
 router.post('/matches/:matchId/referee/tracking',
-    hasRole('referee'),
+    hasRole('referee', 'admin'),
     param('matchId').isInt().withMessage('ID de partido no válido'),
     body('timestampMs').isInt().withMessage('timestampMs inválido'),
     body('period').optional({ nullable: true }).isIn(['pre', '1H', 'HT', '2H', 'ET', 'post']).withMessage('period inválido'),
     body('ball').optional().isObject().withMessage('ball debe ser objeto'),
     body('players').isArray({ min: 0 }).withMessage('players debe ser arreglo'),
+    body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido'),
+    body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido'),
     handleInputError,
     asyncHandler(MatchDetailController.registerTrackingFrame)
+);
+
+router.get('/matches/:matchId/analytics',
+    hasRole('admin', 'coach', 'player', 'referee'),
+    param('matchId').isInt().withMessage('ID de partido no válido'),
+    handleInputError,
+    asyncHandler(MatchDetailController.getMatchAnalytics)
 );
 
 // 2. Ver Tabla de Posiciones (Público o Autenticado)

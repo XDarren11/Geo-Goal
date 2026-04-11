@@ -44,6 +44,12 @@ export class MatchTrackingFrame extends Model {
   @Column({ type: DataType.JSONB, allowNull: false, defaultValue: [] })
   declare players: Array<Record<string, unknown>>;
 
+  @Column({ type: DataType.STRING, allowNull: false, defaultValue: "manual" })
+  declare source: "manual" | "inferred" | "video" | "simulated";
+
+  @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 1 })
+  declare confidence: number;
+
   @ForeignKey(() => User)
   @Column({ type: DataType.INTEGER, allowNull: true })
   declare recordedBy: number | null;

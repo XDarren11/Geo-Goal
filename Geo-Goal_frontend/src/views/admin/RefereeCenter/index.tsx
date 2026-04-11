@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   assignRefereeToMatch,
+  getMatchAnalytics,
   getRefereeTodayMatches,
   registerMatchEvent,
   registerTrackingFrame,
@@ -52,6 +53,12 @@ export default function RefereeCenterView() {
   const selectedMatch = useMemo(() => {
     return data.find((a) => a.matchId === selectedMatchId) ?? null;
   }, [data, selectedMatchId]);
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ["referee", "analytics", selectedMatchId],
+    queryFn: () => getMatchAnalytics(Number(selectedMatchId)),
+    enabled: role === "referee" && Boolean(selectedMatchId),
+  });
 
   const eventMutation = useMutation({
     mutationFn: async () => {
@@ -248,6 +255,32 @@ export default function RefereeCenterView() {
           </div>
         </section>
       </div>
+
+      <section className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
+        <h3 className="font-bold text-[var(--geo-text)]">Analytics del partido seleccionado</h3>
+        {!selectedMatchId ? (
+          <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Selecciona un partido para ver métricas.</p>
+        ) : analyticsLoading ? (
+          <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Calculando analytics...</p>
+        ) : analytics ? (
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg bg-[var(--geo-bg)] p-3">
+              <p className="text-xs uppercase tracking-widest text-[var(--geo-text-muted)]">Jugadores con stats</p>
+              <p className="mt-1 text-2xl font-black text-geo-green">{analytics.summary.totalPlayersWithStats}</p>
+            </div>
+            <div className="rounded-lg bg-[var(--geo-bg)] p-3">
+              <p className="text-xs uppercase tracking-widest text-[var(--geo-text-muted)]">Conexiones de pase</p>
+              <p className="mt-1 text-2xl font-black text-geo-green">{analytics.summary.totalPassEdges}</p>
+            </div>
+            <div className="rounded-lg bg-[var(--geo-bg)] p-3">
+              <p className="text-xs uppercase tracking-widest text-[var(--geo-text-muted)]">Eventos espaciales</p>
+              <p className="mt-1 text-2xl font-black text-geo-green">{analytics.summary.totalSpatialEvents}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin analytics disponibles por ahora.</p>
+        )}
+      </section>
       </>
       ) : null}
 

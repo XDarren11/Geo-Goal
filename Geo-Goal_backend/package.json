@@ -14,7 +14,9 @@
     "db:seed:repair": "node scripts/repair-seed-coverage.js",
     "seed:check": "node scripts/check-seed-coverage.js",
     "db:backfill:squads": "node scripts/backfill-team-member-and-match-squads.js",
-    "db:backfill:news": "node scripts/backfill-news.js"
+    "db:backfill:news": "node scripts/backfill-news.js",
+    "db:backfill:player-stats": "node scripts/backfill-player-match-stats.js",
+    "db:simulate:referee": "node scripts/simulate-referee-telemetry.js"
 
   },
   "keywords": [],

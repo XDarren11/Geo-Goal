@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { PublicNewsItem } from "@/types";
+import type { MatchAnalyticsResponse, PublicNewsItem } from "@/types";
 
 export type RefereeAssignment = {
   id: number;
@@ -107,6 +107,57 @@ export async function registerTrackingFrame(
   }
 ) {
   const { data } = await api.post(`/league/matches/${matchId}/referee/tracking`, body);
+  return data;
+}
+
+export async function registerMatchEventsBulk(
+  matchId: number,
+  body: {
+    events: Array<{
+      eventType:
+        | "goal"
+        | "own_goal"
+        | "penalty_scored"
+        | "penalty_missed"
+        | "pass"
+        | "key_pass"
+        | "shot"
+        | "tackle"
+        | "recovery"
+        | "interception"
+        | "clearance"
+        | "dribble"
+        | "cross"
+        | "corner_won"
+        | "yellow_card"
+        | "red_card"
+        | "substitution"
+        | "foul"
+        | "offside"
+        | "var_review";
+      minute: number;
+      extraMinute?: number | null;
+      matchTimestampSec?: number | null;
+      teamId?: number | null;
+      playerId?: number | null;
+      relatedPlayerId?: number | null;
+      xStart?: number | null;
+      yStart?: number | null;
+      xEnd?: number | null;
+      yEnd?: number | null;
+      outcome?: string | null;
+      source?: "manual" | "inferred" | "video" | "simulated";
+      confidence?: number;
+      metadata?: Record<string, unknown>;
+    }>;
+  }
+) {
+  const { data } = await api.post(`/league/matches/${matchId}/referee/events/bulk`, body);
+  return data as { created: number; analyticsRows: number };
+}
+
+export async function getMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
+  const { data } = await api.get<MatchAnalyticsResponse>(`/league/matches/${matchId}/analytics`);
   return data;
 }
 

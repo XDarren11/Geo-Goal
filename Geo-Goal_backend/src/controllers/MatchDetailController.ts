@@ -45,6 +45,12 @@ export class MatchDetailController {
     res.status(201).json(data);
   };
 
+  static registerBulkEvents = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const data = await RefereeService.registerBulkEvents(matchId, req.user!.id, req.body);
+    res.status(201).json(data);
+  };
+
   static registerTrackingFrame = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const data = await RefereeService.registerTrackingFrame(matchId, req.user!.id, req.body);
@@ -60,6 +66,12 @@ export class MatchDetailController {
   static getUpcomingLeagueMatches = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
     const data = await RefereeService.getUpcomingLeagueMatches(Number(leagueId), req.user!.id);
+    res.json(data);
+  };
+
+  static getMatchAnalytics = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const data = await RefereeService.getMatchAnalytics(Number(matchId));
     res.json(data);
   };
 }

@@ -7,6 +7,7 @@ import type {
   PublicMatchDetailResponse,
   PublicNewsItem,
   PublicStanding,
+  MatchAnalyticsResponse,
 } from "@/types";
 
 const BASE = "/public";
@@ -68,4 +69,9 @@ export async function getPublicMatchDetail(matchId: number): Promise<PublicMatch
       ? (data as any).detail
       : {},
   } as PublicMatchDetailResponse;
+}
+
+export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
+  const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
+  return data;
 }
