@@ -101,7 +101,7 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
         <p className="text-xs uppercase tracking-wider text-[var(--geo-text-muted)]">Rol: {r}</p>
       </div>
 
-      <nav className="mt-4 flex-1 space-y-5 overflow-y-auto pr-1">
+      <nav className="mt-4 space-y-5 pr-1">
         <div className="space-y-1">
           <p className="px-1 text-[10px] uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">General</p>
           {commonLinks.map((item) => {
@@ -132,7 +132,7 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
       <button
         type="button"
         onClick={logout}
-        className="mt-4 rounded-xl border border-red-500/40 px-3 py-2 text-left text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10"
+        className="mt-3 rounded-xl border border-red-500/40 px-3 py-2 text-left text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10"
       >
         Cerrar sesión
       </button>

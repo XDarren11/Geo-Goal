@@ -13,7 +13,7 @@ export default function AppLayout() {
   const { data, isError, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [desktopMenuOpen, setDesktopMenuOpen] = useState(true);
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
 
   if (isLoading) {
     return (

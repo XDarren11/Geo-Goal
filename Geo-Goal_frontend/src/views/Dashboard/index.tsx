@@ -638,11 +638,16 @@ export default function DashboardView() {
               ) : playerDashboard?.recentTeamResults.length ? (
                 <ul className="space-y-2">
                   {playerDashboard.recentTeamResults.slice(0, 6).map((match) => (
-                    <li key={match.id} className="rounded-lg border border-white/10 p-3">
-                      <p className="font-semibold text-[var(--geo-text)]">
-                        {match.homeTeam?.name || "Local"} {match.homeScore} - {match.awayScore} {match.awayTeam?.name || "Visitante"}
-                      </p>
-                      <p className="text-xs text-[var(--geo-text-muted)]">{formatDateTime(match.date)}</p>
+                    <li key={match.id}>
+                      <Link
+                        to={`/public/matches/${match.id}/detail`}
+                        className="block rounded-lg border border-white/10 p-3 transition-colors hover:border-geo-green/50 hover:bg-geo-green/5"
+                      >
+                        <p className="font-semibold text-[var(--geo-text)]">
+                          {match.homeTeam?.name || "Local"} {match.homeScore} - {match.awayScore} {match.awayTeam?.name || "Visitante"}
+                        </p>
+                        <p className="text-xs text-[var(--geo-text-muted)]">{formatDateTime(match.date)}</p>
+                      </Link>
                     </li>
                   ))}
                 </ul>
