@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { AuthService } from "../services/AuthService";
+import { clearLoginThrottle } from "../middleware/loginThrottle";
 
 /**
  * Handlers de autenticación: solo extraen datos del request,
@@ -19,6 +20,9 @@ export class AuthController {
 
   static login = async (req: Request, res: Response): Promise<void> => {
     const result = await AuthService.login(req.body);
+    if (typeof req.body?.email === "string") {
+      clearLoginThrottle(req.body.email, req.ip);
+    }
     res.send(result);
   };
 
@@ -52,5 +56,26 @@ export class AuthController {
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
     res.json(req.user);
+  };
+
+  static refreshToken = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = req.body;
+    const result = await AuthService.refreshAccessToken(refreshToken);
+    res.send(result);
+  };
+
+  static logout = async (req: Request, res: Response): Promise<void> => {
+    const { refreshToken } = req.body;
+    const result = await AuthService.revokeRefreshToken(refreshToken);
+    res.send(result);
+  };
+
+  static logoutAll = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({ error: "No autorizado" });
+      return;
+    }
+    const result = await AuthService.revokeAllSessions(req.user.id);
+    res.send(result);
   };
 }

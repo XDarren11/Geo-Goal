@@ -27,6 +27,10 @@ export class User extends Model {
     @Column({ type: DataType.STRING, allowNull: false })
     declare role: string;
 
+    @Default(0)
+    @Column({ type: DataType.INTEGER, allowNull: false })
+    declare tokenVersion: number;
+
     // --- RELACIONES ---
 
     // 1. ADMIN: Sus ligas

@@ -2,6 +2,7 @@ import {
   ChartBarIcon,
   ClipboardDocumentListIcon,
   DocumentTextIcon,
+  ExclamationTriangleIcon,
   KeyIcon,
   MapPinIcon,
   PlusCircleIcon,
@@ -11,9 +12,11 @@ import {
   CalendarDaysIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import type { User, Role } from "@/types";
 import { useQueryClient } from "@tanstack/react-query";
+import { logout, logoutAll } from "@/api/AuthAPI";
+import { toast } from "react-toastify";
 
 type NavMenuProps = {
   name: User["name"];
@@ -32,12 +35,28 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const r = (role as Role) || "player";
+  const [showLogoutAllModal, setShowLogoutAllModal] = useState(false);
+  const [isClosingAll, setIsClosingAll] = useState(false);
 
-  const logout = () => {
-    localStorage.removeItem("AUTH_TOKEN");
+  const handleLogout = async () => {
+    await logout();
     queryClient.invalidateQueries({ queryKey: ["user"] });
     onNavigate?.();
     navigate("/public", { replace: true });
+  };
+
+  const handleLogoutAll = async () => {
+    try {
+      setIsClosingAll(true);
+      await logoutAll();
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+      toast.success("Se cerraron todas tus sesiones");
+      onNavigate?.();
+      navigate("/public", { replace: true });
+    } finally {
+      setIsClosingAll(false);
+      setShowLogoutAllModal(false);
+    }
   };
 
   const adminLinks: NavLinkItem[] = [
@@ -129,13 +148,58 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
         </div>
       </nav>
 
-      <button
-        type="button"
-        onClick={logout}
-        className="mt-3 rounded-xl border border-red-500/40 px-3 py-2 text-left text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10"
-      >
-        Cerrar sesión
-      </button>
+      <div className="mt-3 space-y-2">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full rounded-xl border border-red-500/40 px-3 py-2 text-left text-sm font-semibold text-red-500 transition-colors hover:bg-red-500/10"
+        >
+          Cerrar sesión (este dispositivo)
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowLogoutAllModal(true)}
+          className="w-full rounded-xl border border-red-500/60 bg-red-500/5 px-3 py-2 text-left text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/15"
+        >
+          Cerrar todas las sesiones
+        </button>
+      </div>
+
+      {showLogoutAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[var(--geo-bg-card)] p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-full bg-red-500/10 p-2">
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-geo text-[var(--geo-text)]">Cerrar todas las sesiones</h3>
+                <p className="mt-2 text-sm text-[var(--geo-text-muted)]">
+                  Esta acción cerrará tu sesión en todos los dispositivos vinculados a tu cuenta.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowLogoutAllModal(false)}
+                disabled={isClosingAll}
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-[var(--geo-text)] hover:bg-white/5 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleLogoutAll}
+                disabled={isClosingAll}
+                className="rounded-lg border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-60"
+              >
+                {isClosingAll ? "Cerrando..." : "Sí, cerrar todas"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

@@ -38,12 +38,31 @@ import AuditLogsView from "@/views/admin/AuditLogs";
 import RefereeCenterView from "@/views/admin/RefereeCenter";
 import CoachTeamsView from "./views/team/TeamView/CoachTeamsView";
 
+const ACCESS_TOKEN_KEY = "AUTH_TOKEN";
+const REFRESH_TOKEN_KEY = "AUTH_REFRESH_TOKEN";
+
+function hasStoredSession() {
+  return !!localStorage.getItem(ACCESS_TOKEN_KEY) && !!localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+function EntryRedirect() {
+  return <Navigate to={hasStoredSession() ? "/dashboard" : "/public"} replace />;
+}
+
+function PublicOnlyRedirect() {
+  return hasStoredSession() ? <Navigate to="/dashboard" replace /> : <PublicHomeView />;
+}
+
+function GuestOnlyRedirect({ children }: { children: React.ReactNode }) {
+  return hasStoredSession() ? <Navigate to="/dashboard" replace /> : <>{children}</>;
+}
+
 export default function Router() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/public" replace />} />
-        <Route path="/public" element={<PublicHomeView />} />
+        <Route path="/" element={<EntryRedirect />} />
+        <Route path="/public" element={<PublicOnlyRedirect />} />
         <Route path="/public/leagues/:leagueId" element={<PublicLeagueView />} />
         <Route path="/public/matches/:matchId/detail" element={<PublicMatchDetailView />} />
 
@@ -190,13 +209,13 @@ export default function Router() {
         </Route>
 
         <Route element={<AuthLayout />}>
-          <Route path="/auth/login" element={<LoginView />} />
-          <Route path="/auth/register" element={<RegisterView />} />
-          <Route path="/auth/confirm-account" element={<ConfirmAccountView />} />
-          <Route path="/auth/request-code" element={<RequestNewCode />} />
-          <Route path="/auth/forgot-password" element={<ForgotPasswordView />} />
-          <Route path="/auth/new-password" element={<NewPasswordView />} />
-          <Route path="/auth/new-password/:token" element={<NewPasswordView />} />
+          <Route path="/auth/login" element={<GuestOnlyRedirect><LoginView /></GuestOnlyRedirect>} />
+          <Route path="/auth/register" element={<GuestOnlyRedirect><RegisterView /></GuestOnlyRedirect>} />
+          <Route path="/auth/confirm-account" element={<GuestOnlyRedirect><ConfirmAccountView /></GuestOnlyRedirect>} />
+          <Route path="/auth/request-code" element={<GuestOnlyRedirect><RequestNewCode /></GuestOnlyRedirect>} />
+          <Route path="/auth/forgot-password" element={<GuestOnlyRedirect><ForgotPasswordView /></GuestOnlyRedirect>} />
+          <Route path="/auth/new-password" element={<GuestOnlyRedirect><NewPasswordView /></GuestOnlyRedirect>} />
+          <Route path="/auth/new-password/:token" element={<GuestOnlyRedirect><NewPasswordView /></GuestOnlyRedirect>} />
         </Route>
       </Routes>
     </BrowserRouter>
