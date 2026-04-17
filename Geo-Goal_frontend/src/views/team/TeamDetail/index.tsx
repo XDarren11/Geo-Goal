@@ -8,12 +8,13 @@ import {
   removePlayerFromTeam,
   teamLogoUrl,
 } from "@/api/teamAPI";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { UserGroupIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { TeamInvitationMenu } from "@/components/InvitationMenus/TeamInvitationMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
+import { VictoryAxis, VictoryBar, VictoryChart, VictoryGroup } from "victory";
 
 export default function TeamDetailView() {
   const { teamId } = useParams<{ teamId: string }>();
@@ -79,16 +80,54 @@ export default function TeamDetailView() {
   }
 
   const canManagePlayers = team.trainerId === currentUser?.id;
+  const stats = team.stats ?? {
+    playedMatches: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    points: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalDifference: 0,
+  };
+
+  const resultRatio = useMemo(() => {
+    const played = Math.max(1, stats.playedMatches);
+    return {
+      winsPct: Math.round((stats.wins / played) * 100),
+      drawsPct: Math.round((stats.draws / played) * 100),
+      lossesPct: Math.round((stats.losses / played) * 100),
+    };
+  }, [stats.playedMatches, stats.wins, stats.draws, stats.losses]);
+
+  const performanceChartData = useMemo(
+    () => [
+      { x: "GF", y: stats.goalsFor },
+      { x: "GC", y: stats.goalsAgainst },
+      { x: "DG", y: stats.goalDifference },
+      { x: "PTS", y: stats.points },
+    ],
+    [stats.goalsFor, stats.goalsAgainst, stats.goalDifference, stats.points]
+  );
+
+  const resultsBarsData = useMemo(
+    () => [
+      { x: "G", y: stats.wins },
+      { x: "E", y: stats.draws },
+      { x: "P", y: stats.losses },
+    ],
+    [stats.wins, stats.draws, stats.losses]
+  );
 
   return (
-    <div>
+    <div className="space-y-6 opacity-0 animate-in-up">
       <Link
         to={currentUser?.role === 'player' ? '/my-teams' : '/teams'}
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Volver a equipos
       </Link>
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex items-center gap-4 opacity-0 animate-in-up stagger-1">
         {team.logoUrl ? (
           <img
             src={teamLogoUrl(team.logoUrl)}
@@ -108,49 +147,81 @@ export default function TeamDetailView() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Coach</p>
-          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.trainer?.name ?? '—'}</p>
-        </div>
-        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Cancha</p>
-          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.fieldAddress ?? '—'}</p>
-        </div>
-        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Liga</p>
-          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.league?.name ?? 'Sin liga'}</p>
-        </div>
-        <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Puntos</p>
-          <p className="mt-1 font-bold text-[var(--geo-text)]">{team.stats?.points ?? 0}</p>
-        </div>
+      <div className="grid gap-4 opacity-0 animate-in-up stagger-2 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Coach" value={team.trainer?.name ?? "—"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Cancha" value={team.fieldAddress ?? "—"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Liga" value={team.league?.name ?? "Sin liga"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Puntos" value={String(stats.points)} accent="text-geo-green" />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
-          <p className="text-xs text-[var(--geo-text-muted)]">PJ</p>
-          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.playedMatches ?? 0}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
-          <p className="text-xs text-[var(--geo-text-muted)]">G</p>
-          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.wins ?? 0}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
-          <p className="text-xs text-[var(--geo-text-muted)]">E</p>
-          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.draws ?? 0}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
-          <p className="text-xs text-[var(--geo-text-muted)]">P</p>
-          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.losses ?? 0}</p>
-        </div>
-        <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
-          <p className="text-xs text-[var(--geo-text-muted)]">DG</p>
-          <p className="text-xl font-black text-[var(--geo-text)]">{team.stats?.goalDifference ?? 0}</p>
-        </div>
+      <div className="grid gap-3 opacity-0 animate-in-up stagger-3 sm:grid-cols-2 lg:grid-cols-5">
+        <StatPill label="PJ" value={stats.playedMatches} />
+        <StatPill label="G" value={stats.wins} />
+        <StatPill label="E" value={stats.draws} />
+        <StatPill label="P" value={stats.losses} />
+        <StatPill label="DG" value={stats.goalDifference} />
       </div>
 
-      <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
+      <div className="grid gap-4 opacity-0 animate-in-up stagger-4 xl:grid-cols-2">
+        <section className="card-pitch p-5">
+          <h2 className="font-geo text-xl text-[var(--geo-text)]">Dashboard de rendimiento</h2>
+          <p className="mb-2 text-xs text-[var(--geo-text-muted)]">Comparativo de producción y rendimiento general</p>
+          <VictoryChart domainPadding={{ x: 24, y: 14 }} height={260}>
+            <VictoryAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+                grid: { stroke: "#27272a", strokeDasharray: "4,4" },
+              }}
+            />
+            <VictoryBar
+              data={performanceChartData}
+              style={{ data: { fill: "rgba(57,255,20,0.45)", stroke: "#39FF14", strokeWidth: 1.1 } }}
+              barWidth={24}
+              cornerRadius={5}
+            />
+          </VictoryChart>
+        </section>
+
+        <section className="card-pitch p-5">
+          <h2 className="font-geo text-xl text-[var(--geo-text)]">Balance de resultados</h2>
+          <p className="mb-3 text-xs text-[var(--geo-text-muted)]">Distribucion de victorias, empates y derrotas</p>
+          <VictoryChart domainPadding={{ x: 24, y: 14 }} height={220}>
+            <VictoryAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+                grid: { stroke: "#27272a", strokeDasharray: "4,4" },
+              }}
+            />
+            <VictoryGroup colorScale={["#39FF14"]}>
+              <VictoryBar data={resultsBarsData} barWidth={28} cornerRadius={5} />
+            </VictoryGroup>
+          </VictoryChart>
+
+          <div className="mt-2 space-y-2">
+            <ProgressRow label="Victorias" value={resultRatio.winsPct} color="bg-emerald-400" />
+            <ProgressRow label="Empates" value={resultRatio.drawsPct} color="bg-blue-300" />
+            <ProgressRow label="Derrotas" value={resultRatio.lossesPct} color="bg-red-400" />
+          </div>
+        </section>
+      </div>
+
+      <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 opacity-0 animate-in-up stagger-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
             <UserGroupIcon className="h-5 w-5 text-geo-green" />
@@ -238,6 +309,38 @@ export default function TeamDetailView() {
             Aún no hay jugadores. Busca por email para agregar.
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div className="card-pitch p-4">
+      <p className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">{label}</p>
+      <p className={`mt-2 text-2xl font-geo ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function StatPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+      <p className="text-xs text-[var(--geo-text-muted)]">{label}</p>
+      <p className="text-xl font-black text-[var(--geo-text)]">{value}</p>
+    </div>
+  );
+}
+
+function ProgressRow({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-[var(--geo-text-muted)]">{label}</span>
+        <span className="font-semibold text-[var(--geo-text)]">{value}%</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/10">
+        <div className={`h-2 rounded-full transition-all duration-700 ${color}`} style={{ width: `${value}%` }} />
       </div>
     </div>
   );

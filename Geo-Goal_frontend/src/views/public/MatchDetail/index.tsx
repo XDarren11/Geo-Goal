@@ -6,6 +6,7 @@ import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon }
 import { useEffect, useMemo, useState } from "react";
 
 type Side = "home" | "away";
+type MatchViewMode = "normal" | "pro";
 
 type Incident = {
   yellow: number;
@@ -40,6 +41,63 @@ function formatDateOnly(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString();
+}
+
+function resolveLiveState(input: {
+  played?: boolean;
+  kickoff?: string | null;
+  endTime?: string | null;
+  durationMinutes?: number | null;
+}) {
+  if (input.played) return "finished" as const;
+
+  const now = Date.now();
+  const kickoffRaw = input.kickoff ? new Date(input.kickoff).getTime() : Number.NaN;
+  const endRaw = input.endTime ? new Date(input.endTime).getTime() : Number.NaN;
+  const hasKickoff = Number.isFinite(kickoffRaw);
+  const hasEnd = Number.isFinite(endRaw);
+  const durationMs = Math.max(60, input.durationMinutes ?? 90) * 60_000;
+
+  if (hasEnd && now >= endRaw) return "finished" as const;
+  if (hasKickoff && now >= kickoffRaw && now <= kickoffRaw + durationMs + 20 * 60_000) return "live" as const;
+  if (hasKickoff && now < kickoffRaw) return "upcoming" as const;
+  return "unknown" as const;
+}
+
+function eventVisual(eventType: string) {
+  const type = eventType.toLowerCase();
+  if (type === "goal" || type === "own_goal" || type === "penalty_scored") {
+    return { icon: "GOAL", color: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300" };
+  }
+  if (type === "yellow_card") {
+    return { icon: "YC", color: "border-yellow-500/40 bg-yellow-500/15 text-yellow-300" };
+  }
+  if (type === "red_card") {
+    return { icon: "RC", color: "border-red-500/40 bg-red-500/15 text-red-300" };
+  }
+  if (type === "substitution") {
+    return { icon: "SUB", color: "border-blue-500/40 bg-blue-500/15 text-blue-300" };
+  }
+  return { icon: "EV", color: "border-white/20 bg-white/[0.06] text-[var(--geo-text)]" };
+}
+
+function eventLabel(eventType: string) {
+  const map: Record<string, string> = {
+    goal: "Gol",
+    own_goal: "Autogol",
+    penalty_scored: "Penal anotado",
+    penalty_missed: "Penal fallado",
+    yellow_card: "Tarjeta amarilla",
+    red_card: "Tarjeta roja",
+    substitution: "Cambio",
+    foul: "Falta",
+    offside: "Fuera de juego",
+    var_review: "Revision VAR",
+    pass: "Pase",
+    key_pass: "Pase clave",
+    shot: "Disparo",
+  };
+  return map[eventType] ?? eventType;
 }
 
 function listLabel(player: MatchDetailLineupEntry, index: number) {
@@ -393,18 +451,49 @@ function TeamLineupCard({
 export default function PublicMatchDetailView() {
   const { matchId } = useParams<{ matchId: string }>();
   const id = Number(matchId);
+  const [tick, setTick] = useState(() => Date.now());
+  const [viewMode, setViewMode] = useState<MatchViewMode>("normal");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["public-match-detail", id],
     queryFn: () => getPublicMatchDetail(id),
     enabled: Number.isInteger(id) && id > 0,
+    refetchInterval: (query) => {
+      const payload = query.state.data;
+      if (!payload?.match) return false;
+      const liveState = resolveLiveState({
+        played: payload.match.played,
+        kickoff: payload.detail?.kickoffTime ?? payload.match.date,
+        endTime: payload.detail?.endTime,
+        durationMinutes: payload.detail?.durationMinutes,
+      });
+      return liveState === "live" ? 8000 : false;
+    },
   });
 
   const { data: analytics } = useQuery({
     queryKey: ["public-match-analytics", id],
     queryFn: () => getPublicMatchAnalytics(id),
     enabled: Number.isInteger(id) && id > 0,
+    refetchInterval: (query) => {
+      const payload = data;
+      if (!payload?.match) return false;
+      const liveState = resolveLiveState({
+        played: payload.match.played,
+        kickoff: payload.detail?.kickoffTime ?? payload.match.date,
+        endTime: payload.detail?.endTime,
+        durationMinutes: payload.detail?.durationMinutes,
+      });
+      if (liveState !== "live") return false;
+      // Mientras esté en vivo, si aún no hay eventos seguimos refrescando para captar los primeros.
+      return (query.state.data?.timelineEvents?.length ?? 0) >= 0 ? 8000 : 8000;
+    },
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (isLoading) {
     return (
@@ -430,6 +519,15 @@ export default function PublicMatchDetailView() {
   }
 
   const { match, detail } = data;
+  const liveState = resolveLiveState({
+    played: match.played,
+    kickoff: detail.kickoffTime ?? match.date,
+    endTime: detail.endTime,
+    durationMinutes: detail.durationMinutes,
+  });
+  const isLive = liveState === "live";
+  const liveEvents = (analytics?.timelineEvents ?? []).slice(-12).reverse();
+  const renderedEvents = viewMode === "pro" ? liveEvents : liveEvents.slice(0, 6);
   const homeStarters = detail.squads?.home?.starters?.length
     ? detail.squads.home.starters.map((p) => ({
         userId: p.id,
@@ -475,11 +573,53 @@ export default function PublicMatchDetailView() {
         </Link>
 
         <section className="mt-4 rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
-          <h1 className="font-geo text-3xl lg:text-4xl">Detalle de partido</h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="font-geo text-3xl lg:text-4xl">Detalle de partido</h1>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                liveState === "live"
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400"
+                  : liveState === "finished"
+                    ? "border-blue-500/40 bg-blue-500/10 text-blue-300"
+                    : "border-amber-500/40 bg-amber-500/10 text-amber-300"
+              }`}
+            >
+              {liveState === "live" ? "En curso" : liveState === "finished" ? "Finalizado" : "Programado"}
+            </span>
+          </div>
           <p className="mt-2 text-lg text-[var(--geo-text)]">
             {match.homeTeam?.name ?? "Local"} vs {match.awayTeam?.name ?? "Visitante"}
           </p>
           <p className="mt-1 text-sm text-[var(--geo-text-muted)]">{match.roundName}</p>
+          <div className="mt-3 inline-flex rounded-lg border border-white/15 bg-white/[0.03] p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode("normal")}
+              className={`rounded-md px-3 py-1 font-semibold transition ${
+                viewMode === "normal"
+                  ? "bg-geo-green text-geo-black"
+                  : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
+              }`}
+            >
+              Modo normal
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("pro")}
+              className={`rounded-md px-3 py-1 font-semibold transition ${
+                viewMode === "pro"
+                  ? "bg-geo-green text-geo-black"
+                  : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
+              }`}
+            >
+              Modo pro
+            </button>
+          </div>
+          {isLive ? (
+            <p className="mt-2 text-xs text-emerald-300">
+              Actualizando eventos y tracking automaticamente cada 8s.
+            </p>
+          ) : null}
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
@@ -502,6 +642,75 @@ export default function PublicMatchDetailView() {
             </div>
           </div>
         </section>
+
+        {(isLive || liveEvents.length > 0) && (
+          <section className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="font-black text-[var(--geo-text)]">Eventos del partido</h2>
+              <span className="text-xs text-[var(--geo-text-muted)]">
+                {isLive ? "En vivo" : "Últimos registros"} · {new Date(tick).toLocaleTimeString()}
+              </span>
+            </div>
+            {renderedEvents.length ? (
+              <div className="space-y-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {renderedEvents.map((ev, index) => {
+                    const visual = eventVisual(ev.eventType);
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`rounded-lg border px-3 py-2 text-sm transition-all duration-500 ${visual.color} ${
+                          isLive && index === 0 ? "animate-pulse" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{ev.minute}'</span>
+                          <span className="rounded bg-black/25 px-2 py-0.5 text-[10px] font-bold">{visual.icon}</span>
+                        </div>
+                        <p className="mt-1 font-semibold">{eventLabel(ev.eventType)}</p>
+                        {viewMode === "pro" && (
+                          <p className="mt-1 text-xs text-[var(--geo-text-muted)]">
+                            {ev.outcome ? `Resultado: ${ev.outcome}` : "Sin outcome"} ·
+                            {ev.teamId ? ` Team ${ev.teamId}` : " Sin team"}
+                            {ev.playerId ? ` · Jugador ${ev.playerId}` : ""}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {viewMode === "pro" && (
+                  <div className="rounded-lg border border-white/10 bg-[var(--geo-bg)] p-3">
+                    <p className="mb-2 text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">
+                      Timeline visual (ultimo tramo)
+                    </p>
+                    <div className="relative h-12">
+                      <div className="absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 bg-white/15" />
+                      {renderedEvents.map((ev, idx) => {
+                        const minute = Math.max(0, Math.min(120, ev.minute + (ev.extraMinute ?? 0)));
+                        const left = (minute / 120) * 100;
+                        const visual = eventVisual(ev.eventType);
+                        return (
+                          <div
+                            key={`dot-${ev.id}`}
+                            className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border ${visual.color}`}
+                            style={{ left: `${left}%`, animationDelay: `${idx * 80}ms` }}
+                            title={`${ev.minute}' ${eventLabel(ev.eventType)}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--geo-text-muted)]">
+                Partido en curso, esperando primeros eventos registrados por arbitraje.
+              </p>
+            )}
+          </section>
+        )}
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
