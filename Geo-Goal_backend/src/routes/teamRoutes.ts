@@ -5,7 +5,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { TeamController } from "../controllers/TeamController";
 import { TeamInvitationController } from "../controllers/TeamInvitationController";
-import { upload } from "../middleware/upload";
+import { upload, uploadAvatar } from "../middleware/upload";
 import { asyncHandler } from "../middleware/asyncHandler";
 
 const router = Router();
@@ -88,6 +88,16 @@ router.delete(
   param("playerId").isInt().withMessage("ID no válido"),
   handleInputError,
   asyncHandler(TeamController.deletePlayerToTeam)
+);
+
+// Subir/actualizar avatar de jugador en equipo (solo el propio jugador)
+router.patch(
+  "/:id/member/avatar",
+  hasRole("player"),
+  param("id").isInt().withMessage("ID no válido"),
+  handleInputError,
+  uploadAvatar.single("avatar"),
+  asyncHandler(TeamController.updatePlayerAvatar)
 );
 
 router.get('/leagues/coach/active',

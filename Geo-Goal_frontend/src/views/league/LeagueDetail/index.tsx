@@ -7,7 +7,9 @@ import {
   addTeamToLeague,
   getTrainerTeams,
   removeTeamFromLeague,
-  restructureFixture
+  restructureFixture,
+  updateLeagueLogo,
+  leagueLogoFullUrl,
 } from "@/api/leagueAPI";
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
@@ -495,9 +497,40 @@ export default function LeagueDetailView() {
           <TrophyIcon className="h-5 w-5 text-geo-green" />
           Logo de la liga
         </h2>
-        <p className="mt-2 text-sm text-[var(--geo-text-muted)]">
-          Próximamente podrás subir el logo de la liga desde aquí.
-        </p>
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+          {league.logoUrl ? (
+            <img
+              src={leagueLogoFullUrl(league.logoUrl)}
+              alt={league.name}
+              className="h-20 w-20 rounded-full object-cover border-2 border-geo-green/40"
+            />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-geo-green/10 border-2 border-dashed border-geo-green/30">
+              <TrophyIcon className="h-8 w-8 text-geo-green/50" />
+            </div>
+          )}
+          <label className="cursor-pointer">
+            <span className="inline-flex items-center gap-2 rounded-lg bg-geo-green/10 px-4 py-2 text-sm font-semibold text-geo-green transition-colors hover:bg-geo-green/20">
+              {league.logoUrl ? "Cambiar logo" : "Subir logo"}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  await updateLeagueLogo(id, file);
+                  void queryClient.invalidateQueries({ queryKey: ["league", id] });
+                  toast.success("Logo actualizado");
+                } catch {
+                  toast.error("No se pudo actualizar el logo");
+                }
+              }}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">

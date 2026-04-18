@@ -819,11 +819,8 @@ export class TeamService {
       logoUrl?: string | null;
     }
   ): Promise<string> {
-    const existingTeam = await Team.findOne({ where: { trainerId } });
-    if (existingTeam) {
-      throw new AppError(409, "Cada entrenador solo puede dirigir un equipo");
-    }
-
+    // Un coach puede tener varios equipos, pero solo uno por liga.
+    // La restricción por liga se aplica al momento de inscribir el equipo.
     const team = new Team({
       ...data,
       trainerId,
@@ -986,7 +983,7 @@ export class TeamService {
           model: User,
           as: "players",
           attributes: ["id", "name", "email"],
-          through: { attributes: ["playerName", "jerseyNumber", "preferredPosition"] },
+          through: { attributes: ["playerName", "jerseyNumber", "preferredPosition", "avatarUrl"] },
         },
       ],
     });
@@ -1002,6 +999,7 @@ export class TeamService {
         playerName: membership?.playerName ?? player.name,
         jerseyNumber: membership?.jerseyNumber ?? null,
         preferredPosition: membership?.preferredPosition ?? null,
+        avatarUrl: membership?.avatarUrl ?? null,
       };
     });
   }
@@ -1091,5 +1089,27 @@ export class TeamService {
       lastMatches,
       chartData,
     };
+  }
+
+  static async updatePlayerAvatar(
+    teamId: string,
+    userId: number,
+    avatarFilename: string
+  ): Promise<{ avatarUrl: string }> {
+    const member = await TeamMember.findOne({
+      where: { teamId: Number(teamId), userId },
+    });
+    if (!member) {
+      throw new AppError(404, "No perteneces a este equipo");
+    }
+    if (member.avatarUrl) {
+      const fs = await import("fs");
+      const path = await import("path");
+      const oldPath = path.resolve("public/uploads", member.avatarUrl);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+    member.avatarUrl = avatarFilename;
+    await member.save();
+    return { avatarUrl: avatarFilename };
   }
 }

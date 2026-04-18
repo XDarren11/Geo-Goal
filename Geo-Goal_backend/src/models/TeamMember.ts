@@ -35,4 +35,10 @@ export class TeamMember extends Model {
         allowNull: true
     })
     declare preferredPosition: string | null;
+
+    @Column({
+        type: DataType.STRING,
+        allowNull: true
+    })
+    declare avatarUrl: string | null;
 }
