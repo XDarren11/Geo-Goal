@@ -36,7 +36,7 @@ router.use(authenticate);
  *                 example: Liga Profesional 2024
  *               description:
  *                 type: string
- *                 example: Torneo principal de fútbol profesional
+ *                 example: Torneo principal de f?tbol profesional
  *     responses:
  *       201:
  *         description: Liga creada exitosamente
@@ -104,7 +104,7 @@ router.get('/',
  *         description: ID de la liga
  *     responses:
  *       200:
- *         description: Información de la liga
+ *         description: Informaci?n de la liga
  *         content:
  *           application/json:
  *             schema:
@@ -121,7 +121,7 @@ router.get('/',
  */
 router.get('/:leagueId',
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('ID no válido'),
+    param('leagueId').isInt().withMessage('ID no v?lido'),
     handleInputError,
     asyncHandler(LeagueController.getLeagueById)
 );
@@ -156,7 +156,7 @@ router.get('/:leagueId',
  *                 example: Liga Actualizada 2024
  *               description:
  *                 type: string
- *                 example: Descripción actualizada
+ *                 example: Descripci?n actualizada
  *     responses:
  *       200:
  *         description: Liga actualizada exitosamente
@@ -208,7 +208,7 @@ router.delete('/:leagueId',
  * /api/league/{leagueId}/teams/find:
  *   post:
  *     summary: Buscar equipos de un entrenador por email
- *     tags: [Ligas - Gestión de Equipos]
+ *     tags: [Ligas - Gesti?n de Equipos]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -250,7 +250,7 @@ router.post('/:leagueId/teams/find',
  * /api/league/{leagueId}/teams:
  *   post:
  *     summary: Agregar un equipo a la liga
- *     tags: [Ligas - Gestión de Equipos]
+ *     tags: [Ligas - Gesti?n de Equipos]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -283,7 +283,7 @@ router.post('/:leagueId/teams',
     param('leagueId').isNumeric().withMessage('ID de la liga no valido'),
     body('teamId').isNumeric().withMessage('El ID del equipo es obligatorio'),
     handleInputError,
-    LeagueController.addTeamToLeague
+    asyncHandler(LeagueController.addTeamToLeague)
 )
 
 /**
@@ -291,7 +291,7 @@ router.post('/:leagueId/teams',
  * /api/league/{leagueId}/teams:
  *   get:
  *     summary: Obtener equipos de una liga
- *     tags: [Ligas - Gestión de Equipos]
+ *     tags: [Ligas - Gesti?n de Equipos]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -322,7 +322,7 @@ router.post('/:leagueId/teams',
  */
 router.get('/:leagueId/teams',
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('ID no válido'),
+    param('leagueId').isInt().withMessage('ID no v?lido'),
     handleInputError,
     asyncHandler(LeagueController.getTeamsLeague)
 )
@@ -332,7 +332,7 @@ router.get('/:leagueId/teams',
  * /api/league/{leagueId}/teams/{teamId}:
  *   delete:
  *     summary: Eliminar un equipo de la liga
- *     tags: [Ligas - Gestión de Equipos]
+ *     tags: [Ligas - Gesti?n de Equipos]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -365,17 +365,17 @@ router.delete('/:leagueId/teams/:teamId',
 router.post('/:id/calculate-fixture',
     hasRole('admin'),
     param('id').isInt(),
-    body('type').isIn(['round-robin', 'knockout']).withMessage('Tipo inválido'),
-        body('scheduleStartDate').optional().isISO8601().withMessage('Fecha inicial inválida'),
+    body('type').isIn(['round-robin', 'knockout']).withMessage('Tipo inv?lido'),
+        body('scheduleStartDate').optional().isISO8601().withMessage('Fecha inicial inv?lida'),
         body('matchTime')
             .optional()
             .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-            .withMessage('Hora inválida (usa HH:mm)'),
-        body('daysBetweenRounds').optional().isInt({ min: 0, max: 30 }).withMessage('Intervalo entre jornadas inválido'),
+            .withMessage('Hora inv?lida (usa HH:mm)'),
+        body('daysBetweenRounds').optional().isInt({ min: 0, max: 30 }).withMessage('Intervalo entre jornadas inv?lido'),
         body('matchDuration')
             .optional()
             .isInt({ min: 10, max: 240 })
-            .withMessage('La duración debe ser entre 10 y 240 minutos'),
+            .withMessage('La duraci?n debe ser entre 10 y 240 minutos'),
     handleInputError,
     asyncHandler(LeagueController.generateFixture)
 );
@@ -396,8 +396,8 @@ router.get('/:id/fixture',
 router.post('/matches/:matchId/result',
     hasRole('admin'),
     param('matchId').isInt(),
-    body('homeScore').isInt().withMessage('El marcador debe ser un número'),
-    body('awayScore').isInt().withMessage('El marcador debe ser un número'),
+    body('homeScore').isInt().withMessage('El marcador debe ser un n?mero'),
+    body('awayScore').isInt().withMessage('El marcador debe ser un n?mero'),
     body('homePenaltiesScore').optional().isInt(),
     body('awayPenaltiesScore').optional().isInt(),
     handleInputError,
@@ -407,54 +407,54 @@ router.post('/matches/:matchId/result',
 router.patch('/matches/:matchId/schedule',
     hasRole('admin'),
     param('matchId').isInt(),
-    body('date').isISO8601().withMessage('Fecha y hora inválidas'),
+    body('date').isISO8601().withMessage('Fecha y hora inv?lidas'),
     handleInputError,
     MatchController.scheduleMatch
 );
 
 router.put('/matches/:matchId/detail',
     hasRole('admin'),
-    param('matchId').isInt().withMessage('ID de partido no válido'),
-    body('kickoffTime').optional({ nullable: true }).isISO8601().withMessage('Hora de inicio inválida'),
-    body('durationMinutes').optional().isInt({ min: 1 }).withMessage('Duración inválida'),
-    body('endTime').optional({ nullable: true }).isISO8601().withMessage('Hora de término inválida'),
-    body('matchDay').optional({ nullable: true }).isISO8601().withMessage('Día de partido inválido'),
-    body('fieldId').optional({ nullable: true }).isInt().withMessage('Campo inválido'),
-    body('homeCoachId').optional({ nullable: true }).isInt().withMessage('Entrenador local inválido'),
-    body('awayCoachId').optional({ nullable: true }).isInt().withMessage('Entrenador visitante inválido'),
-    body('homeStartingXI').optional().isArray().withMessage('Titulares local inválido'),
-    body('awayStartingXI').optional().isArray().withMessage('Titulares visitante inválido'),
-    body('homeBench').optional().isArray().withMessage('Banca local inválida'),
-    body('awayBench').optional().isArray().withMessage('Banca visitante inválida'),
-    body('homeUnavailable').optional().isArray().withMessage('No disponibles local inválido'),
-    body('awayUnavailable').optional().isArray().withMessage('No disponibles visitante inválido'),
-    body('referee').optional({ nullable: true }).isString().withMessage('Árbitro inválido'),
-    body('weather').optional({ nullable: true }).isString().withMessage('Clima inválido'),
-    body('attendance').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Asistencia inválida'),
-    body('notes').optional({ nullable: true }).isString().withMessage('Notas inválidas'),
+    param('matchId').isInt().withMessage('ID de partido no v?lido'),
+    body('kickoffTime').optional({ nullable: true }).isISO8601().withMessage('Hora de inicio inv?lida'),
+    body('durationMinutes').optional().isInt({ min: 1 }).withMessage('Duraci?n inv?lida'),
+    body('endTime').optional({ nullable: true }).isISO8601().withMessage('Hora de t?rmino inv?lida'),
+    body('matchDay').optional({ nullable: true }).isISO8601().withMessage('D?a de partido inv?lido'),
+    body('fieldId').optional({ nullable: true }).isInt().withMessage('Campo inv?lido'),
+    body('homeCoachId').optional({ nullable: true }).isInt().withMessage('Entrenador local inv?lido'),
+    body('awayCoachId').optional({ nullable: true }).isInt().withMessage('Entrenador visitante inv?lido'),
+    body('homeStartingXI').optional().isArray().withMessage('Titulares local inv?lido'),
+    body('awayStartingXI').optional().isArray().withMessage('Titulares visitante inv?lido'),
+    body('homeBench').optional().isArray().withMessage('Banca local inv?lida'),
+    body('awayBench').optional().isArray().withMessage('Banca visitante inv?lida'),
+    body('homeUnavailable').optional().isArray().withMessage('No disponibles local inv?lido'),
+    body('awayUnavailable').optional().isArray().withMessage('No disponibles visitante inv?lido'),
+    body('referee').optional({ nullable: true }).isString().withMessage('��rbitro inv?lido'),
+    body('weather').optional({ nullable: true }).isString().withMessage('Clima inv?lido'),
+    body('attendance').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Asistencia inv?lida'),
+    body('notes').optional({ nullable: true }).isString().withMessage('Notas inv?lidas'),
     handleInputError,
     asyncHandler(MatchDetailController.upsertByMatchId)
 );
 
 router.post('/matches/:matchId/referee/assign',
     hasRole('admin'),
-    param('matchId').isInt().withMessage('ID de partido no válido'),
-    body('refereeUserId').isInt().withMessage('Árbitro no válido'),
-    body('status').optional().isIn(['assigned', 'checked_in', 'closed']).withMessage('Estado inválido'),
+    param('matchId').isInt().withMessage('ID de partido no v?lido'),
+    body('refereeUserId').isInt().withMessage('��rbitro no v?lido'),
+    body('status').optional().isIn(['assigned', 'checked_in', 'closed']).withMessage('Estado inv?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.assignReferee)
 );
 
 router.get('/:leagueId/referees',
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('ID de liga no válido'),
+    param('leagueId').isInt().withMessage('ID de liga no v?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.getLeagueReferees)
 );
 
 router.get('/:leagueId/matches/upcoming',
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('ID de liga no válido'),
+    param('leagueId').isInt().withMessage('ID de liga no v?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.getUpcomingLeagueMatches)
 );
@@ -471,23 +471,23 @@ router.get('/referee/dashboard',
 
 router.post('/matches/:matchId/referee/events',
     hasRole('referee', 'admin'),
-    param('matchId').isInt().withMessage('ID de partido no válido'),
+    param('matchId').isInt().withMessage('ID de partido no v?lido'),
     body('eventType')
             .isIn(['goal', 'own_goal', 'penalty_scored', 'penalty_missed', 'pass', 'key_pass', 'shot', 'tackle', 'recovery', 'interception', 'clearance', 'dribble', 'cross', 'corner_won', 'yellow_card', 'red_card', 'substitution', 'foul', 'offside', 'var_review'])
-      .withMessage('Tipo de evento inválido'),
-    body('minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inválido'),
-    body('extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inválido'),
-        body('matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inválido'),
-    body('teamId').optional({ nullable: true }).isInt().withMessage('teamId inválido'),
-    body('playerId').optional({ nullable: true }).isInt().withMessage('playerId inválido'),
-        body('relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inválido'),
-        body('xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inválido'),
-        body('yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inválido'),
-        body('xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inválido'),
-        body('yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inválido'),
-        body('outcome').optional({ nullable: true }).isString().withMessage('outcome inválido'),
-        body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido'),
-        body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido'),
+      .withMessage('Tipo de evento inv?lido'),
+    body('minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inv?lido'),
+    body('extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inv?lido'),
+        body('matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inv?lido'),
+    body('teamId').optional({ nullable: true }).isInt().withMessage('teamId inv?lido'),
+    body('playerId').optional({ nullable: true }).isInt().withMessage('playerId inv?lido'),
+        body('relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inv?lido'),
+        body('xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inv?lido'),
+        body('yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inv?lido'),
+        body('xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inv?lido'),
+        body('yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inv?lido'),
+        body('outcome').optional({ nullable: true }).isString().withMessage('outcome inv?lido'),
+        body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inv?lido'),
+        body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inv?lido'),
     body('metadata').optional().isObject().withMessage('metadata debe ser objeto'),
     handleInputError,
     asyncHandler(MatchDetailController.registerEvent)
@@ -495,24 +495,24 @@ router.post('/matches/:matchId/referee/events',
 
 router.post('/matches/:matchId/referee/events/bulk',
     hasRole('referee', 'admin'),
-        param('matchId').isInt().withMessage('ID de partido no válido'),
+        param('matchId').isInt().withMessage('ID de partido no v?lido'),
         body('events').isArray({ min: 1 }).withMessage('events debe ser arreglo con elementos'),
         body('events.*.eventType')
             .isIn(['goal', 'own_goal', 'penalty_scored', 'penalty_missed', 'pass', 'key_pass', 'shot', 'tackle', 'recovery', 'interception', 'clearance', 'dribble', 'cross', 'corner_won', 'yellow_card', 'red_card', 'substitution', 'foul', 'offside', 'var_review'])
-            .withMessage('Tipo de evento inválido en events'),
-        body('events.*.minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inválido en events'),
-        body('events.*.extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inválido en events'),
-        body('events.*.matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inválido en events'),
-        body('events.*.teamId').optional({ nullable: true }).isInt().withMessage('teamId inválido en events'),
-        body('events.*.playerId').optional({ nullable: true }).isInt().withMessage('playerId inválido en events'),
-        body('events.*.relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inválido en events'),
-        body('events.*.xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inválido en events'),
-        body('events.*.yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inválido en events'),
-        body('events.*.xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inválido en events'),
-        body('events.*.yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inválido en events'),
-        body('events.*.outcome').optional({ nullable: true }).isString().withMessage('outcome inválido en events'),
-        body('events.*.source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido en events'),
-        body('events.*.confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido en events'),
+            .withMessage('Tipo de evento inv?lido en events'),
+        body('events.*.minute').isInt({ min: 0, max: 130 }).withMessage('Minuto inv?lido en events'),
+        body('events.*.extraMinute').optional({ nullable: true }).isInt({ min: 0, max: 30 }).withMessage('Tiempo extra inv?lido en events'),
+        body('events.*.matchTimestampSec').optional({ nullable: true }).isInt({ min: 0, max: 9000 }).withMessage('matchTimestampSec inv?lido en events'),
+        body('events.*.teamId').optional({ nullable: true }).isInt().withMessage('teamId inv?lido en events'),
+        body('events.*.playerId').optional({ nullable: true }).isInt().withMessage('playerId inv?lido en events'),
+        body('events.*.relatedPlayerId').optional({ nullable: true }).isInt().withMessage('relatedPlayerId inv?lido en events'),
+        body('events.*.xStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xStart inv?lido en events'),
+        body('events.*.yStart').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yStart inv?lido en events'),
+        body('events.*.xEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('xEnd inv?lido en events'),
+        body('events.*.yEnd').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('yEnd inv?lido en events'),
+        body('events.*.outcome').optional({ nullable: true }).isString().withMessage('outcome inv?lido en events'),
+        body('events.*.source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inv?lido en events'),
+        body('events.*.confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inv?lido en events'),
         body('events.*.metadata').optional().isObject().withMessage('metadata debe ser objeto en events'),
         handleInputError,
         asyncHandler(MatchDetailController.registerBulkEvents)
@@ -520,54 +520,54 @@ router.post('/matches/:matchId/referee/events/bulk',
 
 router.post('/matches/:matchId/referee/tracking',
     hasRole('referee', 'admin'),
-    param('matchId').isInt().withMessage('ID de partido no válido'),
-    body('timestampMs').isInt().withMessage('timestampMs inválido'),
-    body('period').optional({ nullable: true }).isIn(['pre', '1H', 'HT', '2H', 'ET', 'post']).withMessage('period inválido'),
+    param('matchId').isInt().withMessage('ID de partido no v?lido'),
+    body('timestampMs').isInt().withMessage('timestampMs inv?lido'),
+    body('period').optional({ nullable: true }).isIn(['pre', '1H', 'HT', '2H', 'ET', 'post']).withMessage('period inv?lido'),
     body('ball').optional().isObject().withMessage('ball debe ser objeto'),
     body('players').isArray({ min: 0 }).withMessage('players debe ser arreglo'),
-    body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inválido'),
-    body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inválido'),
+    body('source').optional().isIn(['manual', 'inferred', 'video', 'simulated']).withMessage('source inv?lido'),
+    body('confidence').optional().isFloat({ min: 0, max: 1 }).withMessage('confidence inv?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.registerTrackingFrame)
 );
 
 router.get('/matches/:matchId/analytics',
     hasRole('admin', 'coach', 'player', 'referee'),
-    param('matchId').isInt().withMessage('ID de partido no válido'),
+    param('matchId').isInt().withMessage('ID de partido no v?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.getMatchAnalytics)
 );
 
-// 2. Ver Tabla de Posiciones (Público o Autenticado)
+// 2. Ver Tabla de Posiciones (P?blico o Autenticado)
 router.get('/:id/standings',
     authenticate,
     param('id').isInt(),
     handleInputError,
-    LeagueController.getStandings
+    asyncHandler(LeagueController.getStandings)
 );
 
 // Ver los resultados de las jornadas
 router.get('/:id/matches',
     authenticate,
-    param('id').isNumeric().withMessage('ID de la liga no válido'),
+    param('id').isNumeric().withMessage('ID de la liga no v?lido'),
     handleInputError,
-    LeagueController.getLeagueMatches
+    asyncHandler(LeagueController.getLeagueMatches)
 );
 
 // Reestructurar calendario a mitad de torneo (cuando entran o salen equipos)
 router.post('/:id/restructure-fixture',
     authenticate,
     hasRole('admin'),
-    param('id').isInt().withMessage('El ID de la liga no es válido'),
+    param('id').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
-    LeagueController.restructureFixture
+    asyncHandler(LeagueController.restructureFixture)
 );
 
 /**
  * @swagger
  * /api/leagues/:leagueId/invitation:
  *   post:
- *     summary: Generar código de invitación para una liga
+ *     summary: Generar c?digo de invitaci?n para una liga
  *     tags: [Invitaciones]
  *     security:
  *       - bearerAuth: []
@@ -585,15 +585,15 @@ router.post('/:id/restructure-fixture',
  *             properties:
  *               expiresIn:
  *                 type: integer
- *                 description: Minutos hasta que expire el código
+ *                 description: Minutos hasta que expire el c?digo
  *     responses:
  *       200:
- *         description: Código generado exitosamente
+ *         description: C?digo generado exitosamente
  */
 router.post('/:leagueId/invitation',
     authenticate,
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('El ID de la liga no es válido'),
+    param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
     asyncHandler(LeagueInvitationController.generateInvitation)
 );
@@ -602,7 +602,7 @@ router.post('/:leagueId/invitation',
  * @swagger
  * /api/leagues/:leagueId/invitation:
  *   get:
- *     summary: Obtener código de invitación actual
+ *     summary: Obtener c?digo de invitaci?n actual
  *     tags: [Invitaciones]
  *     security:
  *       - bearerAuth: []
@@ -616,7 +616,7 @@ router.post('/:leagueId/invitation',
 router.get('/:leagueId/invitation',
     authenticate,
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('El ID de la liga no es válido'),
+    param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
     asyncHandler(LeagueInvitationController.getInvitation)
 );
@@ -625,7 +625,7 @@ router.get('/:leagueId/invitation',
  * @swagger
  * /api/leagues/:leagueId/invitation:
  *   delete:
- *     summary: Revocar código de invitación
+ *     summary: Revocar c?digo de invitaci?n
  *     tags: [Invitaciones]
  *     security:
  *       - bearerAuth: []
@@ -639,7 +639,7 @@ router.get('/:leagueId/invitation',
 router.delete('/:leagueId/invitation',
     authenticate,
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('El ID de la liga no es válido'),
+    param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
     asyncHandler(LeagueInvitationController.revokeInvitation)
 );
@@ -648,7 +648,7 @@ router.delete('/:leagueId/invitation',
  * @swagger
  * /api/leagues/join-by-code:
  *   post:
- *     summary: Unir equipo a liga usando código
+ *     summary: Unir equipo a liga usando c?digo
  *     tags: [Invitaciones]
  *     security:
  *       - bearerAuth: []
@@ -675,8 +675,8 @@ router.delete('/:leagueId/invitation',
 router.post('/join-by-code',
     authenticate,
     hasRole('coach', 'referee'),
-    body('code').notEmpty().withMessage('El código es obligatorio'),
-    body('teamId').optional({ nullable: true }).isInt().withMessage('El ID del equipo debe ser un número'),
+    body('code').notEmpty().withMessage('El c?digo es obligatorio'),
+    body('teamId').optional({ nullable: true }).isInt().withMessage('El ID del equipo debe ser un n?mero'),
     handleInputError,
     asyncHandler(LeagueInvitationController.joinByCode)
 );
