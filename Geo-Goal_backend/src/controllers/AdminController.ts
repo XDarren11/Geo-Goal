@@ -1,413 +1,268 @@
 import type { Request, Response } from "express";
-import { AdminService } from "../services/AdminService";
-import { AuditService } from "../services/AuditService";
-import { User } from "../models/User";
-import { LeagueAdmin } from "../models/LeagueAdmin";
-import { Field } from "../models/Field";
+import type { AdminActorContext } from "../services/AdminOrchestrator";
+import { buildAdminMediator } from "../application/admin/AdminMediator";
+import type {
+  ChangeSeasonStatusBodyDTO,
+  CreateFieldBodyDTO,
+  CreateSeasonBodyDTO,
+  CreateUserBodyDTO,
+  LeagueAdminRoleDTO,
+  UpdateFieldBodyDTO,
+  UpdateSeasonBodyDTO,
+  UpdateUserBodyDTO,
+} from "../application/admin/dto/AdminDTOs";
+import {
+  AdminAssignLeagueAdminRequest,
+  AdminAuditLogFilters,
+  AdminChangeSeasonStatusRequest,
+  AdminCreateFieldRequest,
+  AdminCreateSeasonRequest,
+  AdminCreateUserRequest,
+  AdminDashboardSummaryRequest,
+  AdminDeleteFieldRequest,
+  AdminDeleteSeasonRequest,
+  AdminDeleteUserRequest,
+  AdminGetAuditLogByIdRequest,
+  AdminGetFieldByIdRequest,
+  AdminGetSeasonByIdRequest,
+  AdminListAuditLogsRequest,
+  AdminListFieldsRequest,
+  AdminListLeagueAdminsRequest,
+  AdminListSeasonsByLeagueRequest,
+  AdminListUsersByLeagueRequest,
+  AdminListUsersRequest,
+  AdminRemoveLeagueAdminRequest,
+  AdminUpdateFieldRequest,
+  AdminUpdateLeagueAdminRoleRequest,
+  AdminUpdateSeasonRequest,
+  AdminUpdateUserRequest,
+} from "../application/admin/requests/AdminRequests";
+
+const adminMediator = buildAdminMediator();
+
+function adminCtx(req: Request): AdminActorContext {
+  return {
+    actorUserId: req.user!.id,
+    ip: req.ip,
+    userAgent: req.get("user-agent") ?? null,
+  };
+}
 
 export class AdminController {
   static dashboardSummary = async (req: Request, res: Response): Promise<void> => {
-    const data = await AdminService.getDashboardSummary(req.user!.id);
+    const data = await adminMediator.send(
+      new AdminDashboardSummaryRequest(req.user!.id)
+    );
     res.json(data);
   };
 
-  // Usuarios
   static listUsersByLeague = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await AdminService.listUsersByLeague(leagueId, req.user!.id);
+    const data = await adminMediator.send(
+      new AdminListUsersByLeagueRequest(leagueId, req.user!.id)
+    );
     res.json(data);
   };
 
   static listUsers = async (_req: Request, res: Response): Promise<void> => {
-    const data = await AdminService.listUsers();
+    const data = await adminMediator.send(new AdminListUsersRequest());
     res.json(data);
   };
 
   static createUser = async (req: Request, res: Response): Promise<void> => {
-    const result = await AdminService.createUser(req.body);
-
-    const createdUser = await User.findOne({ where: { email: req.body.email } });
-    if (createdUser) {
-      const userData = createdUser.toJSON() as Record<string, unknown>;
-      delete userData.password;
-      delete userData.token;
-
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        entityType: "user",
-        entityId: createdUser.id,
-        action: "create",
-        afterData: userData,
-        reason: req.body.reason ?? "Creación de usuario",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminCreateUserRequest(req.body as CreateUserBodyDTO, adminCtx(req))
+    );
     res.send(result);
   };
 
   static updateUser = async (req: Request, res: Response): Promise<void> => {
     const { userId } = req.params;
-    const before = await User.findByPk(userId);
-    const result = await AdminService.updateUser(userId, req.body);
-
-    const after = await User.findByPk(userId);
-    if (before && after) {
-      const beforeData = before.toJSON() as Record<string, unknown>;
-      const afterData = after.toJSON() as Record<string, unknown>;
-      delete beforeData.password;
-      delete beforeData.token;
-      delete afterData.password;
-      delete afterData.token;
-
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        entityType: "user",
-        entityId: userId,
-        action: "update",
-        beforeData,
-        afterData,
-        reason: req.body.reason ?? "Actualización de usuario",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminUpdateUserRequest(userId, req.body as UpdateUserBodyDTO, adminCtx(req))
+    );
     res.send(result);
   };
 
   static deleteUser = async (req: Request, res: Response): Promise<void> => {
     const { userId } = req.params;
-    const before = await User.findByPk(userId);
-    const result = await AdminService.deleteUser(userId, req.user!.id);
-
-    if (before) {
-      const beforeData = before.toJSON() as Record<string, unknown>;
-      delete beforeData.password;
-      delete beforeData.token;
-
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        entityType: "user",
-        entityId: userId,
-        action: "delete",
-        beforeData,
-        reason: req.body?.reason ?? "Eliminación de usuario",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminDeleteUserRequest(userId, req.user!.id, req.body, adminCtx(req))
+    );
     res.send(result);
   };
 
-  // Admins por liga
   static listLeagueAdmins = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await AdminService.listLeagueAdmins(leagueId, req.user!.id);
+    const data = await adminMediator.send(
+      new AdminListLeagueAdminsRequest(leagueId, req.user!.id)
+    );
     res.json(data);
   };
 
   static assignLeagueAdmin = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
     const { userId, leagueRole } = req.body;
-
-    const before = await LeagueAdmin.findOne({
-      where: { leagueId, userId: Number(userId) },
-    });
-
-    const result = await AdminService.assignLeagueAdmin(
-      leagueId,
-      Number(userId),
-      leagueRole,
-      req.user!.id,
-      req.user!.id
+    const result = await adminMediator.send(
+      new AdminAssignLeagueAdminRequest(
+        leagueId,
+        Number(userId),
+        leagueRole as LeagueAdminRoleDTO,
+        req.user!.id,
+        req.user!.id,
+        req.body,
+        adminCtx(req)
+      )
     );
-
-    const after = await LeagueAdmin.findOne({
-      where: { leagueId, userId: Number(userId) },
-    });
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: Number(leagueId),
-      entityType: "league_admin_assignment",
-      entityId: `${leagueId}:${userId}`,
-      action: before ? "update" : "create",
-      beforeData: before ? (before.toJSON() as Record<string, unknown>) : null,
-      afterData: after ? (after.toJSON() as Record<string, unknown>) : null,
-      reason: req.body.reason ?? "Asignación de admin de liga",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
     res.send(result);
   };
 
   static updateLeagueAdminRole = async (req: Request, res: Response): Promise<void> => {
     const { leagueId, userId } = req.params;
     const { leagueRole } = req.body;
-
-    const before = await LeagueAdmin.findOne({ where: { leagueId, userId } });
-
-    const result = await AdminService.updateLeagueAdminRole(
-      leagueId,
-      userId,
-      leagueRole,
-      req.user!.id,
-      req.user!.id
+    const result = await adminMediator.send(
+      new AdminUpdateLeagueAdminRoleRequest(
+        leagueId,
+        userId,
+        leagueRole as LeagueAdminRoleDTO,
+        req.user!.id,
+        req.user!.id,
+        req.body,
+        adminCtx(req)
+      )
     );
-
-    const after = await LeagueAdmin.findOne({ where: { leagueId, userId } });
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: Number(leagueId),
-      entityType: "league_admin_assignment",
-      entityId: `${leagueId}:${userId}`,
-      action: "update",
-      beforeData: before ? (before.toJSON() as Record<string, unknown>) : null,
-      afterData: after ? (after.toJSON() as Record<string, unknown>) : null,
-      reason: req.body.reason ?? "Cambio de rol de admin de liga",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
     res.send(result);
   };
 
   static removeLeagueAdmin = async (req: Request, res: Response): Promise<void> => {
     const { leagueId, userId } = req.params;
-
-    const before = await LeagueAdmin.findOne({ where: { leagueId, userId } });
-
-    const result = await AdminService.removeLeagueAdmin(leagueId, userId, req.user!.id);
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: Number(leagueId),
-      entityType: "league_admin_assignment",
-      entityId: `${leagueId}:${userId}`,
-      action: "delete",
-      beforeData: before ? (before.toJSON() as Record<string, unknown>) : null,
-      reason: req.body?.reason ?? "Remoción de admin de liga",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
+    const result = await adminMediator.send(
+      new AdminRemoveLeagueAdminRequest(
+        leagueId,
+        userId,
+        req.user!.id,
+        req.body,
+        adminCtx(req)
+      )
+    );
     res.send(result);
   };
 
-  // Campos
   static listFields = async (_req: Request, res: Response): Promise<void> => {
-    const data = await AdminService.listFields();
+    const data = await adminMediator.send(new AdminListFieldsRequest());
     res.json(data);
   };
 
   static getFieldById = async (req: Request, res: Response): Promise<void> => {
     const { fieldId } = req.params;
-    const data = await AdminService.getFieldById(fieldId);
+    const data = await adminMediator.send(new AdminGetFieldByIdRequest(fieldId));
     res.json(data);
   };
 
   static createField = async (req: Request, res: Response): Promise<void> => {
-    const result = await AdminService.createField(req.body);
-
-    const createdField = await Field.findOne({
-      where: {
-        name: req.body.name,
-        address: req.body.address,
-        lat: req.body.lat,
-        lng: req.body.lng,
-      },
-      order: [["id", "DESC"]],
-    });
-
-    if (createdField) {
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        leagueId: createdField.leagueId ?? null,
-        entityType: "field",
-        entityId: createdField.id,
-        action: "create",
-        afterData: createdField.toJSON() as Record<string, unknown>,
-        reason: req.body.reason ?? "Creación de campo",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminCreateFieldRequest(req.body as CreateFieldBodyDTO, adminCtx(req))
+    );
     res.send(result);
   };
 
   static updateField = async (req: Request, res: Response): Promise<void> => {
     const { fieldId } = req.params;
-    const before = await Field.findByPk(fieldId);
-    const result = await AdminService.updateField(fieldId, req.body);
-
-    const after = await Field.findByPk(fieldId);
-    if (before && after) {
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        leagueId: after.leagueId ?? before.leagueId ?? null,
-        entityType: "field",
-        entityId: fieldId,
-        action: "update",
-        beforeData: before.toJSON() as Record<string, unknown>,
-        afterData: after.toJSON() as Record<string, unknown>,
-        reason: req.body.reason ?? "Actualización de campo",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminUpdateFieldRequest(fieldId, req.body as UpdateFieldBodyDTO, adminCtx(req))
+    );
     res.send(result);
   };
 
   static deleteField = async (req: Request, res: Response): Promise<void> => {
     const { fieldId } = req.params;
-    const before = await Field.findByPk(fieldId);
-    const result = await AdminService.deleteField(fieldId);
-
-    if (before) {
-      await AuditService.log({
-        actorUserId: req.user!.id,
-        leagueId: before.leagueId ?? null,
-        entityType: "field",
-        entityId: fieldId,
-        action: "delete",
-        beforeData: before.toJSON() as Record<string, unknown>,
-        reason: req.body?.reason ?? "Eliminación de campo",
-        ip: req.ip,
-        userAgent: req.get("user-agent") ?? null,
-      });
-    }
-
+    const result = await adminMediator.send(
+      new AdminDeleteFieldRequest(fieldId, req.body, adminCtx(req))
+    );
     res.send(result);
   };
 
-  // Temporadas
   static createSeason = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const season = await AdminService.createSeason(leagueId, req.user!.id, req.body);
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: Number(leagueId),
-      seasonId: season.id,
-      entityType: "season",
-      entityId: season.id,
-      action: "create",
-      afterData: season.toJSON() as Record<string, unknown>,
-      reason: req.body.reason ?? "Creación de temporada",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
+    const season = await adminMediator.send(
+      new AdminCreateSeasonRequest(
+        leagueId,
+        req.user!.id,
+        req.body as CreateSeasonBodyDTO,
+        adminCtx(req)
+      )
+    );
     res.status(201).json(season);
   };
 
   static listSeasonsByLeague = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await AdminService.listSeasonsByLeague(leagueId, req.user!.id);
+    const data = await adminMediator.send(
+      new AdminListSeasonsByLeagueRequest(leagueId, req.user!.id)
+    );
     res.json(data);
   };
 
   static getSeasonById = async (req: Request, res: Response): Promise<void> => {
     const { seasonId } = req.params;
-    const data = await AdminService.getSeasonById(seasonId, req.user!.id);
+    const data = await adminMediator.send(
+      new AdminGetSeasonByIdRequest(seasonId, req.user!.id)
+    );
     res.json(data);
   };
 
   static updateSeason = async (req: Request, res: Response): Promise<void> => {
     const { seasonId } = req.params;
-    const before = await AdminService.getSeasonById(seasonId, req.user!.id);
-    const updated = await AdminService.updateSeason(seasonId, req.user!.id, req.body);
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: updated.leagueId,
-      seasonId: updated.id,
-      entityType: "season",
-      entityId: updated.id,
-      action: "update",
-      beforeData: before.toJSON() as Record<string, unknown>,
-      afterData: updated.toJSON() as Record<string, unknown>,
-      reason: req.body.reason ?? "Actualización de temporada",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
+    const updated = await adminMediator.send(
+      new AdminUpdateSeasonRequest(
+        seasonId,
+        req.user!.id,
+        req.body as UpdateSeasonBodyDTO,
+        adminCtx(req)
+      )
+    );
     res.json(updated);
   };
 
   static changeSeasonStatus = async (req: Request, res: Response): Promise<void> => {
     const { seasonId } = req.params;
-    const before = await AdminService.getSeasonById(seasonId, req.user!.id);
-    const updated = await AdminService.changeSeasonStatus(
-      seasonId,
-      req.body.status,
-      req.user!.id
+    const body: ChangeSeasonStatusBodyDTO = {
+      status: req.body.status,
+      reason: req.body.reason,
+    };
+    const updated = await adminMediator.send(
+      new AdminChangeSeasonStatusRequest(seasonId, req.user!.id, body, adminCtx(req))
     );
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: updated.leagueId,
-      seasonId: updated.id,
-      entityType: "season",
-      entityId: updated.id,
-      action: "status_change",
-      beforeData: before.toJSON() as Record<string, unknown>,
-      afterData: updated.toJSON() as Record<string, unknown>,
-      reason: req.body.reason ?? "Cambio de estado de temporada",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
     res.json(updated);
   };
 
   static deleteSeason = async (req: Request, res: Response): Promise<void> => {
     const { seasonId } = req.params;
-    const before = await AdminService.getSeasonById(seasonId, req.user!.id);
-    const result = await AdminService.deleteSeason(seasonId, req.user!.id);
-
-    await AuditService.log({
-      actorUserId: req.user!.id,
-      leagueId: before.leagueId,
-      seasonId: before.id,
-      entityType: "season",
-      entityId: before.id,
-      action: "delete",
-      beforeData: before.toJSON() as Record<string, unknown>,
-      reason: req.body?.reason ?? "Eliminación de temporada",
-      ip: req.ip,
-      userAgent: req.get("user-agent") ?? null,
-    });
-
+    const result = await adminMediator.send(
+      new AdminDeleteSeasonRequest(seasonId, req.user!.id, req.body, adminCtx(req))
+    );
     res.send(result);
   };
 
-  // Auditoría
   static listAuditLogs = async (req: Request, res: Response): Promise<void> => {
-    const data = await AdminService.listAuditLogs({
+    const filters: AdminAuditLogFilters = {
       leagueId: req.query.leagueId ? Number(req.query.leagueId) : undefined,
       seasonId: req.query.seasonId ? Number(req.query.seasonId) : undefined,
       actorUserId: req.query.actorUserId ? Number(req.query.actorUserId) : undefined,
       entityType: req.query.entityType ? String(req.query.entityType) : undefined,
       action: req.query.action
-        ? (String(req.query.action) as "create" | "update" | "delete" | "status_change" | "manual_fix")
+        ? (String(req.query.action) as AdminAuditLogFilters["action"])
         : undefined,
       from: req.query.from ? String(req.query.from) : undefined,
       to: req.query.to ? String(req.query.to) : undefined,
-    });
+    };
+    const data = await adminMediator.send(new AdminListAuditLogsRequest(filters));
     res.json(data);
   };
 
   static getAuditLogById = async (req: Request, res: Response): Promise<void> => {
     const { logId } = req.params;
-    const data = await AdminService.getAuditLogById(logId);
+    const data = await adminMediator.send(new AdminGetAuditLogByIdRequest(logId));
     res.json(data);
   };
 }

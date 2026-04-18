@@ -2,9 +2,12 @@ import { League } from "../models/League";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { Match } from "../models/Match";
+import { TeamLeagueStat } from "../models/TeamLeagueStat";
+import { TeamMember } from "../models/TeamMember";
 import { MatchGenerator } from "../utils/MatchGenerator";
 import { AppError } from "../types/errors";
 import { NotificationService } from "./NotificationService";
+import { AuditService } from "./AuditService";
 
 export class LeagueService {
   private static buildRoundDate(
@@ -352,5 +355,301 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     });
 
     return list;
+  }
+
+  static async canUserAccessLeague(
+    userId: number,
+    role: string,
+    leagueId: number
+  ): Promise<boolean> {
+    if (role === "admin") return true;
+
+    if (role === "coach") {
+      const team = await Team.findOne({
+        where: { trainerId: userId, leagueId },
+        attributes: ["id"],
+      });
+      return !!team;
+    }
+
+    if (role === "player") {
+      const leagueTeams = await Team.findAll({
+        where: { leagueId },
+        attributes: ["id"],
+      });
+
+      const leagueTeamIds = leagueTeams.map((t) => t.id);
+      if (!leagueTeamIds.length) return false;
+
+      const member = await TeamMember.findOne({
+        where: {
+          userId,
+          teamId: leagueTeamIds,
+        },
+        attributes: ["userId"],
+      });
+
+      return !!member;
+    }
+
+    return false;
+  }
+
+  static async addTeamToLeague(leagueId: string, teamId: number): Promise<string> {
+    const team = await Team.findByPk(teamId);
+    const league = await League.findByPk(leagueId);
+
+    if (!team || !league) {
+      throw new AppError(404, "Equipo o Liga no encontrados");
+    }
+
+    if (team.leagueId && team.leagueId !== league.id) {
+      throw new AppError(409, "Este equipo ya pertenece a otra liga");
+    }
+
+    const coachTeamInLeague = await Team.findOne({
+      where: {
+        trainerId: team.trainerId,
+        leagueId: league.id,
+      },
+      attributes: ["id", "name"],
+    });
+
+    if (coachTeamInLeague && coachTeamInLeague.id !== team.id) {
+      throw new AppError(
+        409,
+        `El entrenador ya dirige otro equipo en esta liga (${coachTeamInLeague.name})`
+      );
+    }
+
+    team.leagueId = league.id;
+    await team.save();
+
+    await TeamLeagueStat.findOrCreate({
+      where: {
+        teamId: team.id,
+        leagueId: league.id,
+      },
+      defaults: {
+        points: 0,
+        gamesPlayed: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+        goalDifference: 0,
+      },
+    });
+
+    return `Equipo ${team.name} agregado a la liga`;
+  }
+
+  static async getStandings(
+    leagueId: string,
+    userId: number | undefined,
+    role: string | undefined
+  ): Promise<unknown> {
+    if (userId == null || role == null) {
+      throw new AppError(401, "No autorizado");
+    }
+
+    const leagueIdNum = Number(leagueId);
+    const canAccess = await LeagueService.canUserAccessLeague(userId, role, leagueIdNum);
+    if (!canAccess) {
+      throw new AppError(403, "No tienes acceso a la tabla de esta liga");
+    }
+
+    return TeamLeagueStat.findAll({
+      where: { leagueId },
+      attributes: [
+        "points",
+        "gamesPlayed",
+        "wins",
+        "draws",
+        "losses",
+        "goalsFor",
+        "goalsAgainst",
+        "goalDifference",
+        "penaltyWins",
+      ],
+      include: [
+        {
+          model: Team,
+          attributes: ["id", "name", "logoUrl"],
+        },
+      ],
+      order: [
+        ["points", "DESC"],
+        ["goalDifference", "DESC"],
+        ["goalsFor", "DESC"],
+      ],
+    });
+  }
+
+  static async getLeagueMatchesGrouped(
+    leagueId: string,
+    userId: number | undefined,
+    role: string | undefined
+  ): Promise<Record<string, unknown[]>> {
+    if (userId == null || role == null) {
+      throw new AppError(401, "No autorizado");
+    }
+
+    const leagueIdNum = Number(leagueId);
+    const canAccess = await LeagueService.canUserAccessLeague(userId, role, leagueIdNum);
+    if (!canAccess) {
+      throw new AppError(403, "No tienes acceso a los resultados de esta liga");
+    }
+
+    const matches = await Match.findAll({
+      where: { leagueId },
+      include: [
+        {
+          model: Team,
+          as: "homeTeam",
+          attributes: ["id", "name", "logoUrl"],
+        },
+        {
+          model: Team,
+          as: "awayTeam",
+          attributes: ["id", "name", "logoUrl"],
+        },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    return matches.reduce<Record<string, unknown[]>>((acc, match) => {
+      const round = match.roundName;
+      if (!acc[round]) {
+        acc[round] = [];
+      }
+      acc[round].push(match);
+      return acc;
+    }, {});
+  }
+
+  static async restructureFixture(
+    leagueId: string,
+    audit: {
+      actorUserId: number | null;
+      reason?: string;
+      ip?: string | null;
+      userAgent?: string | null;
+    }
+  ): Promise<{ message: string; newMatchesGenerated: number }> {
+    const league = await League.findByPk(leagueId);
+    if (!league) {
+      throw new AppError(404, "Liga no encontrada");
+    }
+
+    const teams = await Team.findAll({ where: { leagueId } });
+    const teamIds = teams.map((t) => t.id);
+
+    if (teamIds.length < 2) {
+      throw new AppError(
+        400,
+        "Se necesitan al menos 2 equipos activos para generar partidos"
+      );
+    }
+
+    const playedMatches = await Match.findAll({
+      where: { leagueId, played: true },
+    });
+
+    await Match.destroy({
+      where: { leagueId, played: false },
+    });
+
+    const unplayedPairs: { home: number; away: number }[] = [];
+
+    for (let i = 0; i < teamIds.length; i++) {
+      for (let j = i + 1; j < teamIds.length; j++) {
+        const teamA = teamIds[i];
+        const teamB = teamIds[j];
+
+        const alreadyPlayed = playedMatches.some(
+          (m) =>
+            (m.homeTeamId === teamA && m.awayTeamId === teamB) ||
+            (m.homeTeamId === teamB && m.awayTeamId === teamA)
+        );
+
+        if (!alreadyPlayed) {
+          unplayedPairs.push({ home: teamA, away: teamB });
+        }
+      }
+    }
+
+    let maxRoundNumber = 0;
+    playedMatches.forEach((m) => {
+      const matchNumber = m.roundName.match(/\d+/);
+      const num = matchNumber ? parseInt(matchNumber[0], 10) : 0;
+      if (num > maxRoundNumber) {
+        maxRoundNumber = num;
+      }
+    });
+
+    let currentRoundNum = maxRoundNumber + 1;
+    const newMatchesToSave: Array<{
+      leagueId: string;
+      homeTeamId: number;
+      awayTeamId: number;
+      roundName: string;
+      played: boolean;
+    }> = [];
+
+    while (unplayedPairs.length > 0) {
+      const teamsPlayingThisRound = new Set<number>();
+      let i = 0;
+
+      while (i < unplayedPairs.length) {
+        const pair = unplayedPairs[i];
+
+        if (!teamsPlayingThisRound.has(pair.home) && !teamsPlayingThisRound.has(pair.away)) {
+          newMatchesToSave.push({
+            leagueId,
+            homeTeamId: pair.home,
+            awayTeamId: pair.away,
+            roundName: `Jornada ${currentRoundNum}`,
+            played: false,
+          });
+
+          teamsPlayingThisRound.add(pair.home);
+          teamsPlayingThisRound.add(pair.away);
+
+          unplayedPairs.splice(i, 1);
+        } else {
+          i++;
+        }
+      }
+
+      currentRoundNum++;
+    }
+
+    if (newMatchesToSave.length > 0) {
+      await Match.bulkCreate(newMatchesToSave);
+    }
+
+    await AuditService.log({
+      actorUserId: audit.actorUserId,
+      leagueId: Number(leagueId),
+      entityType: "fixture",
+      entityId: String(leagueId),
+      action: "manual_fix",
+      beforeData: {
+        previouslyPlayedMatches: playedMatches.length,
+      },
+      afterData: {
+        newMatchesGenerated: newMatchesToSave.length,
+      },
+      reason: audit.reason ?? "Reestructuración de fixture",
+      ip: audit.ip ?? null,
+      userAgent: audit.userAgent ?? null,
+    });
+
+    return {
+      message: "Calendario reestructurado exitosamente",
+      newMatchesGenerated: newMatchesToSave.length,
+    };
   }
 }

@@ -1020,4 +1020,70 @@ export class TeamService {
     await teamMember.destroy();
     return "Jugador eliminado del equipo correctamente";
   }
+
+  static async getCoachActiveLeagues(trainerId: number) {
+    return League.findAll({
+      include: [
+        {
+          model: Team,
+          where: { trainerId },
+          attributes: ["id", "name", "logoUrl"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+  }
+
+  static async getTeamDashboard(leagueId: string, teamId: string) {
+    const upcomingMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: false,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["roundName", "ASC"]],
+      limit: 3,
+    });
+
+    const lastMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: true,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["updatedAt", "DESC"]],
+      limit: 3,
+    });
+
+    const allPlayedMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: true,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      order: [["id", "ASC"]],
+    });
+
+    const chartData = allPlayedMatches.map((match) => {
+      const isHome = match.homeTeamId === Number(teamId);
+      const gf = isHome ? match.homeScore : match.awayScore;
+      const gc = isHome ? match.awayScore : match.homeScore;
+      const roundLabel = match.roundName.replace("Jornada ", "J");
+      return { round: roundLabel, gf, gc };
+    });
+
+    return {
+      upcomingMatches,
+      lastMatches,
+      chartData,
+    };
+  }
 }

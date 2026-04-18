@@ -1,51 +1,67 @@
 import type { Request, Response } from "express";
-import { PublicService } from "../services/PublicService";
+import { buildPublicMediator } from "../application/public/PublicMediator";
+import { PublicServiceAdapter } from "../services/PublicServiceAdapter";
+import {
+  GetLeagueDetailRequest,
+  GetLeaguesRequest,
+  GetNewsRequest,
+  GetPublicFixtureRequest,
+  GetPublicFixtureWithLocationsRequest,
+  GetPublicMatchAnalyticsRequest,
+  GetPublicStandingsRequest,
+  GetTeamProfileRequest,
+} from "../application/public/requests/PublicRequests";
+
+const publicMediator = buildPublicMediator(new PublicServiceAdapter());
 
 export class PublicController {
   static getNews = async (req: Request, res: Response): Promise<void> => {
     const limit = req.query.limit != null ? Number(req.query.limit) : undefined;
-    const data = await PublicService.getNews(Number.isInteger(limit) && limit! > 0 ? limit : 12);
+    const n = Number.isInteger(limit) && limit! > 0 ? limit! : 12;
+    const data = await publicMediator.send(new GetNewsRequest(n));
     res.json(data);
   };
 
-  static getLeagues = async (req: Request, res: Response): Promise<void> => {
-    const data = await PublicService.getLeagues();
+  static getLeagues = async (_req: Request, res: Response): Promise<void> => {
+    const data = await publicMediator.send(new GetLeaguesRequest());
     res.json(data);
   };
 
   static getLeagueDetail = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await PublicService.getLeagueDetail(leagueId);
+    const data = await publicMediator.send(new GetLeagueDetailRequest(leagueId));
     res.json(data);
   };
 
   static getStandings = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await PublicService.getStandings(leagueId);
+    const data = await publicMediator.send(new GetPublicStandingsRequest(leagueId));
     res.json(data);
   };
 
   static getFixture = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await PublicService.getFixture(leagueId);
+    const data = await publicMediator.send(new GetPublicFixtureRequest(leagueId));
     res.json(data);
   };
 
   static getFixtureWithLocations = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const data = await PublicService.getFixtureWithLocations(leagueId);
+    const data = await publicMediator.send(
+      new GetPublicFixtureWithLocationsRequest(leagueId)
+    );
     res.json(data);
   };
 
   static getTeamProfile = async (req: Request, res: Response): Promise<void> => {
     const { leagueId, teamId } = req.params;
-    const data = await PublicService.getTeamProfile(leagueId, teamId);
+    const data = await publicMediator.send(new GetTeamProfileRequest(leagueId, teamId));
     res.json(data);
   };
 
   static getMatchAnalytics = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
-    const data = await PublicService.getMatchAnalytics(matchId);
+    const data = await publicMediator.send(new GetPublicMatchAnalyticsRequest(matchId));
     res.json(data);
   };
 }
