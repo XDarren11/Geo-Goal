@@ -224,7 +224,7 @@ export class TeamService {
         const matchCardsWeight = cardsByMatch.get(match.id) ?? 0;
         const matchMinutes = minutesByMatch.get(match.id) ?? 0;
 
-        const ratingRaw = 6 + matchGoals * 1.2 + matchAssists * 1 + matchMinutes / 120 - matchCardsWeight * 0.3;
+        const ratingRaw = 6 + matchGoals * 1.2 + matchAssists + matchMinutes / 120 - matchCardsWeight * 0.3;
         const rating = Math.min(10, Math.max(1, Number(ratingRaw.toFixed(1))));
 
         return {
@@ -702,6 +702,10 @@ export class TeamService {
   static async getTeamById(teamId: string, userId: number, role: string) {
     let accessTeam: Team | null = null;
 
+    if (role === "admin") {
+      accessTeam = await Team.findByPk(teamId);
+    }
+
     if (role === "coach") {
       accessTeam = await Team.findOne({
         where: { id: teamId, trainerId: userId },
@@ -958,7 +962,9 @@ export class TeamService {
   static async getPlayersTeam(teamId: string, userId: number, role: string) {
     const whereClause: any = { id: teamId };
 
-    if (role === "coach") {
+    if (role === "admin") {
+      // Admin can view roster for any team.
+    } else if (role === "coach") {
       whereClause.trainerId = userId;
     } else if (role === "player") {
       const membership = await TeamMember.findOne({
@@ -1019,5 +1025,71 @@ export class TeamService {
     }
     await teamMember.destroy();
     return "Jugador eliminado del equipo correctamente";
+  }
+
+  static async getCoachActiveLeagues(trainerId: number) {
+    return League.findAll({
+      include: [
+        {
+          model: Team,
+          where: { trainerId },
+          attributes: ["id", "name", "logoUrl"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+  }
+
+  static async getTeamDashboard(leagueId: string, teamId: string) {
+    const upcomingMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: false,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["roundName", "ASC"]],
+      limit: 3,
+    });
+
+    const lastMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: true,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["updatedAt", "DESC"]],
+      limit: 3,
+    });
+
+    const allPlayedMatches = await Match.findAll({
+      where: {
+        leagueId,
+        played: true,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      order: [["id", "ASC"]],
+    });
+
+    const chartData = allPlayedMatches.map((match) => {
+      const isHome = match.homeTeamId === Number(teamId);
+      const gf = isHome ? match.homeScore : match.awayScore;
+      const gc = isHome ? match.awayScore : match.homeScore;
+      const roundLabel = match.roundName.replace("Jornada ", "J");
+      return { round: roundLabel, gf, gc };
+    });
+
+    return {
+      upcomingMatches,
+      lastMatches,
+      chartData,
+    };
   }
 }

@@ -21,7 +21,7 @@ router.get("/player/me", hasRole("player"), asyncHandler(TeamController.getPlaye
 
 router.get(
   "/:id",
-  hasRole("coach", "player"),
+  hasRole("admin", "coach", "player"),
   param("id").isInt().withMessage("ID no válido"),
   handleInputError,
   asyncHandler(TeamController.getTeamById)
@@ -75,7 +75,7 @@ router.post(
 
 router.get(
   "/:id/player",
-  hasRole("coach", "player"),
+  hasRole("admin", "coach", "player"),
   param("id").isInt().withMessage("ID no válido"),
   handleInputError,
   asyncHandler(TeamController.getPlayersTeam)
