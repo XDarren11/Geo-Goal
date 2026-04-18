@@ -163,3 +163,14 @@ export class RestructureLeagueFixtureRequest extends LeagueRequest<{
     super();
   }
 }
+
+export class UpdateLeagueLogoRequest extends LeagueRequest<{ logoUrl: string }> {
+  readonly requestName = "league.updateLogo";
+  constructor(
+    public readonly leagueId: string,
+    public readonly logoFilename: string
+  ) {
+    super();
+  }
+}
+

@@ -7,6 +7,9 @@ import {
   addPlayerToTeam,
   removePlayerFromTeam,
   teamLogoUrl,
+  updateTeam,
+  updatePlayerAvatar,
+  avatarUrl as playerAvatarUrl,
 } from "@/api/teamAPI";
 import { useState } from "react";
 import { toast } from "react-toastify";
@@ -165,17 +168,40 @@ export default function TeamDetailView() {
         ← Volver a equipos
       </Link>
       <div className="mt-4 flex items-center gap-4 opacity-0 animate-in-up stagger-1">
-        {team.logoUrl ? (
-          <img
-            src={teamLogoUrl(team.logoUrl)}
-            alt=""
-            className="h-16 w-16 rounded-full object-cover"
-          />
-        ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-geo-green/20">
-            <UserGroupIcon className="h-8 w-8 text-geo-green" />
-          </div>
-        )}
+        <div className="relative">
+          {team.logoUrl ? (
+            <img
+              src={teamLogoUrl(team.logoUrl)}
+              alt=""
+              className="h-16 w-16 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-geo-green/20">
+              <UserGroupIcon className="h-8 w-8 text-geo-green" />
+            </div>
+          )}
+          {canManagePlayers && (
+            <label className="absolute -bottom-1 -right-1 cursor-pointer rounded-full bg-geo-green p-1 shadow" title="Cambiar logo del equipo">
+              <PlusIcon className="h-3 w-3 text-geo-black" />
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    await updateTeam(id, { logo: file });
+                    void queryClient.invalidateQueries({ queryKey: ["team", id] });
+                    toast.success("Logo actualizado");
+                  } catch {
+                    toast.error("No se pudo actualizar el logo");
+                  }
+                }}
+              />
+            </label>
+          )}
+        </div>
         <div>
           <h1 className="text-3xl font-black text-geo-green">{team.name}</h1>
           {team.fieldAddress && (
@@ -312,22 +338,60 @@ export default function TeamDetailView() {
 
         {players && players.length > 0 ? (
           <ul className="mt-4 space-y-2">
-            {players.map((p) => (
+            {players.map((p) => {
+              const isCurrentPlayer = currentUser?.role === "player" && currentUser.id === p.id;
+              return (
               <li
                 key={p.id}
                 className="flex items-center justify-between rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3"
               >
-                <span className="font-medium text-[var(--geo-text)]">
-                  {p.playerName || p.name}
-                  {p.jerseyNumber ? (
-                    <span className="ml-2 rounded bg-geo-green/15 px-2 py-0.5 text-xs font-bold text-geo-green">
-                      #{p.jerseyNumber}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative shrink-0">
+                    {p.avatarUrl ? (
+                      <img
+                        src={playerAvatarUrl(p.avatarUrl)}
+                        alt={p.playerName || p.name}
+                        className="h-9 w-9 rounded-full object-cover border border-geo-green/30"
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-geo-green/10 text-xs font-bold text-geo-green border border-geo-green/20">
+                        {(p.playerName || p.name).charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    {isCurrentPlayer && (
+                      <label className="absolute -bottom-1 -right-1 cursor-pointer rounded-full bg-geo-green p-0.5 shadow" title="Cambiar mi foto">
+                        <PlusIcon className="h-2.5 w-2.5 text-geo-black" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              await updatePlayerAvatar(id, file);
+                              void queryClient.invalidateQueries({ queryKey: ["team-players", id] });
+                              toast.success("Foto actualizada");
+                            } catch {
+                              toast.error("No se pudo actualizar la foto");
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <span className="font-medium text-[var(--geo-text)]">
+                    {p.playerName || p.name}
+                    {p.jerseyNumber ? (
+                      <span className="ml-2 rounded bg-geo-green/15 px-2 py-0.5 text-xs font-bold text-geo-green">
+                        #{p.jerseyNumber}
+                      </span>
+                    ) : null}
+                    <span className="ml-2 text-sm text-[var(--geo-text-muted)]">
+                      {p.email}
                     </span>
-                  ) : null}
-                  <span className="ml-2 text-sm text-[var(--geo-text-muted)]">
-                    {p.email}
                   </span>
-                </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => removePlayerMutation.mutate(p.id)}
@@ -339,7 +403,8 @@ export default function TeamDetailView() {
                   <TrashIcon className="h-5 w-5" />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         ) : (
           <p className="mt-4 text-[var(--geo-text-muted)]">

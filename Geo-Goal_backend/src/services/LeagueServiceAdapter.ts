@@ -91,4 +91,8 @@ export class LeagueServiceAdapter implements ILeagueService {
   ): Promise<{ message: string; newMatchesGenerated: number }> {
     return LeagueService.restructureFixture(leagueId, audit);
   }
+
+  updateLeagueLogo(leagueId: string, logoFilename: string): Promise<{ logoUrl: string }> {
+    return LeagueService.updateLeagueLogo(leagueId, logoFilename);
+  }
 }

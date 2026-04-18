@@ -14,6 +14,7 @@ import {
   GetTeamByIdHandler,
   GetTeamDashboardHandler,
   RemovePlayerFromTeamHandler,
+  UpdatePlayerAvatarHandler,
   UpdateTeamHandler,
 } from "./handlers/TeamHandlers";
 
@@ -33,5 +34,6 @@ export function buildTeamMediator(teamService: ITeamService): Mediator {
   m.register("team.removePlayer", new RemovePlayerFromTeamHandler(teamService));
   m.register("team.getCoachActiveLeagues", new GetCoachActiveLeaguesHandler(teamService));
   m.register("team.getTeamDashboard", new GetTeamDashboardHandler(teamService));
+  m.register("team.updatePlayerAvatar", new UpdatePlayerAvatarHandler(teamService));
   return m;
 }

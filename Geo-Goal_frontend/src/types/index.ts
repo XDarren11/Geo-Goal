@@ -36,6 +36,7 @@ export interface League {
   name: string
   description?: string
   managerId?: number
+  logoUrl?: string | null
   teams?: Team[]
 }
 
@@ -212,6 +213,7 @@ export interface Player {
   playerName?: string | null
   jerseyNumber?: number | null
   preferredPosition?: string | null
+  avatarUrl?: string | null
 }
 
 export interface AdminUser {

@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import {League} from "../models/League";
 import {Team} from "../models/Team";
 import {User} from "../models/User";
@@ -8,6 +9,8 @@ import {MatchGenerator} from "../utils/MatchGenerator";
 import {AppError} from "../types/errors";
 import {NotificationService} from "./NotificationService";
 import {AuditService} from "./AuditService";
+import fs from "fs";
+import path from "path";
 
 export class LeagueService {
   private static buildRoundDate(
@@ -419,6 +422,44 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       );
     }
 
+    // Verificar que ningún jugador del equipo ya esté en otro equipo de esta liga
+    const teamMembers = await TeamMember.findAll({
+      where: { teamId: team.id },
+      attributes: ["userId"],
+    });
+
+    if (teamMembers.length > 0) {
+      const memberUserIds = teamMembers.map((m) => m.userId);
+
+      // Obtener equipos que ya están en esta liga (excepto este equipo)
+      const teamsInLeague = await Team.findAll({
+        where: { leagueId: league.id, id: { [Op.ne]: team.id } },
+        attributes: ["id", "name"],
+      });
+
+      if (teamsInLeague.length > 0) {
+        const teamsInLeagueIds = teamsInLeague.map((t) => t.id);
+
+        const conflictingMember = await TeamMember.findOne({
+          where: {
+            userId: { [Op.in]: memberUserIds },
+            teamId: { [Op.in]: teamsInLeagueIds },
+          },
+          include: [{ model: User, attributes: ["name"] }],
+        });
+
+        if (conflictingMember) {
+          const conflictTeam = teamsInLeague.find(
+            (t) => t.id === conflictingMember.teamId
+          );
+          throw new AppError(
+            409,
+            `Un jugador del equipo ya pertenece a otro equipo de esta liga (${conflictTeam?.name ?? "equipo rival"})`
+          );
+        }
+      }
+    }
+
     team.leagueId = league.id;
     await team.save();
 
@@ -648,5 +689,22 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       message: "Calendario reestructurado exitosamente",
       newMatchesGenerated: newMatchesToSave.length,
     };
+  }
+
+  static async updateLeagueLogo(
+    leagueId: string,
+    logoFilename: string
+  ): Promise<{ logoUrl: string }> {
+    const league = await League.findByPk(leagueId);
+    if (!league) {
+      throw new AppError(404, "Liga no encontrada");
+    }
+    if (league.logoUrl) {
+      const oldPath = path.resolve("public/uploads", league.logoUrl);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    }
+    league.logoUrl = logoFilename;
+    await league.save();
+    return { logoUrl: logoFilename };
   }
 }

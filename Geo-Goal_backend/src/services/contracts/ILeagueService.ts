@@ -38,4 +38,5 @@ export interface ILeagueService {
     leagueId: string,
     audit: RestructureFixtureAuditDTO
   ): Promise<{ message: string; newMatchesGenerated: number }>;
+  updateLeagueLogo(leagueId: string, logoFilename: string): Promise<{ logoUrl: string }>;
 }

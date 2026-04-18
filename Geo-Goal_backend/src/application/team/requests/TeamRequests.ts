@@ -135,3 +135,15 @@ export class GetTeamDashboardRequest extends TeamReq<unknown> {
     super();
   }
 }
+
+export class UpdatePlayerAvatarRequest extends TeamReq<{ avatarUrl: string }> {
+  readonly requestName = "team.updatePlayerAvatar";
+  constructor(
+    public readonly teamId: string,
+    public readonly userId: number,
+    public readonly avatarFilename: string
+  ) {
+    super();
+  }
+}
+

@@ -69,4 +69,12 @@ export class TeamServiceAdapter implements ITeamService {
   getTeamDashboard(leagueId: string, teamId: string): Promise<unknown> {
     return TeamService.getTeamDashboard(leagueId, teamId);
   }
+
+  updatePlayerAvatar(
+    teamId: string,
+    userId: number,
+    avatarFilename: string
+  ): Promise<{ avatarUrl: string }> {
+    return TeamService.updatePlayerAvatar(teamId, userId, avatarFilename);
+  }
 }
