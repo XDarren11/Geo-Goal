@@ -1,13 +1,13 @@
-import { League } from "../models/League";
-import { Team } from "../models/Team";
-import { User } from "../models/User";
-import { Match } from "../models/Match";
-import { TeamLeagueStat } from "../models/TeamLeagueStat";
-import { TeamMember } from "../models/TeamMember";
-import { MatchGenerator } from "../utils/MatchGenerator";
-import { AppError } from "../types/errors";
-import { NotificationService } from "./NotificationService";
-import { AuditService } from "./AuditService";
+import {League} from "../models/League";
+import {Team} from "../models/Team";
+import {User} from "../models/User";
+import {Match} from "../models/Match";
+import {TeamLeagueStat} from "../models/TeamLeagueStat";
+import {TeamMember} from "../models/TeamMember";
+import {MatchGenerator} from "../utils/MatchGenerator";
+import {AppError} from "../types/errors";
+import {NotificationService} from "./NotificationService";
+import {AuditService} from "./AuditService";
 
 export class LeagueService {
   private static buildRoundDate(
@@ -42,13 +42,13 @@ export class LeagueService {
     });
   }
 
-  static async getLeagueById(leagueId: string, managerId: number) {
+  static async getLeagueById(leagueId: string, _managerId: number) {
     const league = await League.findOne({
-      where: { id: leagueId, managerId },
+      where: { id: leagueId },
       include: [Team],
     });
     if (!league) {
-      throw new AppError(404, "Liga no encontrada o no tienes acceso");
+      throw new AppError(404, "Liga no encontrada");
     }
     return league;
   }
@@ -295,13 +295,12 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       ],
       order: [["roundName", "ASC"]],
     });
-    const groupedMatches = matches.reduce((acc: Record<string, typeof matches>, match) => {
+    return matches.reduce((acc: Record<string, typeof matches>, match) => {
       const round = match.roundName;
       if (!acc[round]) acc[round] = [];
       acc[round].push(match);
       return acc;
     }, {});
-    return groupedMatches;
   }
 
   /**
@@ -327,14 +326,14 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       order: [["roundName", "ASC"], ["id", "ASC"]],
     });
 
-    const list = matches.map((m) => {
+    return matches.map((m) => {
       const home = m.homeTeam as Team & { lat?: number; lng?: number; fieldAddress?: string };
       const hasLocation =
-        home &&
-        home.lat != null &&
-        home.lng != null &&
-        !Number.isNaN(Number(home.lat)) &&
-        !Number.isNaN(Number(home.lng));
+          home &&
+          home.lat != null &&
+          home.lng != null &&
+          !Number.isNaN(Number(home.lat)) &&
+          !Number.isNaN(Number(home.lng));
 
       return {
         id: m.id,
@@ -345,16 +344,14 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
         homeTeamName: home?.name ?? "Local",
         awayTeamName: (m as any).awayTeam?.name ?? "Visitante",
         location: hasLocation
-          ? {
+            ? {
               lat: Number(home.lat),
               lng: Number(home.lng),
               fieldAddress: home.fieldAddress ?? null,
             }
-          : null,
+            : null,
       };
     });
-
-    return list;
   }
 
   static async canUserAccessLeague(

@@ -25,10 +25,14 @@ import UpdateScheduleModal from "@/components/Modals/UpdateScheduleModal";
 import { LeagueInvitationMenu } from "@/components/InvitationMenus/LeagueInvitationMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
+import type { FixtureByRound, League, Match, Team } from "@/types";
+
+type RoundEntry = { round: string; matches: Match[] };
 
 export default function LeagueDetailView() {
   const { leagueId } = useParams<{ leagueId: string }>();
   const id = Number(leagueId);
+  const isValidLeagueId = Number.isInteger(id) && id > 0;
   const queryClient = useQueryClient();
   const { data: currentUser } = useAuth();
 
@@ -37,24 +41,24 @@ export default function LeagueDetailView() {
   const [trainerTeams, setTrainerTeams] = useState<{ id: number; name: string }[]>([]);
   const [searchingTrainer, setSearchingTrainer] = useState(false);
   const [, setSelectedTeamId] = useState<number | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<any>(null);
-  const [selectedScheduleMatch, setSelectedScheduleMatch] = useState<any>(null);
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [selectedScheduleMatch, setSelectedScheduleMatch] = useState<Match | null>(null);
   const [needsRestructure, setNeedsRestructure] = useState(false);
   const [scheduleStartDate, setScheduleStartDate] = useState("");
   const [matchTime, setMatchTime] = useState("20:00");
   const [daysBetweenRounds, setDaysBetweenRounds] = useState(7);
   const [matchDuration, setMatchDuration] = useState<number>(60); 
 
-  const { data: league, isLoading } = useQuery({
+  const { data: league, isLoading, isError, error } = useQuery<League & { teams: Team[] }>({
     queryKey: ["league", id],
     queryFn: () => getLeagueById(id),
-    enabled: Number.isInteger(id),
+    enabled: isValidLeagueId,
   });
 
-  const { data: fixture, isLoading: loadingFixture } = useQuery({
+  const { data: fixture, isLoading: loadingFixture } = useQuery<FixtureByRound>({
     queryKey: ["fixture", id],
     queryFn: () => getFixture(id),
-    enabled: Number.isInteger(id),
+    enabled: isValidLeagueId,
   });
 
 
@@ -75,7 +79,7 @@ export default function LeagueDetailView() {
   const removeTeamMutation = useMutation({
     mutationFn: (teamId: number) => removeTeamFromLeague(id, teamId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["league", id] });
+      void queryClient.invalidateQueries({ queryKey: ["league", id] });
       toast.success("Equipo quitado de la liga");
       setNeedsRestructure(true);
     },
@@ -122,18 +126,12 @@ export default function LeagueDetailView() {
     }
   }
 
-  if (isLoading || !league) {
-    return (
-      <div className="py-8 text-center text-[var(--geo-text-muted)]">
-        Cargando liga…
-      </div>
+  const teams = useMemo(() => league?.teams ?? [], [league?.teams]);
+  const fixtureMatches = useMemo<Match[]>(() => {
+    if (!fixture) return [];
+    return Object.values(fixture).flatMap((roundMatches) =>
+      Array.isArray(roundMatches) ? roundMatches : []
     );
-  }
-
-  const teams = league.teams || [];
-  const fixtureMatches = useMemo(() => {
-    if (!fixture || typeof fixture !== "object") return [] as any[];
-    return Object.values(fixture).flatMap((roundMatches) => (Array.isArray(roundMatches) ? roundMatches : []));
   }, [fixture]);
 
   const dashboardMetrics = useMemo(() => {
@@ -187,9 +185,14 @@ export default function LeagueDetailView() {
 
   const nextMatch = useMemo(() => {
     const now = Date.now();
-    return fixtureMatches
-      .filter((match) => match.date && new Date(match.date).getTime() >= now)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+    const upcomingMatches = fixtureMatches.filter(
+      (match): match is Match & { date: string } =>
+        typeof match.date === "string" && new Date(match.date).getTime() >= now
+    );
+
+    return upcomingMatches.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )[0];
   }, [fixtureMatches]);
 
   const teamCards = useMemo(() => {
@@ -215,11 +218,11 @@ export default function LeagueDetailView() {
     });
   }, [teams, fixtureMatches]);
 
-  const roundEntries = useMemo(() => {
-    if (!fixture || typeof fixture !== "object") return [] as Array<{ round: string; matches: any[] }>;
+  const roundEntries = useMemo<RoundEntry[]>(() => {
+    if (!fixture) return [];
     return Object.entries(fixture).map(([round, matches]) => ({
       round,
-      matches: Array.isArray(matches) ? (matches as any[]) : [],
+      matches: Array.isArray(matches) ? matches : [],
     }));
   }, [fixture]);
 
@@ -291,6 +294,46 @@ export default function LeagueDetailView() {
       heightPct: bucket.count ? Math.max(10, Math.round((bucket.count / maxCount) * 100)) : 6,
     }));
   }, [fixtureMatches]);
+
+  if (!isValidLeagueId) {
+    return (
+      <div className="card-pitch border-amber-500/30 bg-amber-500/10 p-5 text-amber-300">
+        El identificador de la liga no es valido.
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="py-8 text-center text-[var(--geo-text-muted)]">
+        Cargando liga…
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/leagues"
+          className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
+        >
+          ← Volver a ligas
+        </Link>
+        <div className="card-pitch border-red-500/30 bg-red-500/10 p-5 text-red-400">
+          {error instanceof Error ? error.message : "No se pudo cargar el detalle de la liga."}
+        </div>
+      </div>
+    );
+  }
+
+  if (!league) {
+    return (
+      <div className="card-pitch border-amber-500/30 bg-amber-500/10 p-5 text-amber-300">
+        No se encontro la liga solicitada.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 opacity-0 animate-in-up">
@@ -550,7 +593,15 @@ export default function LeagueDetailView() {
                         .map((part) => part[0]?.toUpperCase())
                         .join("")}
                     </div>
-                    <p className="font-semibold text-[var(--geo-text)]">{team.name}</p>
+                    <div>
+                      <p className="font-semibold text-[var(--geo-text)]">{team.name}</p>
+                      <Link
+                        to={`/teams/${team.id}`}
+                        className="text-xs font-semibold text-geo-green hover:text-geo-green-hover"
+                      >
+                        Ver detalle del equipo
+                      </Link>
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -695,7 +746,7 @@ export default function LeagueDetailView() {
                       </div>
                     </div>
                     <ul className="mt-2 space-y-2">
-                      {(matches as any[]).map((m: any) => (
+                      {matches.map((m) => (
                         <li
                           key={m.id}
                           className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-3 text-sm"

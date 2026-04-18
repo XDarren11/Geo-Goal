@@ -8,39 +8,47 @@ import {
   removePlayerFromTeam,
   teamLogoUrl,
 } from "@/api/teamAPI";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "react-toastify";
 import { UserGroupIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { TeamInvitationMenu } from "@/components/InvitationMenus/TeamInvitationMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 import { VictoryAxis, VictoryBar, VictoryChart, VictoryGroup } from "victory";
+import type { Team } from "@/types";
 
 export default function TeamDetailView() {
   const { teamId } = useParams<{ teamId: string }>();
   const id = Number(teamId);
+  const isValidTeamId = Number.isInteger(id) && id > 0;
   const queryClient = useQueryClient();
   const { data: currentUser } = useAuth();
   const [playerEmail, setPlayerEmail] = useState("");
   const [foundPlayer, setFoundPlayer] = useState<{ id: number; name: string; email: string } | null>(null);
   const [searching, setSearching] = useState(false);
+  const backToTeamsPath =
+    currentUser?.role === "player"
+      ? "/my-teams"
+      : currentUser?.role === "coach"
+      ? "/coach/teams"
+      : "/dashboard";
 
-  const { data: team, isLoading } = useQuery({
+  const { data: team, isLoading, isError, error } = useQuery({
     queryKey: ["team", id],
     queryFn: () => getTeamById(id),
-    enabled: Number.isInteger(id),
+    enabled: isValidTeamId,
   });
 
   const { data: players } = useQuery({
     queryKey: ["team-players", id],
     queryFn: () => getPlayersTeam(id),
-    enabled: Number.isInteger(id),
+    enabled: isValidTeamId,
   });
 
   const addPlayerMutation = useMutation({
     mutationFn: (playerId: number) => addPlayerToTeam(id, playerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-players", id] });
+      void queryClient.invalidateQueries({ queryKey: ["team-players", id] });
       setFoundPlayer(null);
       setPlayerEmail("");
       toast.success("Jugador agregado");
@@ -51,7 +59,7 @@ export default function TeamDetailView() {
   const removePlayerMutation = useMutation({
     mutationFn: (playerId: number) => removePlayerFromTeam(id, playerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-players", id] });
+      void queryClient.invalidateQueries({ queryKey: ["team-players", id] });
       toast.success("Jugador eliminado");
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo quitar el jugador")),
@@ -71,7 +79,15 @@ export default function TeamDetailView() {
     }
   }
 
-  if (isLoading || !team) {
+  if (!isValidTeamId) {
+    return (
+      <div className="card-pitch border-amber-500/30 bg-amber-500/10 p-5 text-amber-300">
+        El identificador del equipo no es valido.
+      </div>
+    );
+  }
+
+  if (isLoading) {
     return (
       <div className="py-8 text-center text-[var(--geo-text-muted)]">
         Cargando equipo…
@@ -79,50 +95,71 @@ export default function TeamDetailView() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to={backToTeamsPath}
+          className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
+        >
+          ← Volver a equipos
+        </Link>
+        <div className="card-pitch border-red-500/30 bg-red-500/10 p-5 text-red-400">
+          {error instanceof Error ? error.message : "No se pudo cargar el detalle del equipo."}
+        </div>
+      </div>
+    );
+  }
+
+  if (!team) {
+    return (
+      <div className="card-pitch border-amber-500/30 bg-amber-500/10 p-5 text-amber-300">
+        No se encontro el equipo solicitado.
+      </div>
+    );
+  }
+
   const canManagePlayers = team.trainerId === currentUser?.id;
-  const stats = team.stats ?? {
-    playedMatches: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    points: 0,
-    goalsFor: 0,
-    goalsAgainst: 0,
-    goalDifference: 0,
+  const safeNumber = (value: unknown) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+  const rawStats: Partial<NonNullable<Team["stats"]>> = team?.stats ?? {};
+  const stats = {
+    playedMatches: safeNumber(rawStats.playedMatches),
+    wins: safeNumber(rawStats.wins),
+    draws: safeNumber(rawStats.draws),
+    losses: safeNumber(rawStats.losses),
+    points: safeNumber(rawStats.points),
+    goalsFor: safeNumber(rawStats.goalsFor),
+    goalsAgainst: safeNumber(rawStats.goalsAgainst),
+    goalDifference: safeNumber(rawStats.goalDifference),
   };
 
-  const resultRatio = useMemo(() => {
-    const played = Math.max(1, stats.playedMatches);
-    return {
-      winsPct: Math.round((stats.wins / played) * 100),
-      drawsPct: Math.round((stats.draws / played) * 100),
-      lossesPct: Math.round((stats.losses / played) * 100),
-    };
-  }, [stats.playedMatches, stats.wins, stats.draws, stats.losses]);
+  const played = Math.max(1, stats.playedMatches);
+  const resultRatio = {
+    winsPct: Math.round((stats.wins / played) * 100),
+    drawsPct: Math.round((stats.draws / played) * 100),
+    lossesPct: Math.round((stats.losses / played) * 100),
+  };
 
-  const performanceChartData = useMemo(
-    () => [
-      { x: "GF", y: stats.goalsFor },
-      { x: "GC", y: stats.goalsAgainst },
-      { x: "DG", y: stats.goalDifference },
-      { x: "PTS", y: stats.points },
-    ],
-    [stats.goalsFor, stats.goalsAgainst, stats.goalDifference, stats.points]
-  );
+  const performanceChartData = [
+    { x: "GF", y: stats.goalsFor },
+    { x: "GC", y: stats.goalsAgainst },
+    { x: "DG", y: stats.goalDifference },
+    { x: "PTS", y: stats.points },
+  ];
 
-  const resultsBarsData = useMemo(
-    () => [
-      { x: "G", y: stats.wins },
-      { x: "E", y: stats.draws },
-      { x: "P", y: stats.losses },
-    ],
-    [stats.wins, stats.draws, stats.losses]
-  );
+  const resultsBarsData = [
+    { x: "G", y: stats.wins },
+    { x: "E", y: stats.draws },
+    { x: "P", y: stats.losses },
+  ];
 
   return (
     <div className="space-y-6 opacity-0 animate-in-up">
       <Link
-        to={currentUser?.role === 'player' ? '/my-teams' : '/teams'}
+        to={backToTeamsPath}
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Volver a equipos

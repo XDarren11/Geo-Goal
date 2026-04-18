@@ -169,7 +169,7 @@ export default function Router() {
           <Route
             path="/teams/:teamId"
             element={
-              <RoleGuard allowedRoles={["coach", "player"]}>
+              <RoleGuard allowedRoles={["admin", "coach", "player"]}>
                 <TeamDetailView />
               </RoleGuard>
             }

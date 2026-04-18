@@ -224,7 +224,7 @@ export class TeamService {
         const matchCardsWeight = cardsByMatch.get(match.id) ?? 0;
         const matchMinutes = minutesByMatch.get(match.id) ?? 0;
 
-        const ratingRaw = 6 + matchGoals * 1.2 + matchAssists * 1 + matchMinutes / 120 - matchCardsWeight * 0.3;
+        const ratingRaw = 6 + matchGoals * 1.2 + matchAssists + matchMinutes / 120 - matchCardsWeight * 0.3;
         const rating = Math.min(10, Math.max(1, Number(ratingRaw.toFixed(1))));
 
         return {
@@ -702,6 +702,10 @@ export class TeamService {
   static async getTeamById(teamId: string, userId: number, role: string) {
     let accessTeam: Team | null = null;
 
+    if (role === "admin") {
+      accessTeam = await Team.findByPk(teamId);
+    }
+
     if (role === "coach") {
       accessTeam = await Team.findOne({
         where: { id: teamId, trainerId: userId },
@@ -958,7 +962,9 @@ export class TeamService {
   static async getPlayersTeam(teamId: string, userId: number, role: string) {
     const whereClause: any = { id: teamId };
 
-    if (role === "coach") {
+    if (role === "admin") {
+      // Admin can view roster for any team.
+    } else if (role === "coach") {
       whereClause.trainerId = userId;
     } else if (role === "player") {
       const membership = await TeamMember.findOne({
