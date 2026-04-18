@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import { userSchema, type ConfirmToken, type ForgotPasswordForm, type NewPasswordForm, type RequestConfirmationCodeForm, type UserRegistrationForm } from "@/types";
+import { userSchema, type ConfirmToken, type ForgotPasswordForm, type NewPasswordForm, type RequestConfirmationCodeForm, type UserLoginForm, type UserRegistrationForm } from "@/types";
 import { isAxiosError } from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -39,14 +39,19 @@ export async function requestConfirmationCode(formData: RequestConfirmationCodeF
     }
 }
 
-export async function authenticateUser(formData: UserRegistrationForm | RequestConfirmationCodeForm) {
+export async function authenticateUser(formData: UserLoginForm) {
     try {
         const url = '/auth/login';
-        const { data } = await api.post<string>(url, formData);
-        
-        await AsyncStorage.setItem('AUTH_TOKEN', data);
-        
-        return data;
+        const { data } = await api.post<string | { token?: string }>(url, formData);
+        const token = typeof data === 'string' ? data : data?.token;
+
+        if (!token) {
+            throw new Error('No se recibió token de autenticación');
+        }
+
+        await AsyncStorage.setItem('AUTH_TOKEN', token);
+
+        return token;
     } catch (error) {
         if (isAxiosError(error) && error.response) {
             throw new Error(error.response.data.error);

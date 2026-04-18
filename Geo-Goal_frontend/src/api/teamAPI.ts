@@ -1,10 +1,25 @@
 import api from "@/lib/axios";
-import type { Team, Player } from "@/types";
+import type { Team, Player, CoachDashboardSummary, PlayerDashboardSummary } from "@/types";
 
 const BASE = "/teams";
 
 export async function getMyTeams(): Promise<Team[]> {
   const { data } = await api.get<Team[]>(BASE);
+  return data;
+}
+
+export async function getCoachDashboardSummary(): Promise<CoachDashboardSummary> {
+  const { data } = await api.get<CoachDashboardSummary>(`${BASE}/coach/dashboard`);
+  return data;
+}
+
+export async function getPlayerDashboardSummary(): Promise<PlayerDashboardSummary> {
+  const { data } = await api.get<PlayerDashboardSummary>(`${BASE}/player/dashboard`);
+  return data;
+}
+
+export async function getMyPlayerTeams(): Promise<Team[]> {
+  const { data } = await api.get<Team[]>(`${BASE}/player/me`);
   return data;
 }
 

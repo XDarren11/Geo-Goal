@@ -1,172 +1,146 @@
-import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { getActiveLeagues } from "@/api/teamAPI";
-import { TrophyIcon, UserGroupIcon } from "@heroicons/react/24/outline";
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { KeyIcon, TrophyIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { toast } from 'react-toastify';
+import { useAuth } from '@/hooks/useAuth';
+import { getMyTeams } from '@/api/teamAPI';
+import { leagueInvitationAPI } from '@/api/invitationAPI';
+import ErrorMessage from '@/components/ErrorMessage';
+import { getApiErrorMessage } from '@/utils/getApiErrorMessage';
 
-export default function CoachActiveLeaguesView() {
-  const { data: leagues, isLoading, isError } = useQuery({
-    queryKey: ["coachActiveLeagues"],
-    queryFn: getActiveLeagues,
+export default function JoinLeagueView() {
+  const navigate = useNavigate();
+  const { data: currentUser, isLoading: loadingUser } = useAuth();
+  const isReferee = currentUser?.role === 'referee';
+  const [code, setCode] = useState('');
+  const [teamId, setTeamId] = useState('');
+  const [localError, setLocalError] = useState('');
+
+  const { data: teams = [], isLoading: loadingTeams } = useQuery({
+    queryKey: ['my-teams', currentUser?.id],
+    queryFn: getMyTeams,
+    enabled: !!currentUser?.id && !isReferee,
   });
 
-  const getTeamLogoUrl = (logoUrl: string | null, teamName: string) => {
-    if (logoUrl) {
-      return `http://localhost:4000/uploads/${logoUrl}`;
+  const selectedTeam = useMemo(
+    () => teams.find((team) => String(team.id) === teamId),
+    [teamId, teams]
+  );
+
+  const { mutate: joinLeague, isPending } = useMutation({
+    mutationFn: () =>
+      leagueInvitationAPI.joinByCode(
+        code.trim().toUpperCase(),
+        isReferee ? undefined : Number(teamId)
+      ),
+    onSuccess: () => {
+      toast.success(isReferee ? 'Te uniste a la liga como árbitro' : 'Tu equipo se unió a la liga correctamente');
+      navigate('/dashboard');
+    },
+    onError: (error: any) => {
+      toast.error(getApiErrorMessage(error, 'No se pudo unir a la liga'));
+    },
+  });
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setLocalError('');
+
+    if (!code.trim()) {
+      setLocalError('El código es obligatorio');
+      return;
     }
-    const initials = teamName.substring(0, 2).toUpperCase();
-    return `https://ui-avatars.com/api/?name=${initials}&background=27272a&color=fff&rounded=true&bold=true`;
+
+    if (!isReferee && !teamId) {
+      setLocalError('Debes seleccionar tu equipo');
+      return;
+    }
+
+    joinLeague();
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <p className="text-[var(--geo-text-muted)] animate-pulse">Cargando tus ligas activas…</p>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="rounded-xl border border-red-500/50 bg-red-500/10 p-4 text-center text-red-600 dark:text-red-400">
-        Hubo un error al cargar tus ligas. Por favor, intenta de nuevo.
-      </div>
-    );
-  }
-
   return (
-    <div className="animate-in fade-in duration-300">
-      <Link
-        to="/"
-        className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
-      >
-        ← Volver al Inicio
+    <div className="mx-auto max-w-2xl">
+      <Link to="/dashboard" className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green">
+        ← Volver al inicio
       </Link>
-      
-      <div className="mt-4 flex items-center gap-3">
-        <TrophyIcon className="h-8 w-8 text-geo-green" />
-        <h1 className="text-3xl font-black text-[var(--geo-text)]">
-          Mis Ligas Activas
-        </h1>
-      </div>
-      
-      <p className="mt-2 text-[var(--geo-text-muted)]">
-        Aquí verás los torneos donde tus equipos están compitiendo actualmente.
-      </p>
 
-      {!leagues || leagues.length === 0 ? (
-        <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-8 text-center shadow-sm">
-          <UserGroupIcon className="mx-auto h-12 w-12 text-zinc-600 mb-4" />
-          <p className="text-[var(--geo-text-muted)]">
-            Tus equipos aún no están participando en ninguna liga.
-          </p>
-          <p className="text-sm mt-2 text-zinc-500">
-            Un administrador debe invitar a tus equipos a un torneo.
-          </p>
+      <div className="mt-4 rounded-3xl border border-geo-green/40 bg-[var(--geo-bg-card)] p-8 shadow-[0_0_0_1px_rgba(57,255,20,0.08),0_20px_60px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center gap-3">
+          <TrophyIcon className="h-9 w-9 text-geo-green" />
+          <div>
+            <h1 className="text-3xl font-black text-[var(--geo-text)]">Ingresar código de liga</h1>
+            <p className="mt-1 text-[var(--geo-text-muted)]">
+              Ingresa el código que te compartió el administrador.
+            </p>
+          </div>
         </div>
-      ) : (
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {leagues.map((league: any) => (
-            <div 
-              key={league.id} 
-              className="flex flex-col rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5 shadow-sm transition-all hover:border-geo-green/50 hover:shadow-md"
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          {(loadingUser || (!isReferee && loadingTeams)) && (
+            <p className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3 text-sm text-[var(--geo-text-muted)]">
+              {isReferee ? 'Cargando datos del árbitro…' : 'Cargando datos del entrenador…'}
+            </p>
+          )}
+
+          <div>
+            <label className="flex items-center gap-2 font-semibold text-[var(--geo-text)]">
+              <KeyIcon className="h-5 w-5 text-geo-green" />
+              Código de la liga
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              placeholder="ABC123XY"
+              className="mt-2 w-full rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3 font-mono text-lg tracking-[0.35em] text-[var(--geo-text)] uppercase placeholder:tracking-normal focus:border-geo-green focus:outline-none focus:ring-1 focus:ring-geo-green"
+              maxLength={8}
+              disabled={loadingUser || loadingTeams}
+            />
+            {localError && <ErrorMessage>{localError}</ErrorMessage>}
+          </div>
+
+          {!isReferee && (
+          <div>
+            <label className="flex items-center gap-2 font-semibold text-[var(--geo-text)]">
+              <UserGroupIcon className="h-5 w-5 text-geo-green" />
+              Selecciona tu equipo
+            </label>
+            <select
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3 text-[var(--geo-text)] focus:border-geo-green focus:outline-none focus:ring-1 focus:ring-geo-green"
+              disabled={loadingUser || loadingTeams}
             >
-              {/* Encabezado de la Liga */}
-              <div className="flex items-start justify-between border-b border-zinc-800 pb-4">
-                <div>
-                  <h2 className="text-xl font-black text-geo-green line-clamp-1" title={league.name}>
-                    {league.name}
-                  </h2>
-                  <p className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">
-                    Liga Oficial
-                  </p>
-                </div>
-                <TrophyIcon className="h-6 w-6 text-zinc-600" />
-              </div>
+              <option value="">Selecciona un equipo</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+            {!selectedTeam && teams.length === 0 && (
+              <p className="mt-2 text-sm text-[var(--geo-text-muted)]">
+                Primero debes crear un equipo para poder unirte a una liga con código.
+              </p>
+            )}
+          </div>
+          )}
 
-              {/* Descripción de la liga */}
-              {league.description && (
-                <p className="mt-4 text-sm text-[var(--geo-text-muted)] line-clamp-2 min-h-[40px]">
-                  {league.description}
-                </p>
-              )}
-
-              {/* Sección de Equipos Participantes de este Coach */}
-              <div className="mt-5 flex-1 rounded-lg bg-zinc-900/50 p-4 border border-zinc-800">
-                <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-3">
-                  Tus Equipos en competencia
-                </p>
-                
-                {league.teams && league.teams.length > 0 ? (
-                  <ul className="space-y-3">
-                    {league.teams.map((team: any) => (
-                      <li key={team.id} className="flex items-center gap-3">
-                        <img 
-                          src={getTeamLogoUrl(team.logoUrl, team.name)} 
-                          alt={`Logo de ${team.name}`}
-                          className="h-8 w-8 rounded-full object-cover border border-zinc-700 bg-zinc-800"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${team.name.substring(0, 2)}&background=27272a&color=fff&rounded=true`;
-                          }}
-                        />
-                        <span className="font-semibold text-[var(--geo-text)] text-sm">
-                          {team.name}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-zinc-500 italic">No hay equipos listados.</p>
-                )}
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                 <Link
-                  to={`/league/${league.id}/standings`}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 py-2 text-center text-sm font-bold text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
-                 >
-                   Tabla
-                 </Link>
-                 <Link
-                  to={`/leagues/${league.id}/results`}
-                  className="rounded-lg border border-geo-green/30 bg-geo-green/10 py-2 text-center text-sm font-bold text-geo-green hover:bg-geo-green/20 transition-colors"
-                 >
-                   Resultados
-                 </Link>
-              </div>
-
-              {/* Botón(es) de Estadísticas Dinámico */}
-              <div className="mt-3">
-                {league.teams?.length === 1 ? (
-                  <Link
-                    to={`/leagues/${league.id}/teams/${league.teams[0].id}/dashboard`}
-                    className="block w-full rounded-lg border border-blue-500/30 bg-blue-500/10 py-2 text-center text-sm font-bold text-blue-400 hover:bg-blue-500/20 transition-colors"
-                  >
-                    Estadísticas del equipo
-                  </Link>
-                ) : league.teams?.length > 1 ? (
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3">
-                    <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                      Ver estadísticas por equipo:
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {league.teams.map((team: any) => (
-                        <Link
-                          key={team.id}
-                          to={`/leagues/${league.id}/teams/${team.id}/dashboard`}
-                          className="truncate rounded border border-blue-500/30 bg-blue-500/5 py-1.5 px-2 text-center text-xs font-bold text-blue-400 hover:bg-blue-500/20 transition-colors"
-                          title={`Estadísticas de ${team.name}`}
-                        >
-                          {team.name}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+          <button
+            type="submit"
+            disabled={
+              isPending ||
+              loadingUser ||
+              (!isReferee && (loadingTeams || teams.length === 0))
+            }
+            className="w-full rounded-xl bg-geo-green py-3.5 font-bold text-geo-black transition-colors hover:bg-geo-green-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPending ? (isReferee ? 'Uniéndote…' : 'Uniendo equipo…') : 'Unir a liga'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

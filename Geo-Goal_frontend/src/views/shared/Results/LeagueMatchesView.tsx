@@ -1,7 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getLeagueMatches } from "@/api/leagueAPI";
+import { getLeagueMatches, getMatchAnalytics } from "@/api/leagueAPI";
 import { CalendarDaysIcon } from "@heroicons/react/24/outline";
+import { useMemo, useState } from "react";
+import type { MatchAnalyticsResponse } from "@/types";
 
 export default function LeagueMatchesView() {
   const { leagueId } = useParams<{ leagueId: string }>();
@@ -85,6 +87,39 @@ export default function LeagueMatchesView() {
 
 
 function MatchCard({ match }: { match: any }) {  
+  const [showAnalytics, setShowAnalytics] = useState(false);
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery<MatchAnalyticsResponse>({
+    queryKey: ["match-analytics", match.id],
+    queryFn: () => getMatchAnalytics(Number(match.id)),
+    enabled: showAnalytics && Boolean(match.played),
+    staleTime: 30_000,
+  });
+
+  const playerNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    const rows = analytics?.playerStats ?? [];
+    rows.forEach((row) => {
+      if (!map.has(row.playerId)) {
+        map.set(row.playerId, row.player?.name || `Jugador ${row.playerId}`);
+      }
+    });
+    return map;
+  }, [analytics?.playerStats]);
+
+  const topHeatCells = useMemo(() => {
+    const items = analytics?.heatmaps ?? [];
+    const merged: Record<string, number> = {};
+    items.forEach((entry) => {
+      Object.entries(entry.cells || {}).forEach(([cell, value]) => {
+        merged[cell] = (merged[cell] ?? 0) + value;
+      });
+    });
+    return Object.entries(merged)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [analytics?.heatmaps]);
+
   const getLogoUrl = (team: any) => {
     if (team?.logoUrl) {
       return `http://localhost:4000/uploads/${team.logoUrl}`;
@@ -158,6 +193,107 @@ function MatchCard({ match }: { match: any }) {
           </span>
         </div>
       </div>
+
+      <div className="mt-4 flex justify-end">
+        <span className="mr-auto text-[11px] text-[var(--geo-text-muted)]">
+          {match.date ? new Date(match.date).toLocaleString() : "Sin programar"}
+        </span>
+        {match.played ? (
+          <button
+            type="button"
+            onClick={() => setShowAnalytics((prev) => !prev)}
+            className="mr-4 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:text-geo-green"
+          >
+            {showAnalytics ? "Ocultar analytics" : "Ver analytics"}
+          </button>
+        ) : null}
+        <Link
+          to={`/public/matches/${match.id}/detail`}
+          className="text-xs font-bold uppercase tracking-wider text-geo-green hover:underline"
+        >
+          Ver detalle del partido
+        </Link>
+      </div>
+
+      {showAnalytics ? (
+        <div className="mt-4 rounded-lg border border-white/10 bg-zinc-900/30 p-3">
+          {analyticsLoading ? (
+            <p className="text-xs text-[var(--geo-text-muted)]">Cargando analytics...</p>
+          ) : analytics ? (
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="rounded-md bg-zinc-900/60 p-2 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Jugadores</p>
+                  <p className="text-lg font-black text-geo-green">{analytics.summary.totalPlayersWithStats}</p>
+                </div>
+                <div className="rounded-md bg-zinc-900/60 p-2 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Pases conectados</p>
+                  <p className="text-lg font-black text-geo-green">{analytics.summary.totalPassEdges}</p>
+                </div>
+                <div className="rounded-md bg-zinc-900/60 p-2 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500">Eventos espaciales</p>
+                  <p className="text-lg font-black text-geo-green">{analytics.summary.totalSpatialEvents}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="lg:col-span-1">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-zinc-400">Top jugadores</p>
+                  <ul className="space-y-1 text-xs">
+                    {(analytics.topPlayers || []).slice(0, 5).map((p) => (
+                      <li key={p.id} className="rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-200">
+                        {p.player?.name || `Jugador ${p.playerId}`} · ⭐ {p.rating.toFixed(2)} · G/A {p.goals}/{p.assists}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="lg:col-span-1">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-zinc-400">Red de pases</p>
+                  <ul className="space-y-1 text-xs">
+                    {(analytics.passNetwork || []).slice(0, 5).map((edge, idx) => (
+                      <li key={`${edge.teamId}-${edge.fromPlayerId}-${edge.toPlayerId}-${idx}`} className="rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-200">
+                        {playerNameById.get(edge.fromPlayerId) || `#${edge.fromPlayerId}`} → {playerNameById.get(edge.toPlayerId) || `#${edge.toPlayerId}`} ({edge.count})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="lg:col-span-1">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-widest text-zinc-400">Heatmap (zonas)</p>
+                  <ul className="space-y-1 text-xs">
+                    {topHeatCells.length ? (
+                      topHeatCells.map(([cell, count]) => (
+                        <li key={cell} className="rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-200">
+                          Zona {cell.replace(":", "-")} · {count} acciones
+                        </li>
+                      ))
+                    ) : (
+                      <li className="rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-400">Sin datos de calor</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs font-bold uppercase tracking-widest text-zinc-400">Resumen por equipo</p>
+                <ul className="grid gap-2 md:grid-cols-2 text-xs">
+                  {(analytics.teamStats || []).map((teamRow) => (
+                    <li key={teamRow.id} className="rounded-md bg-zinc-900/50 px-2 py-2 text-zinc-200">
+                      <p className="font-semibold text-geo-green">{teamRow.team?.name || `Equipo ${teamRow.teamId}`}</p>
+                      <p>Goles: {teamRow.goals} · Tiros: {teamRow.shots} · A puerta: {teamRow.shotsOnTarget}</p>
+                      <p>Pases: {teamRow.passesCompleted}/{teamRow.passes}</p>
+                      <p>Rating prom: {teamRow.avgRating.toFixed(2)}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-400">No hay analytics disponibles para este partido.</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

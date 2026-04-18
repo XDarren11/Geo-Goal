@@ -33,8 +33,19 @@ export async function getLeagueMatches(leagueId: number): Promise<FixtureByRound
   return data;
 }
 
+export async function updateMatchSchedule(matchId: number, date: string) {
+  const { data } = await api.patch(`${BASE}/matches/${matchId}/schedule`, { date });
+  return data;
+}
+
 export function leagueLogoUrl(path: string | null | undefined): string {
   if (!path) return "";
   const base = process.env.EXPO_PUBLIC_API_URL || "";
   return `${base.replace(/\/$/, "")}/uploads/${path}`;
+}
+
+// 👇👇👇 ¡AQUÍ ESTÁ LA MAGIA NUEVA PARA CREAR LIGAS! 👇👇👇
+export async function createLeague(body: { name: string; description: string }): Promise<string> {
+  const { data } = await api.post<string>(BASE, body);
+  return data;
 }

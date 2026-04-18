@@ -108,6 +108,7 @@ export default function RegisterView() {
             <option value="">Selecciona</option>
             <option value="player">Soy jugador</option>
             <option value="coach">Soy entrenador</option>
+            <option value="referee">Soy árbitro</option>
             <option value="admin">Organizador</option>
           </select>
           {errors.role && <ErrorMessage>{errors.role.message}</ErrorMessage>}

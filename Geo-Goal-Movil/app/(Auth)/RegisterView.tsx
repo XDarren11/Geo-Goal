@@ -23,7 +23,7 @@ export default function RegisterView() {
     const [showPassword, setShowPassword] = useState(false);
 
     const { control, handleSubmit, watch, reset, formState: { errors } } = useForm<UserRegistrationForm>({
-        defaultValues: { name: '', email: '', password: '', password_confirmation: '' }
+        defaultValues: { name: '', email: '', password: '', password_confirmation: '', role: '' }
     });
 
     const password = watch('password');
@@ -157,6 +157,38 @@ export default function RegisterView() {
                                 )}
                             />
                             {errors.password_confirmation && <Text className="text-red-500 ml-5 mt-1 font-bold">{errors.password_confirmation.message}</Text>}
+                        </View>
+
+                        {/* --- Selector de Rol --- */}
+                        <View className="mb-8">
+                            <Text className="text-geo-green font-bold mb-2 ml-5">Rol</Text>
+                            <Controller
+                                control={control}
+                                name="role"
+                                rules={{ required: 'Selecciona un rol' }}
+                                render={({ field: { onChange, value } }) => (
+                                    <View className="flex-row flex-wrap gap-2">
+                                        {[
+                                            { key: 'player', label: 'Jugador' },
+                                            { key: 'coach', label: 'Entrenador' },
+                                            { key: 'referee', label: 'Árbitro' },
+                                            { key: 'admin', label: 'Organizador' },
+                                        ].map((option) => {
+                                            const active = value === option.key;
+                                            return (
+                                                <TouchableOpacity
+                                                    key={option.key}
+                                                    onPress={() => onChange(option.key)}
+                                                    className={`rounded-xl border px-4 py-2 ${active ? 'border-geo-green bg-geo-green/20' : 'border-gray-700 bg-gray-800'}`}
+                                                >
+                                                    <Text className={`${active ? 'text-geo-green' : 'text-white'} font-bold`}>{option.label}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+                            />
+                            {errors.role && <Text className="text-red-500 ml-5 mt-1 font-bold">{errors.role.message}</Text>}
                         </View>
                         
                         {/* --- Botones --- */}

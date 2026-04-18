@@ -4,6 +4,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { authenticate } from "../middleware/auth";
 import { asyncHandler } from "../middleware/asyncHandler";
+import { loginThrottle } from "../middleware/loginThrottle";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.post(
   body("email").isEmail().withMessage("E-mail no válido"),
   body("role")
     .notEmpty().withMessage("El rol es obligatorio")
-    .isIn(["coach", "player", "admin"])
+    .isIn(["coach", "player", "admin", "referee"])
     .withMessage("Rol no válido"),
   handleInputError,
   asyncHandler(AuthController.createAccount)
@@ -35,6 +36,7 @@ router.post(
 
 router.post(
   "/login",
+  loginThrottle,
   body("email").isEmail().withMessage("E-mail no válido"),
   body("password").notEmpty().withMessage("La contraseña no puede ir vacía"),
   handleInputError,
@@ -77,6 +79,22 @@ router.post(
 );
 
 router.get("/user", authenticate, asyncHandler(AuthController.user));
+
+router.post(
+  "/refresh-token",
+  body("refreshToken").notEmpty().withMessage("refreshToken es obligatorio"),
+  handleInputError,
+  asyncHandler(AuthController.refreshToken)
+);
+
+router.post(
+  "/logout",
+  body("refreshToken").notEmpty().withMessage("refreshToken es obligatorio"),
+  handleInputError,
+  asyncHandler(AuthController.logout)
+);
+
+router.post("/logout-all", authenticate, asyncHandler(AuthController.logoutAll));
 
 
 export default router

@@ -8,14 +8,19 @@ import {
   removePlayerFromTeam,
   teamLogoUrl,
 } from "@/api/teamAPI";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { UserGroupIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { TeamInvitationMenu } from "@/components/InvitationMenus/TeamInvitationMenu";
+import { useAuth } from "@/hooks/useAuth";
+import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
+import { VictoryAxis, VictoryBar, VictoryChart, VictoryGroup } from "victory";
 
 export default function TeamDetailView() {
   const { teamId } = useParams<{ teamId: string }>();
   const id = Number(teamId);
   const queryClient = useQueryClient();
+  const { data: currentUser } = useAuth();
   const [playerEmail, setPlayerEmail] = useState("");
   const [foundPlayer, setFoundPlayer] = useState<{ id: number; name: string; email: string } | null>(null);
   const [searching, setSearching] = useState(false);
@@ -40,7 +45,7 @@ export default function TeamDetailView() {
       setPlayerEmail("");
       toast.success("Jugador agregado");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo agregar el jugador")),
   });
 
   const removePlayerMutation = useMutation({
@@ -49,7 +54,7 @@ export default function TeamDetailView() {
       queryClient.invalidateQueries({ queryKey: ["team-players", id] });
       toast.success("Jugador eliminado");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo quitar el jugador")),
   });
 
   async function handleFindPlayer() {
@@ -60,7 +65,7 @@ export default function TeamDetailView() {
       const p = await findPlayer(id, playerEmail.trim());
       setFoundPlayer(p);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Jugador no encontrado");
+      toast.error(getApiErrorMessage(e, "Jugador no encontrado"));
     } finally {
       setSearching(false);
     }
@@ -74,15 +79,55 @@ export default function TeamDetailView() {
     );
   }
 
+  const canManagePlayers = team.trainerId === currentUser?.id;
+  const stats = team.stats ?? {
+    playedMatches: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    points: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalDifference: 0,
+  };
+
+  const resultRatio = useMemo(() => {
+    const played = Math.max(1, stats.playedMatches);
+    return {
+      winsPct: Math.round((stats.wins / played) * 100),
+      drawsPct: Math.round((stats.draws / played) * 100),
+      lossesPct: Math.round((stats.losses / played) * 100),
+    };
+  }, [stats.playedMatches, stats.wins, stats.draws, stats.losses]);
+
+  const performanceChartData = useMemo(
+    () => [
+      { x: "GF", y: stats.goalsFor },
+      { x: "GC", y: stats.goalsAgainst },
+      { x: "DG", y: stats.goalDifference },
+      { x: "PTS", y: stats.points },
+    ],
+    [stats.goalsFor, stats.goalsAgainst, stats.goalDifference, stats.points]
+  );
+
+  const resultsBarsData = useMemo(
+    () => [
+      { x: "G", y: stats.wins },
+      { x: "E", y: stats.draws },
+      { x: "P", y: stats.losses },
+    ],
+    [stats.wins, stats.draws, stats.losses]
+  );
+
   return (
-    <div>
+    <div className="space-y-6 opacity-0 animate-in-up">
       <Link
-        to="/teams"
+        to={currentUser?.role === 'player' ? '/my-teams' : '/teams'}
         className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green"
       >
         ← Volver a equipos
       </Link>
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex items-center gap-4 opacity-0 animate-in-up stagger-1">
         {team.logoUrl ? (
           <img
             src={teamLogoUrl(team.logoUrl)}
@@ -102,12 +147,93 @@ export default function TeamDetailView() {
         </div>
       </div>
 
-      <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
-        <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
-          <UserGroupIcon className="h-5 w-5 text-geo-green" />
-          Jugadores ({players?.length ?? 0})
-        </h2>
+      <div className="grid gap-4 opacity-0 animate-in-up stagger-2 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Coach" value={team.trainer?.name ?? "—"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Cancha" value={team.fieldAddress ?? "—"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Liga" value={team.league?.name ?? "Sin liga"} accent="text-[var(--geo-text)]" />
+        <MetricCard label="Puntos" value={String(stats.points)} accent="text-geo-green" />
+      </div>
 
+      <div className="grid gap-3 opacity-0 animate-in-up stagger-3 sm:grid-cols-2 lg:grid-cols-5">
+        <StatPill label="PJ" value={stats.playedMatches} />
+        <StatPill label="G" value={stats.wins} />
+        <StatPill label="E" value={stats.draws} />
+        <StatPill label="P" value={stats.losses} />
+        <StatPill label="DG" value={stats.goalDifference} />
+      </div>
+
+      <div className="grid gap-4 opacity-0 animate-in-up stagger-4 xl:grid-cols-2">
+        <section className="card-pitch p-5">
+          <h2 className="font-geo text-xl text-[var(--geo-text)]">Dashboard de rendimiento</h2>
+          <p className="mb-2 text-xs text-[var(--geo-text-muted)]">Comparativo de producción y rendimiento general</p>
+          <VictoryChart domainPadding={{ x: 24, y: 14 }} height={260}>
+            <VictoryAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+                grid: { stroke: "#27272a", strokeDasharray: "4,4" },
+              }}
+            />
+            <VictoryBar
+              data={performanceChartData}
+              style={{ data: { fill: "rgba(57,255,20,0.45)", stroke: "#39FF14", strokeWidth: 1.1 } }}
+              barWidth={24}
+              cornerRadius={5}
+            />
+          </VictoryChart>
+        </section>
+
+        <section className="card-pitch p-5">
+          <h2 className="font-geo text-xl text-[var(--geo-text)]">Balance de resultados</h2>
+          <p className="mb-3 text-xs text-[var(--geo-text-muted)]">Distribucion de victorias, empates y derrotas</p>
+          <VictoryChart domainPadding={{ x: 24, y: 14 }} height={220}>
+            <VictoryAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              style={{
+                axis: { stroke: "#3f3f46" },
+                tickLabels: { fill: "#a1a1aa", fontSize: 10 },
+                grid: { stroke: "#27272a", strokeDasharray: "4,4" },
+              }}
+            />
+            <VictoryGroup colorScale={["#39FF14"]}>
+              <VictoryBar data={resultsBarsData} barWidth={28} cornerRadius={5} />
+            </VictoryGroup>
+          </VictoryChart>
+
+          <div className="mt-2 space-y-2">
+            <ProgressRow label="Victorias" value={resultRatio.winsPct} color="bg-emerald-400" />
+            <ProgressRow label="Empates" value={resultRatio.drawsPct} color="bg-blue-300" />
+            <ProgressRow label="Derrotas" value={resultRatio.lossesPct} color="bg-red-400" />
+          </div>
+        </section>
+      </div>
+
+      <div className="mt-8 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 opacity-0 animate-in-up stagger-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="flex items-center gap-2 font-bold text-[var(--geo-text)]">
+            <UserGroupIcon className="h-5 w-5 text-geo-green" />
+            Jugadores ({players?.length ?? 0})
+          </h2>
+          <TeamInvitationMenu
+            teamId={id}
+            userIsTrainer={team?.trainerId === currentUser?.id}
+          />
+        </div>
+
+        {canManagePlayers ? (
         <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
           <p className="text-sm font-semibold text-[var(--geo-text)]">
             Buscar jugador por email para agregar
@@ -145,6 +271,7 @@ export default function TeamDetailView() {
             </div>
           )}
         </div>
+        ) : null}
 
         {players && players.length > 0 ? (
           <ul className="mt-4 space-y-2">
@@ -154,7 +281,12 @@ export default function TeamDetailView() {
                 className="flex items-center justify-between rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-4 py-3"
               >
                 <span className="font-medium text-[var(--geo-text)]">
-                  {p.name}
+                  {p.playerName || p.name}
+                  {p.jerseyNumber ? (
+                    <span className="ml-2 rounded bg-geo-green/15 px-2 py-0.5 text-xs font-bold text-geo-green">
+                      #{p.jerseyNumber}
+                    </span>
+                  ) : null}
                   <span className="ml-2 text-sm text-[var(--geo-text-muted)]">
                     {p.email}
                   </span>
@@ -162,6 +294,8 @@ export default function TeamDetailView() {
                 <button
                   type="button"
                   onClick={() => removePlayerMutation.mutate(p.id)}
+                  disabled={!canManagePlayers}
+                  hidden={!canManagePlayers}
                   className="text-red-500 hover:text-red-400"
                   title="Quitar del equipo"
                 >
@@ -175,6 +309,38 @@ export default function TeamDetailView() {
             Aún no hay jugadores. Busca por email para agregar.
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div className="card-pitch p-4">
+      <p className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">{label}</p>
+      <p className={`mt-2 text-2xl font-geo ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function StatPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 text-center">
+      <p className="text-xs text-[var(--geo-text-muted)]">{label}</p>
+      <p className="text-xl font-black text-[var(--geo-text)]">{value}</p>
+    </div>
+  );
+}
+
+function ProgressRow({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-[var(--geo-text-muted)]">{label}</span>
+        <span className="font-semibold text-[var(--geo-text)]">{value}%</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/10">
+        <div className={`h-2 rounded-full transition-all duration-700 ${color}`} style={{ width: `${value}%` }} />
       </div>
     </div>
   );

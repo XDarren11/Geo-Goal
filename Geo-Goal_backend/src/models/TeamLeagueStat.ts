@@ -1,6 +1,7 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { Team } from './Team';
 import { League } from './League';
+import { Season } from './Season';
 
 @Table({ tableName: 'team_league_stats' })
 export class TeamLeagueStat extends Model {
@@ -18,6 +19,13 @@ export class TeamLeagueStat extends Model {
 
     @BelongsTo(() => League)
     declare league: League;
+
+    @ForeignKey(() => Season)
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare seasonId: number | null;
+
+    @BelongsTo(() => Season)
+    declare season: Season;
 
     // --- ESTADÍSTICAS ESPECÍFICAS DE ESTA LIGA ---
     @Column({ type: DataType.INTEGER, defaultValue: 0 })

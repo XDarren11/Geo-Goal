@@ -14,13 +14,14 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
-import { useMutation } from '@tanstack/react-query';
-import { authenticateUser } from '@/Api/AuthApi'; 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { authenticateUser, getUser } from '@/Api/AuthApi'; 
 import type { UserLoginForm } from '@/types'; 
 
 export default function LoginScreen() {
     const [showPassword, setShowPassword] = useState(false);
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     // 1. Configuración del Formulario
     const { control, handleSubmit, formState: { errors } } = useForm<UserLoginForm>({
@@ -32,11 +33,16 @@ export default function LoginScreen() {
 
     // 2. Configuración de la Mutación (TanStack Query)
     const { mutate, isPending } = useMutation({
-        mutationFn: authenticateUser,
+        mutationFn: async (formData: UserLoginForm) => {
+            await authenticateUser(formData);
+            const user = await getUser();
+            return user;
+        },
         onError: (error) => {
             Alert.alert("Error", error.message || "Hubo un error al iniciar sesión");
         },
-        onSuccess: () => {
+        onSuccess: (user) => {
+            queryClient.setQueryData(['user'], user);
             router.replace('/(tabs)/home'); 
         }
     });

@@ -4,7 +4,20 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
-    "dev:api": "nodemon --exec ts-node src/index.ts --api"
+    "dev:api": "nodemon --exec ts-node src/index.ts --api",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:migrate:status": "sequelize-cli db:migrate:status",
+    "db:migration:create": "sequelize-cli migration:generate --name",
+    "db:seed:demo": "node scripts/seed-demo-data.js",
+    "db:seed:massive": "SEED_TARGET_LEAGUES=36 SEED_TARGET_ADMINS=8 SEED_TARGET_COACHES=30 SEED_TARGET_PLAYERS=320 SEED_TARGET_REFEREES=16 SEED_TEAM_ROSTER_SIZE=16 SEED_PLAYED_MATCHES_PER_LEAGUE=10 SEED_FUTURE_MATCHES_PER_LEAGUE=4 SEED_STARTERS_PER_MATCH=11 node scripts/seed-demo-data.js",
+    "db:seed:repair": "node scripts/repair-seed-coverage.js",
+    "seed:check": "node scripts/check-seed-coverage.js",
+    "db:backfill:squads": "node scripts/backfill-team-member-and-match-squads.js",
+    "db:backfill:news": "node scripts/backfill-news.js",
+    "db:backfill:player-stats": "node scripts/backfill-player-match-stats.js",
+    "db:simulate:referee": "node scripts/simulate-referee-telemetry.js"
+
   },
   "keywords": [],
   "author": "",
@@ -40,6 +53,7 @@
     "@types/nodemailer": "^7.0.4",
     "nodemailer": "^7.0.12",
     "nodemon": "^3.1.11",
+    "sequelize-cli": "^6.6.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

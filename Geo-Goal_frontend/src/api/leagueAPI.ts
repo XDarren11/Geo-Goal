@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { League, Team, FixtureByRound } from "@/types";
+import type { League, Team, FixtureByRound, MatchAnalyticsResponse } from "@/types";
 
 const BASE = "/league";
 
@@ -62,11 +62,22 @@ export async function removeTeamFromLeague(
 
 export async function generateFixture(
   leagueId: number,
-  type: "round-robin" | "knockout"
+  type: "round-robin" | "knockout",
+  options?: {
+    scheduleStartDate?: string;
+    matchTime?: string;
+    daysBetweenRounds?: number;
+    matchDuration?: number
+  }
 ): Promise<{ message: string; totalMatches: number }> {
   const { data } = await api.post<{ message: string; totalMatches: number }>(
     `${BASE}/${leagueId}/calculate-fixture`,
-    { type }
+    {
+      type,
+      ...(options?.scheduleStartDate ? { scheduleStartDate: options.scheduleStartDate } : {}),
+      ...(options?.matchTime ? { matchTime: options.matchTime } : {}),
+      ...(options?.daysBetweenRounds != null ? { daysBetweenRounds: options.daysBetweenRounds } : {}),
+    }
   );
   return data;
 }
@@ -106,6 +117,14 @@ export const updateMatchScore = async (
   return data;
 };
 
+export const updateMatchSchedule = async (
+  matchId: number,
+  date: string
+) => {
+  const { data } = await api.patch(`/league/matches/${matchId}/schedule`, { date });
+  return data;
+};
+
 export const getStandings = async (leagueId: number) => {
   const { data } = await api.get(`${BASE}/${leagueId}/standings`); 
   return data;
@@ -120,3 +139,8 @@ export const getLeagueMatches = async (leagueId: number) => {
   const { data } = await api.get(`${BASE}/${leagueId}/matches`);
   return data;
 };
+
+export async function getMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
+  const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
+  return data;
+}

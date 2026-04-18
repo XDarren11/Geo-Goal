@@ -28,7 +28,7 @@ export const userSchema = authSchema.pick({
 })
 
 export type User = z.infer<typeof userSchema>
-export type Role = 'admin' | 'coach' | 'player'
+export type Role = 'admin' | 'coach' | 'player' | 'referee'
 
 // League
 export interface League {
@@ -49,6 +49,7 @@ export interface Team {
   logoUrl?: string | null
   leagueId?: number | null
   trainerId?: number
+  league?: Pick<League, 'id' | 'name'>
 }
 
 // Match
@@ -66,10 +67,90 @@ export interface Match {
   awayTeam?: Team
 }
 
+export interface MatchDetailLineupEntry {
+  userId?: number
+  name?: string
+  number?: number
+  position?: string
+  [key: string]: unknown
+}
+
+export interface PublicMatchDetail {
+  matchId?: number
+  kickoffTime?: string | null
+  durationMinutes?: number
+  endTime?: string | null
+  matchDay?: string | null
+  homeStartingXI?: MatchDetailLineupEntry[]
+  awayStartingXI?: MatchDetailLineupEntry[]
+  homeBench?: MatchDetailLineupEntry[]
+  awayBench?: MatchDetailLineupEntry[]
+  referee?: string | null
+  weather?: string | null
+  attendance?: number | null
+  notes?: string | null
+}
+
+export interface PublicMatchDetailResponse {
+  match: Match
+  detail: PublicMatchDetail
+}
+
+export interface MatchAnalyticsResponse {
+  summary: {
+    totalPlayersWithStats: number
+    totalPassEdges: number
+    totalSpatialEvents: number
+  }
+  passNetwork: Array<{
+    teamId: number
+    fromPlayerId: number
+    toPlayerId: number
+    count: number
+  }>
+  timelineEvents: Array<{
+    id: number
+    teamId?: number | null
+    playerId?: number | null
+    relatedPlayerId?: number | null
+    eventType: string
+    minute: number
+    extraMinute?: number | null
+    xStart?: number | null
+    yStart?: number | null
+    outcome?: string | null
+    source?: string
+    confidence?: number
+  }>
+  trackingFrames: Array<{
+    id: number
+    timestampMs: number
+    period?: string | null
+    ballX?: number | null
+    ballY?: number | null
+    ballZ?: number | null
+    players: Array<Record<string, unknown>>
+    source?: string
+    confidence?: number
+  }>
+}
+
 export type FixtureByRound = Record<string, Match[]>
 
 export interface Player {
   id: number
   name: string
   email: string
+}
+
+export interface NotificationItem {
+  id: number
+  userId: number
+  type: string
+  title: string
+  message: string
+  payload?: Record<string, unknown>
+  readAt?: string | null
+  createdAt?: string
+  updatedAt?: string
 }

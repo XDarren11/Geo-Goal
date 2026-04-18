@@ -8,9 +8,12 @@ type RoleGuardProps = {
 };
 
 export function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
-  const { data: user } = useAuth();
+  const { data: user, isLoading } = useAuth();
   const role = (user?.role as Role) || "";
   const allowed = allowedRoles.includes(role);
-  if (!allowed) return <Navigate to="/" replace />;
+
+  if (isLoading) return null;
+  if (!user) return <Navigate to="/public" replace />;
+  if (!allowed) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
