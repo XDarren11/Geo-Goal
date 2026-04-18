@@ -112,3 +112,21 @@ export const getTeamDashboard = async (leagueId: number, teamId: number) => {
   const { data } = await api.get(`${BASE}/leagues/${leagueId}/teams/${teamId}/dashboard`);
   return data;
 };
+
+export async function updatePlayerAvatar(teamId: number, avatar: File): Promise<{ avatarUrl: string }> {
+  const formData = new FormData();
+  formData.append("avatar", avatar);
+  const { data } = await api.patch<{ avatarUrl: string }>(
+    `${BASE}/${teamId}/member/avatar`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data;
+}
+
+export function avatarUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+}
+

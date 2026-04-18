@@ -14,6 +14,7 @@ import {
   GetTeamByIdRequest,
   GetTeamDashboardRequest,
   RemovePlayerFromTeamRequest,
+  UpdatePlayerAvatarRequest,
   UpdateTeamRequest,
 } from "../requests/TeamRequests";
 
@@ -126,3 +127,13 @@ export class GetTeamDashboardHandler implements RequestHandler<GetTeamDashboardR
     return this.svc.getTeamDashboard(request.leagueId, request.teamId);
   }
 }
+
+export class UpdatePlayerAvatarHandler
+  implements RequestHandler<UpdatePlayerAvatarRequest, { avatarUrl: string }>
+{
+  constructor(private readonly svc: ITeamService) {}
+  handle(request: UpdatePlayerAvatarRequest): Promise<{ avatarUrl: string }> {
+    return this.svc.updatePlayerAvatar(request.teamId, request.userId, request.avatarFilename);
+  }
+}
+

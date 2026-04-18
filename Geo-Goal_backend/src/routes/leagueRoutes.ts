@@ -8,6 +8,7 @@ import { LeagueInvitationController } from "../controllers/LeagueInvitationContr
 import { asyncHandler } from "../middleware/asyncHandler";
 import { MatchController } from "../controllers/MatchController";
 import { MatchDetailController } from "../controllers/MatchDetailController";
+import { uploadLeagueLogo } from "../middleware/upload";
 
 const router = Router();
 
@@ -121,9 +122,18 @@ router.get('/',
  */
 router.get('/:leagueId',
     hasRole('admin'),
-    param('leagueId').isInt().withMessage('ID no v?lido'),
+    param('leagueId').isInt().withMessage('ID no vÃ¡lido'),
     handleInputError,
     asyncHandler(LeagueController.getLeagueById)
+);
+
+// Subir/actualizar logo de liga
+router.patch('/:leagueId/logo',
+    hasRole('admin'),
+    param('leagueId').isInt().withMessage('ID no vÃ¡lido'),
+    handleInputError,
+    uploadLeagueLogo.single('logo'),
+    asyncHandler(LeagueController.updateLeagueLogo)
 );
 
 /**
@@ -428,7 +438,7 @@ router.put('/matches/:matchId/detail',
     body('awayBench').optional().isArray().withMessage('Banca visitante inv?lida'),
     body('homeUnavailable').optional().isArray().withMessage('No disponibles local inv?lido'),
     body('awayUnavailable').optional().isArray().withMessage('No disponibles visitante inv?lido'),
-    body('referee').optional({ nullable: true }).isString().withMessage('ÿÿrbitro inv?lido'),
+    body('referee').optional({ nullable: true }).isString().withMessage('ï¿½ï¿½rbitro inv?lido'),
     body('weather').optional({ nullable: true }).isString().withMessage('Clima inv?lido'),
     body('attendance').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Asistencia inv?lida'),
     body('notes').optional({ nullable: true }).isString().withMessage('Notas inv?lidas'),
@@ -439,7 +449,7 @@ router.put('/matches/:matchId/detail',
 router.post('/matches/:matchId/referee/assign',
     hasRole('admin'),
     param('matchId').isInt().withMessage('ID de partido no v?lido'),
-    body('refereeUserId').isInt().withMessage('ÿÿrbitro no v?lido'),
+    body('refereeUserId').isInt().withMessage('ï¿½ï¿½rbitro no v?lido'),
     body('status').optional().isIn(['assigned', 'checked_in', 'closed']).withMessage('Estado inv?lido'),
     handleInputError,
     asyncHandler(MatchDetailController.assignReferee)

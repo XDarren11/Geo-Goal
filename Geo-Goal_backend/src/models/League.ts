@@ -15,6 +15,9 @@ export class League extends Model {
     @Column({ type: DataType.STRING })
     declare description: string;
 
+    @Column({ type: DataType.STRING, allowNull: true })
+    declare logoUrl: string | null;
+
     // Dueño de la Liga (Admin)
     @ForeignKey(() => User)
     @Column({ type: DataType.INTEGER })

@@ -15,6 +15,7 @@ import {
   GetTrainerTeamsRequest,
   RemoveTeamFromLeagueRequest,
   RestructureLeagueFixtureRequest,
+  UpdateLeagueLogoRequest,
   UpdateLeagueRequest,
 } from "../requests/LeagueRequests";
 
@@ -184,3 +185,14 @@ export class RestructureLeagueFixtureHandler
     return this.leagueService.restructureFixture(request.leagueId, request.audit);
   }
 }
+
+export class UpdateLeagueLogoHandler
+  implements RequestHandler<UpdateLeagueLogoRequest, { logoUrl: string }>
+{
+  constructor(private readonly leagueService: ILeagueService) {}
+
+  handle(request: UpdateLeagueLogoRequest): Promise<{ logoUrl: string }> {
+    return this.leagueService.updateLeagueLogo(request.leagueId, request.logoFilename);
+  }
+}
+

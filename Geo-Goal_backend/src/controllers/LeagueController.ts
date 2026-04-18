@@ -16,6 +16,7 @@ import {
   GetTrainerTeamsRequest,
   RemoveTeamFromLeagueRequest,
   RestructureLeagueFixtureRequest,
+  UpdateLeagueLogoRequest,
   UpdateLeagueRequest,
 } from "../application/league/requests/LeagueRequests";
 
@@ -146,6 +147,19 @@ export class LeagueController {
         ip: req.ip,
         userAgent: req.get("user-agent") ?? null,
       })
+    );
+    res.json(data);
+  };
+
+  static updateLeagueLogo = async (req: Request, res: Response): Promise<void> => {
+    const { leagueId } = req.params;
+    const logoFilename = req.file?.filename ?? null;
+    if (!logoFilename) {
+      res.status(400).json({ error: "No se recibió ningún archivo" });
+      return;
+    }
+    const data = await leagueMediator.send(
+      new UpdateLeagueLogoRequest(leagueId, logoFilename)
     );
     res.json(data);
   };

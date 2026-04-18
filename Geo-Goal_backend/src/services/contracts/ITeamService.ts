@@ -29,4 +29,5 @@ export interface ITeamService {
   ): Promise<string>;
   getCoachActiveLeagues(trainerId: number): Promise<unknown>;
   getTeamDashboard(leagueId: string, teamId: string): Promise<unknown>;
+  updatePlayerAvatar(teamId: string, userId: number, avatarFilename: string): Promise<{ avatarUrl: string }>;
 }

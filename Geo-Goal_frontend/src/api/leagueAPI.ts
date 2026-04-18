@@ -87,11 +87,14 @@ export async function getFixture(leagueId: number): Promise<FixtureByRound> {
   return data;
 }
 
-export function leagueLogoUrl(path: string | null | undefined): string {
-  if (!path) return "";
+export function leagueLogoUrl(logoPath: string | null | undefined): string {
+  if (!logoPath) return "";
   const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return `${base.replace(/\/$/, "")}/uploads/${logoPath}`;
 }
+
+// Alias semántico para uso en LeagueDetail
+export const leagueLogoFullUrl = leagueLogoUrl;
 
 
 
@@ -102,8 +105,13 @@ export const updateMatchScore = async (
   homePenaltiesScore?: number,
   awayPenaltiesScore?: number 
 ) => {
-  const payload: any = { 
-    homeScore: Number(homeScore), 
+  const payload: {
+    homeScore: number;
+    awayScore: number;
+    homePenaltiesScore?: number;
+    awayPenaltiesScore?: number;
+  } = {
+    homeScore: Number(homeScore),
     awayScore: Number(awayScore) 
   };
   
@@ -142,5 +150,16 @@ export const getLeagueMatches = async (leagueId: number) => {
 
 export async function getMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
   const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
+  return data;
+}
+
+export async function updateLeagueLogo(leagueId: number, logo: File): Promise<{ logoUrl: string }> {
+  const formData = new FormData();
+  formData.append("logo", logo);
+  const { data } = await api.patch<{ logoUrl: string }>(
+    `${BASE}/${leagueId}/logo`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
   return data;
 }

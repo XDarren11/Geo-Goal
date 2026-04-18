@@ -15,6 +15,7 @@ import {
   GetTeamByIdRequest,
   GetTeamDashboardRequest,
   RemovePlayerFromTeamRequest,
+  UpdatePlayerAvatarRequest,
   UpdateTeamRequest,
 } from "../application/team/requests/TeamRequests";
 
@@ -124,6 +125,20 @@ export class TeamController {
   static getTeamDashboard = async (req: Request, res: Response): Promise<void> => {
     const { leagueId, teamId } = req.params;
     const data = await teamMediator.send(new GetTeamDashboardRequest(leagueId, teamId));
+    res.json(data);
+  };
+
+  static updatePlayerAvatar = async (req: Request, res: Response): Promise<void> => {
+    const { id: teamId } = req.params;
+    const userId = req.user!.id;
+    const avatarFilename = req.file?.filename ?? null;
+    if (!avatarFilename) {
+      res.status(400).json({ error: "No se recibió ningún archivo" });
+      return;
+    }
+    const data = await teamMediator.send(
+      new UpdatePlayerAvatarRequest(teamId, userId, avatarFilename)
+    );
     res.json(data);
   };
 }
