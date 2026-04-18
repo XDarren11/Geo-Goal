@@ -1,6 +1,7 @@
 import { LeagueInvitation } from "../models/LeagueInvitation";
 import { League } from "../models/League";
 import { Team } from "../models/Team";
+import { TeamMember } from "../models/TeamMember";
 import { LeagueAdmin } from "../models/LeagueAdmin";
 import { AppError } from "../types/errors";
 import { Op } from "sequelize";
@@ -119,7 +120,7 @@ export class LeagueInvitationService {
         throw new AppError(409, "Ya perteneces a la liga como administrador principal");
       }
 
-      const [assignment, created] = await LeagueAdmin.findOrCreate({
+      const [created] = await LeagueAdmin.findOrCreate({
         where: {
           leagueId: invitation.leagueId,
           userId,
@@ -183,6 +184,40 @@ export class LeagueInvitationService {
         409,
         `El entrenador ya dirige otro equipo en esta liga (${coachTeamInLeague.name})`
       );
+    }
+
+    // Verificar que ningún jugador del equipo ya esté en otro equipo de esta liga
+    const teamMembers = await TeamMember.findAll({
+      where: { teamId: team.id },
+      attributes: ["userId"],
+    });
+
+    if (teamMembers.length > 0) {
+      const memberUserIds = teamMembers.map((m) => m.userId);
+      const teamsInLeague = await Team.findAll({
+        where: { leagueId: invitation.leagueId, id: { [Op.ne]: team.id } },
+        attributes: ["id", "name"],
+      });
+
+      if (teamsInLeague.length > 0) {
+        const teamsInLeagueIds = teamsInLeague.map((t) => t.id);
+        const conflictingMember = await TeamMember.findOne({
+          where: {
+            userId: { [Op.in]: memberUserIds },
+            teamId: { [Op.in]: teamsInLeagueIds },
+          },
+        });
+
+        if (conflictingMember) {
+          const conflictTeam = teamsInLeague.find(
+            (t) => t.id === conflictingMember.teamId
+          );
+          throw new AppError(
+            409,
+            `Un jugador del equipo ya pertenece a otro equipo de esta liga (${conflictTeam?.name ?? "equipo rival"})`
+          );
+        }
+      }
     }
 
     // Agregar equipo a la liga
