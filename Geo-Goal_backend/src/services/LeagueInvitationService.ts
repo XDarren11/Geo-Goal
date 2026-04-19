@@ -5,6 +5,7 @@ import { TeamMember } from "../models/TeamMember";
 import { LeagueAdmin } from "../models/LeagueAdmin";
 import { AppError } from "../types/errors";
 import { Op } from "sequelize";
+import { LeagueService } from "./LeagueService";
 
 export class LeagueInvitationService {
   /**
@@ -220,15 +221,13 @@ export class LeagueInvitationService {
       }
     }
 
-    // Agregar equipo a la liga
-    team.leagueId = invitation.leagueId;
-    await team.save();
+    const addTeamMessage = await LeagueService.addTeamToLeague(String(invitation.leagueId), team.id);
 
     // Incrementar contador de usos
     invitation.usesCount += 1;
     await invitation.save();
 
-    return `Equipo ${team.name} se unió a la liga correctamente`;
+    return addTeamMessage;
   }
 
   /**

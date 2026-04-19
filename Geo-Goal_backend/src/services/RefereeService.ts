@@ -1,17 +1,18 @@
-import { Op } from "sequelize";
-import { AppError } from "../types/errors";
-import { LeagueAdmin } from "../models/LeagueAdmin";
-import { League } from "../models/League";
-import { Match } from "../models/Match";
-import { MatchRefereeAssignment } from "../models/MatchRefereeAssignment";
-import { MatchEvent } from "../models/MatchEvent";
-import { MatchTrackingFrame } from "../models/MatchTrackingFrame";
-import { Team } from "../models/Team";
-import { User } from "../models/User";
-import { AuditService } from "./AuditService";
-import { NotificationService } from "./NotificationService";
-import { NewsService } from "./NewsService";
-import { MatchAnalyticsService } from "./MatchAnalyticsService";
+import {Op} from "sequelize";
+import {AppError} from "../types/errors";
+import {LeagueAdmin} from "../models/LeagueAdmin";
+import {League} from "../models/League";
+import {Match} from "../models/Match";
+import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
+import {MatchEvent} from "../models/MatchEvent";
+import {MatchTrackingFrame} from "../models/MatchTrackingFrame";
+import {Season} from "../models/Season";
+import {Team} from "../models/Team";
+import {User} from "../models/User";
+import {AuditService} from "./AuditService";
+import {NotificationService} from "./NotificationService";
+import {NewsService} from "./NewsService";
+import {MatchAnalyticsService} from "./MatchAnalyticsService";
 
 const ALLOWED_EVENTS = new Set([
   "goal",
@@ -82,6 +83,20 @@ function normalizeCoordinate(value: unknown): number | null {
 }
 
 export class RefereeService {
+  private static async ensureActiveSeasonForLeague(leagueId: number): Promise<void> {
+    const activeSeason = await Season.findOne({
+      where: {
+        leagueId,
+        status: "active",
+      },
+      attributes: ["id"],
+    });
+
+    if (!activeSeason) {
+      throw new AppError(409, "Debe existir una temporada activa en la liga para iniciar partidos");
+    }
+  }
+
   private static async ensureLeagueAdmin(leagueId: number, userId: number) {
     const league = await League.findByPk(leagueId, { attributes: ["id", "managerId"] });
     if (!league) {
@@ -205,6 +220,11 @@ export class RefereeService {
       await this.ensureRefereeBelongsToLeague(match.leagueId, input.refereeUserId);
     }
 
+    // Check-in implies operational start of the match flow.
+    if (input.status === "checked_in") {
+      await this.ensureActiveSeasonForLeague(match.leagueId);
+    }
+
     if (!match.date || new Date(match.date).getTime() <= Date.now()) {
       throw new AppError(409, "Solo puedes asignar árbitro a partidos próximos");
     }
@@ -320,10 +340,10 @@ export class RefereeService {
     const end = new Date(now);
     end.setHours(23, 59, 59, 999);
 
-    const assignments = await MatchRefereeAssignment.findAll({
+    return await MatchRefereeAssignment.findAll({
       where: {
         refereeUserId: userId,
-        status: { [Op.in]: ["assigned", "checked_in"] },
+        status: {[Op.in]: ["assigned", "checked_in"]},
       },
       include: [
         {
@@ -335,15 +355,13 @@ export class RefereeService {
             },
           },
           include: [
-            { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
-            { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+            {model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"]},
+            {model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"]},
           ],
         },
       ],
-      order: [[{ model: Match, as: "match" }, "date", "ASC"]],
+      order: [[{model: Match, as: "match"}, "date", "ASC"]],
     });
-
-    return assignments;
   }
 
   static async getRefereeDashboard(userId: number) {
@@ -555,6 +573,7 @@ export class RefereeService {
 
   static async registerEvent(matchId: string, userId: number, input: RegisterEventInput) {
     const match = await this.ensureRefereeOnMatch(Number(matchId), userId);
+    await this.ensureActiveSeasonForLeague(match.leagueId);
 
     if (!ALLOWED_EVENTS.has(input.eventType)) {
       throw new AppError(400, "Tipo de evento no permitido");
@@ -617,6 +636,7 @@ export class RefereeService {
     }
 
     const match = await this.ensureRefereeOnMatch(Number(matchId), userId);
+    await this.ensureActiveSeasonForLeague(match.leagueId);
     const created: MatchEvent[] = [];
 
     for (const eventInput of events) {
@@ -685,6 +705,7 @@ export class RefereeService {
 
   static async registerTrackingFrame(matchId: string, userId: number, input: RegisterTrackingInput) {
     const match = await this.ensureRefereeOnMatch(Number(matchId), userId);
+    await this.ensureActiveSeasonForLeague(match.leagueId);
 
     if (!Array.isArray(input.players)) {
       throw new AppError(400, "players debe ser un arreglo");
@@ -698,7 +719,7 @@ export class RefereeService {
       throw new AppError(400, "timestampMs es obligatorio");
     }
 
-    const frame = await MatchTrackingFrame.create({
+    return await MatchTrackingFrame.create({
       matchId: Number(matchId),
       leagueId: match.leagueId,
       timestampMs: Number(input.timestampMs),
@@ -711,8 +732,6 @@ export class RefereeService {
       confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
       recordedBy: userId,
     });
-
-    return frame;
   }
 
   static async getMatchAnalytics(matchId: number) {

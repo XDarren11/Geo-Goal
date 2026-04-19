@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import { Match } from "../models/Match";
+import { Season } from "../models/Season";
 import { TeamLeagueStat } from "../models/TeamLeagueStat";
 import { MatchDetail } from "../models/MatchDetail";
 import { AppError } from "../types/errors";
@@ -18,6 +19,16 @@ type AuditMeta = {
  * Programación de partidos y actualización de marcador (antes en MatchController).
  */
 export class MatchOperationsService {
+  private static async resolveActiveSeasonIdForLeague(leagueId: number): Promise<number | null> {
+    const activeSeason = await Season.findOne({
+      where: { leagueId, status: "active" },
+      attributes: ["id"],
+      order: [["id", "DESC"]],
+    });
+
+    return activeSeason?.id ?? null;
+  }
+
   private static async updateTeamStats(teamId: number, leagueId: number): Promise<void> {
     const matches = await Match.findAll({
       where: {
@@ -125,6 +136,13 @@ export class MatchOperationsService {
     }
 
     const beforeData = match.toJSON() as Record<string, unknown>;
+
+    if (match.seasonId == null) {
+      const activeSeasonId = await this.resolveActiveSeasonIdForLeague(match.leagueId);
+      if (activeSeasonId != null) {
+        match.seasonId = activeSeasonId;
+      }
+    }
 
     match.date = parsedDate;
     await match.save();
