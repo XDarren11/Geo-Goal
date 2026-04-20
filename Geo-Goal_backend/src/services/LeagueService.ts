@@ -1,8 +1,9 @@
-import { Op } from "sequelize";
+import { Op, Transaction } from "sequelize";
 import {League} from "../models/League";
 import {Team} from "../models/Team";
 import {User} from "../models/User";
 import {Match} from "../models/Match";
+import {Season} from "../models/Season";
 import {TeamLeagueStat} from "../models/TeamLeagueStat";
 import {TeamMember} from "../models/TeamMember";
 import {MatchGenerator} from "../utils/MatchGenerator";
@@ -13,6 +14,178 @@ import fs from "fs";
 import path from "path";
 
 export class LeagueService {
+  private static async resolveActiveSeasonIdForLeague(
+    leagueId: number,
+    transaction?: Transaction
+  ): Promise<number | null> {
+    const activeSeasons = await Season.findAll({
+      where: { leagueId, status: "active" },
+      attributes: ["id"],
+      limit: 2,
+      order: [["id", "DESC"]],
+      transaction,
+    });
+
+    if (activeSeasons.length > 1) {
+      throw new AppError(409, "La liga tiene más de una temporada activa. Corrige esto antes de continuar");
+    }
+
+    return activeSeasons[0]?.id ?? null;
+  }
+
+  private static extractRoundNumber(roundName: string | null | undefined): number {
+    if (!roundName) return 0;
+    const match = roundName.match(/\d+/);
+    if (!match) return 0;
+    const parsed = Number(match[0]);
+    return Number.isInteger(parsed) ? parsed : 0;
+  }
+
+  private static async appendPendingMatchesForNewTeam(
+    leagueId: number,
+    teamId: number,
+    transaction: Transaction
+  ): Promise<{
+    createdCount: number;
+    scheduledMatches: Array<{ id: number; date: Date }>;
+    reason:
+      | "no_fixture_in_league"
+      | "no_rivals"
+      | "already_fully_paired"
+      | "created";
+  }> {
+    const totalLeagueMatches = await Match.count({ where: { leagueId }, transaction });
+    if (totalLeagueMatches === 0) {
+      return { createdCount: 0, scheduledMatches: [], reason: "no_fixture_in_league" };
+    }
+
+    const activeSeasonId = await this.resolveActiveSeasonIdForLeague(leagueId, transaction);
+
+    const activeSeasonMatches =
+      activeSeasonId == null
+        ? 0
+        : await Match.count({
+            where: { leagueId, seasonId: activeSeasonId },
+            transaction,
+          });
+
+    const nullSeasonMatches = await Match.count({
+      where: { leagueId, seasonId: null },
+      transaction,
+    });
+
+    // Select one deterministic fixture scope so "missing rounds" are created in the same scope users already view.
+    let fixtureScopeWhere: Record<string, unknown>;
+    let targetSeasonId: number | null;
+    if (activeSeasonId != null && activeSeasonMatches > 0) {
+      fixtureScopeWhere = { leagueId, seasonId: activeSeasonId };
+      targetSeasonId = activeSeasonId;
+    } else if (nullSeasonMatches > 0) {
+      fixtureScopeWhere = { leagueId, seasonId: null };
+      targetSeasonId = null;
+    } else if (activeSeasonId != null) {
+      fixtureScopeWhere = { leagueId, seasonId: activeSeasonId };
+      targetSeasonId = activeSeasonId;
+    } else {
+      fixtureScopeWhere = { leagueId };
+      targetSeasonId = null;
+    }
+
+    const leagueTeams = await Team.findAll({
+      where: { leagueId },
+      attributes: ["id"],
+      transaction,
+    });
+
+    const rivalTeamIds = leagueTeams
+      .map((t) => t.id)
+      .filter((id) => Number(id) !== Number(teamId));
+
+    if (!rivalTeamIds.length) {
+      return { createdCount: 0, scheduledMatches: [], reason: "no_rivals" };
+    }
+
+    const existingMatches = await Match.findAll({
+      where: {
+        ...fixtureScopeWhere,
+        [Op.or]: [
+          {
+            homeTeamId: teamId,
+            awayTeamId: { [Op.in]: rivalTeamIds },
+          },
+          {
+            awayTeamId: teamId,
+            homeTeamId: { [Op.in]: rivalTeamIds },
+          },
+        ],
+      },
+      attributes: ["homeTeamId", "awayTeamId"],
+      transaction,
+    });
+
+    const alreadyPairedRivals = new Set<number>();
+    existingMatches.forEach((match) => {
+      if (Number(match.homeTeamId) === Number(teamId)) {
+        alreadyPairedRivals.add(Number(match.awayTeamId));
+      }
+      if (Number(match.awayTeamId) === Number(teamId)) {
+        alreadyPairedRivals.add(Number(match.homeTeamId));
+      }
+    });
+
+    const pendingRivals = rivalTeamIds.filter((id) => !alreadyPairedRivals.has(Number(id)));
+    if (!pendingRivals.length) {
+      return { createdCount: 0, scheduledMatches: [], reason: "already_fully_paired" };
+    }
+
+    const fixtureScopeMatches = await Match.findAll({
+      where: fixtureScopeWhere,
+      attributes: ["roundName", "date"],
+      order: [["id", "ASC"]],
+      transaction,
+    });
+
+    let nextRoundNumber =
+      fixtureScopeMatches.reduce(
+        (max, m) => Math.max(max, this.extractRoundNumber(m.roundName)),
+        0
+      ) + 1;
+
+    const datedMatchesMs = fixtureScopeMatches
+      .map((m) => (m.date ? new Date(m.date).getTime() : NaN))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+
+    const lastScheduledDateMs = datedMatchesMs.length
+      ? datedMatchesMs[datedMatchesMs.length - 1]
+      : null;
+    const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+
+    const matchesToCreate = pendingRivals.map((rivalTeamId, index) => ({
+      leagueId,
+      seasonId: targetSeasonId,
+      homeTeamId: teamId,
+      awayTeamId: rivalTeamId,
+      roundName: `Jornada ${nextRoundNumber++}`,
+      played: false,
+      date:
+        lastScheduledDateMs == null
+          ? null
+          : new Date(lastScheduledDateMs + (index + 1) * oneWeekMs),
+    }));
+
+    const createdMatches = await Match.bulkCreate(matchesToCreate, {
+      returning: true,
+      transaction,
+    });
+
+    const scheduledMatches = createdMatches
+      .filter((m) => m.date != null)
+      .map((m) => ({ id: m.id, date: new Date(m.date as Date) }));
+
+    return { createdCount: createdMatches.length, scheduledMatches, reason: "created" };
+  }
+
   private static buildRoundDate(
     scheduleStartDate: string,
     matchTime: string | undefined,
@@ -198,6 +371,8 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
       throw new AppError(404, "Liga no encontrada");
     }
     const teams = league.teams;
+    const activeSeasonId = await this.resolveActiveSeasonIdForLeague(Number(league.id));
+
     if (teams.length < 2) {
       throw new AppError(
         400,
@@ -255,6 +430,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     return {
       date: matchDate,
       leagueId: league.id,
+      seasonId: activeSeasonId,
       homeTeamId: m.home,
       awayTeamId: m.away,
       roundName: m.round,
@@ -396,91 +572,144 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
   }
 
   static async addTeamToLeague(leagueId: string, teamId: number): Promise<string> {
-    const team = await Team.findByPk(teamId);
-    const league = await League.findByPk(leagueId);
-
-    if (!team || !league) {
-      throw new AppError(404, "Equipo o Liga no encontrados");
+    const sequelize = Match.sequelize;
+    if (!sequelize) {
+      throw new AppError(500, "No hay conexión de base de datos disponible");
     }
 
-    if (team.leagueId && team.leagueId !== league.id) {
-      throw new AppError(409, "Este equipo ya pertenece a otra liga");
-    }
+    const result = await sequelize.transaction(async (transaction) => {
+      const league = await League.findByPk(leagueId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      const team = await Team.findByPk(teamId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
 
-    const coachTeamInLeague = await Team.findOne({
-      where: {
-        trainerId: team.trainerId,
-        leagueId: league.id,
-      },
-      attributes: ["id", "name"],
+      if (!team || !league) {
+        throw new AppError(404, "Equipo o Liga no encontrados");
+      }
+
+      if (team.leagueId && team.leagueId !== league.id) {
+        throw new AppError(409, "Este equipo ya pertenece a otra liga");
+      }
+
+      const coachTeamInLeague = await Team.findOne({
+        where: {
+          trainerId: team.trainerId,
+          leagueId: league.id,
+        },
+        attributes: ["id", "name"],
+        transaction,
+      });
+
+      if (coachTeamInLeague && coachTeamInLeague.id !== team.id) {
+        throw new AppError(
+          409,
+          `El entrenador ya dirige otro equipo en esta liga (${coachTeamInLeague.name})`
+        );
+      }
+
+      // Verificar que ningún jugador del equipo ya esté en otro equipo de esta liga
+      const teamMembers = await TeamMember.findAll({
+        where: { teamId: team.id },
+        attributes: ["userId"],
+        transaction,
+      });
+
+      if (teamMembers.length > 0) {
+        const memberUserIds = teamMembers.map((m) => m.userId);
+
+        // Obtener equipos que ya están en esta liga (excepto este equipo)
+        const teamsInLeague = await Team.findAll({
+          where: { leagueId: league.id, id: { [Op.ne]: team.id } },
+          attributes: ["id", "name"],
+          transaction,
+        });
+
+        if (teamsInLeague.length > 0) {
+          const teamsInLeagueIds = teamsInLeague.map((t) => t.id);
+
+          const conflictingMember = await TeamMember.findOne({
+            where: {
+              userId: { [Op.in]: memberUserIds },
+              teamId: { [Op.in]: teamsInLeagueIds },
+            },
+            include: [{ model: User, attributes: ["name"] }],
+            transaction,
+          });
+
+          if (conflictingMember) {
+            const conflictTeam = teamsInLeague.find(
+              (t) => t.id === conflictingMember.teamId
+            );
+            throw new AppError(
+              409,
+              `Un jugador del equipo ya pertenece a otro equipo de esta liga (${conflictTeam?.name ?? "equipo rival"})`
+            );
+          }
+        }
+      }
+
+      team.leagueId = league.id;
+      await team.save({ transaction });
+
+      await TeamLeagueStat.findOrCreate({
+        where: {
+          teamId: team.id,
+          leagueId: league.id,
+        },
+        defaults: {
+          points: 0,
+          gamesPlayed: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          goalDifference: 0,
+        },
+        transaction,
+      });
+
+      const appendResult = await this.appendPendingMatchesForNewTeam(
+        Number(league.id),
+        team.id,
+        transaction
+      );
+
+      return {
+        teamName: team.name,
+        appendedMatches: appendResult.createdCount,
+        scheduledMatches: appendResult.scheduledMatches,
+        appendReason: appendResult.reason,
+      };
     });
 
-    if (coachTeamInLeague && coachTeamInLeague.id !== team.id) {
-      throw new AppError(
-        409,
-        `El entrenador ya dirige otro equipo en esta liga (${coachTeamInLeague.name})`
+    if (result.scheduledMatches.length) {
+      await Promise.all(
+        result.scheduledMatches.map((match) =>
+          NotificationService.notifyMatchScheduled(match.id, match.date)
+        )
       );
     }
 
-    // Verificar que ningún jugador del equipo ya esté en otro equipo de esta liga
-    const teamMembers = await TeamMember.findAll({
-      where: { teamId: team.id },
-      attributes: ["userId"],
-    });
+    const appendedMatches = result.appendedMatches;
 
-    if (teamMembers.length > 0) {
-      const memberUserIds = teamMembers.map((m) => m.userId);
-
-      // Obtener equipos que ya están en esta liga (excepto este equipo)
-      const teamsInLeague = await Team.findAll({
-        where: { leagueId: league.id, id: { [Op.ne]: team.id } },
-        attributes: ["id", "name"],
-      });
-
-      if (teamsInLeague.length > 0) {
-        const teamsInLeagueIds = teamsInLeague.map((t) => t.id);
-
-        const conflictingMember = await TeamMember.findOne({
-          where: {
-            userId: { [Op.in]: memberUserIds },
-            teamId: { [Op.in]: teamsInLeagueIds },
-          },
-          include: [{ model: User, attributes: ["name"] }],
-        });
-
-        if (conflictingMember) {
-          const conflictTeam = teamsInLeague.find(
-            (t) => t.id === conflictingMember.teamId
-          );
-          throw new AppError(
-            409,
-            `Un jugador del equipo ya pertenece a otro equipo de esta liga (${conflictTeam?.name ?? "equipo rival"})`
-          );
-        }
-      }
+    if (appendedMatches > 0) {
+      return `Equipo ${result.teamName} agregado a la liga. Se programaron ${appendedMatches} partidos nuevos sin alterar el fixture existente`;
     }
 
-    team.leagueId = league.id;
-    await team.save();
+    if (result.appendReason === "no_fixture_in_league") {
+      return `Equipo ${result.teamName} agregado a la liga. No se crearon partidos porque la liga aún no tiene fixture generado`;
+    }
 
-    await TeamLeagueStat.findOrCreate({
-      where: {
-        teamId: team.id,
-        leagueId: league.id,
-      },
-      defaults: {
-        points: 0,
-        gamesPlayed: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-      },
-    });
+    if (result.appendReason === "already_fully_paired") {
+      return `Equipo ${result.teamName} agregado a la liga. No se crearon partidos porque ya tenía cruces contra todos los rivales en el fixture actual`;
+    }
 
-    return `Equipo ${team.name} agregado a la liga`;
+    return `Equipo ${result.teamName} agregado a la liga`;
   }
 
   static async getStandings(
@@ -583,6 +812,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
 
     const teams = await Team.findAll({ where: { leagueId } });
     const teamIds = teams.map((t) => t.id);
+    const activeSeasonId = await this.resolveActiveSeasonIdForLeague(Number(leagueId));
 
     if (teamIds.length < 2) {
       throw new AppError(
@@ -592,11 +822,11 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     }
 
     const playedMatches = await Match.findAll({
-      where: { leagueId, played: true },
+      where: { leagueId, seasonId: activeSeasonId, played: true },
     });
 
     await Match.destroy({
-      where: { leagueId, played: false },
+      where: { leagueId, seasonId: activeSeasonId, played: false },
     });
 
     const unplayedPairs: { home: number; away: number }[] = [];
@@ -630,6 +860,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     let currentRoundNum = maxRoundNumber + 1;
     const newMatchesToSave: Array<{
       leagueId: string;
+      seasonId: number | null;
       homeTeamId: number;
       awayTeamId: number;
       roundName: string;
@@ -646,6 +877,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
         if (!teamsPlayingThisRound.has(pair.home) && !teamsPlayingThisRound.has(pair.away)) {
           newMatchesToSave.push({
             leagueId,
+            seasonId: activeSeasonId,
             homeTeamId: pair.home,
             awayTeamId: pair.away,
             roundName: `Jornada ${currentRoundNum}`,
@@ -671,6 +903,7 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     await AuditService.log({
       actorUserId: audit.actorUserId,
       leagueId: Number(leagueId),
+      seasonId: activeSeasonId,
       entityType: "fixture",
       entityId: String(leagueId),
       action: "manual_fix",

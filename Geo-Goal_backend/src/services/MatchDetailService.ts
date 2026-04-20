@@ -1,6 +1,7 @@
 import { AppError } from "../types/errors";
 import { Op } from "sequelize";
 import { Match } from "../models/Match";
+import { Season } from "../models/Season";
 import { MatchDetail } from "../models/MatchDetail";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
@@ -44,6 +45,16 @@ type ParsedSquadEntry = {
 };
 
 export class MatchDetailService {
+  private static async resolveActiveSeasonIdForLeague(leagueId: number): Promise<number | null> {
+    const activeSeason = await Season.findOne({
+      where: { leagueId, status: "active" },
+      attributes: ["id"],
+      order: [["id", "DESC"]],
+    });
+
+    return activeSeason?.id ?? null;
+  }
+
   private static validateLineups(input: UpsertMatchDetailInput): void {
     const checkArray = (value: unknown, label: string, max: number) => {
       if (value === undefined) return;
@@ -479,6 +490,13 @@ export class MatchDetailService {
     }
 
     if (parsedKickoff !== undefined) {
+      if (match.seasonId == null && parsedKickoff != null) {
+        const activeSeasonId = await this.resolveActiveSeasonIdForLeague(match.leagueId);
+        if (activeSeasonId != null) {
+          match.seasonId = activeSeasonId;
+        }
+      }
+
       match.date = parsedKickoff;
       await match.save();
 
