@@ -166,6 +166,8 @@ export interface PublicMatchDetail {
     city?: string | null
     state?: string | null
     country?: string | null
+    lat?: number
+    lng?: number
   } | null
   homeCoachId?: number | null
   awayCoachId?: number | null
