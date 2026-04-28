@@ -61,14 +61,11 @@ export async function getPublicFixtureWithLocations(leagueId: number): Promise<A
 }
 
 export async function getPublicMatchDetail(matchId: number): Promise<PublicMatchDetailResponse> {
+  // Axios ya hace el trabajo duro de convertir el JSON en un objeto de JS
   const { data } = await api.get<PublicMatchDetailResponse>(`${BASE}/matches/${matchId}/detail`);
-
-  return {
-    match: (data as any)?.match,
-    detail: ((data as any)?.detail && typeof (data as any).detail === "object")
-      ? (data as any).detail
-      : {},
-  } as PublicMatchDetailResponse;
+  
+  // Confiamos ciegamente en lo que manda el backend (igualito que en Postman)
+  return data;
 }
 
 export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {

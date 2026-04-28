@@ -374,22 +374,29 @@ export default function DashboardView() {
               ) : coachDashboard?.upcomingMatches.length ? (
                 <ul className="space-y-3">
                   {coachDashboard.upcomingMatches.slice(0, 5).map((match) => (
-                    <li key={match.id} className="rounded-xl border border-white/10 p-3">
-                      <p className="text-xs text-[var(--geo-text-muted)]">{match.leagueName} · {match.roundName}</p>
-                      <p className="font-semibold text-[var(--geo-text)]">{match.teamName} vs {match.opponentName}</p>
-                      <p className="text-xs text-geo-green">{formatDateTime(match.date)}</p>
-                      {match.location?.lat != null && match.location?.lng != null ? (
-                        <div className="mt-2 overflow-hidden rounded-lg border border-white/10">
-                          <iframe
-                            title={`map-${match.id}`}
-                            src={`https://maps.google.com/maps?q=${match.location.lat},${match.location.lng}&z=14&output=embed`}
-                            className="h-28 w-full"
-                            loading="lazy"
-                          />
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-xs text-[var(--geo-text-muted)]">Ubicación pendiente</p>
-                      )}
+                    <li key={match.id} className="group">
+                      {/* Envolvemos el contenido de la tarjeta en un Link */}
+                      <Link 
+                        to={`/public/matches/${match.id}/detail`}
+                        className="block rounded-xl border border-white/10 p-3 transition-colors hover:border-geo-green/50 hover:bg-white/5"
+                      >
+                        <p className="text-xs text-[var(--geo-text-muted)]">{match.leagueName} · {match.roundName}</p>
+                        <p className="font-semibold text-[var(--geo-text)] group-hover:text-geo-green transition-colors">{match.teamName} vs {match.opponentName}</p>
+                        <p className="text-xs text-geo-green">{formatDateTime(match.date)}</p>
+                        
+                        {match.location?.lat != null && match.location?.lng != null ? (
+                          <div className="mt-2 overflow-hidden rounded-lg border border-white/10">
+                            <iframe
+                              title={`map-${match.id}`}
+                              src={`https://maps.google.com/maps?q=${match.location.lat},${match.location.lng}&z=14&output=embed`}
+                              className="h-28 w-full pointer-events-none" 
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-[var(--geo-text-muted)]">Ubicación pendiente</p>
+                        )}
+                      </Link>
                     </li>
                   ))}
                 </ul>

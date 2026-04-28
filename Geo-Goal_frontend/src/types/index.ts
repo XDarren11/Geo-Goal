@@ -94,11 +94,27 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  lat?: number;
+  lng?: number;
+  fieldAddress?: string;
   location?: {
     lat: number
     lng: number
     fieldAddress?: string
   } | null
+
+  detail?: {
+    field?: {
+      id?: number;
+      name?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      lat?: number;
+      lng?: number;
+    }
+  };
 }
 
 export interface MatchDetailLineupEntry {
