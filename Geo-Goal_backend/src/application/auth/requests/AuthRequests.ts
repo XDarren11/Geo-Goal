@@ -4,8 +4,10 @@ import type {
   LoginDTO,
   RefreshTokenDTO,
   UpdatePasswordDTO,
+  ClientCredentialsDTO,
 } from "../dto/AuthDTOs";
 import type { AuthTokens } from "../../../services/AuthService";
+import type { ClientCredentialsResult } from "../../../services/contracts/IAuthService";
 
 abstract class AuthRequest<TResponse> implements Request<TResponse> {
   abstract readonly requestName: string;
@@ -77,6 +79,13 @@ export class LogoutRequest extends AuthRequest<string> {
 export class LogoutAllRequest extends AuthRequest<string> {
   readonly requestName = "auth.logoutAll";
   constructor(public readonly userId: number) {
+    super();
+  }
+}
+
+export class ClientCredentialsRequest extends AuthRequest<ClientCredentialsResult> {
+  readonly requestName = "auth.clientCredentialsGrant";
+  constructor(public readonly payload: ClientCredentialsDTO) {
     super();
   }
 }

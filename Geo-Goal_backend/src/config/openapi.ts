@@ -244,6 +244,48 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/auth/oauth/token": {
+      post: {
+        tags: ["Auth"],
+        summary: "Obtener token M2M (client_credentials)",
+        description: "OAuth 2.0 client credentials grant para clientes máquina-a-máquina.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["grant_type", "client_id", "client_secret"],
+                properties: {
+                  grant_type: { type: "string", example: "client_credentials" },
+                  client_id: { type: "string", format: "uuid", example: "550e8400-e29b-41d4-a716-446655440000" },
+                  client_secret: { type: "string", example: "my-secret-key" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Token generado exitosamente",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    accessToken: { type: "string" },
+                    tokenType: { type: "string", example: "Bearer" },
+                    expiresIn: { type: "integer", example: 3600 },
+                  },
+                },
+              },
+            },
+          },
+          "401": { description: "Credenciales inválidas" },
+          "403": { description: "Cliente inactivo" },
+        },
+      },
+    },
     "/api/public/leagues": {
       get: {
         tags: ["Público"],

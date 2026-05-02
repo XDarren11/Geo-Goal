@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { User } from "../models/User";
-import { JWT_AUDIENCE, JWT_ISSUER } from "../utils/jwt";
+import { Client } from "../models/Client";
+import { JWT_AUDIENCE, JWT_ISSUER, JWT_TYPE_M2M } from "../utils/jwt";
 
 declare global {
   namespace Express {
     interface Request {
       user?: User;
+      client?: Client;
     }
   }
 }
@@ -14,6 +16,11 @@ declare global {
 type JwtPayloadWithId = {
   id: number;
   tokenVersion: number;
+};
+
+type M2MPayload = {
+  type: string;
+  clientId: string;
 };
 
 const unauthorized = (res: Response, message = "No autorizado") =>
@@ -42,8 +49,38 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       algorithms: ["HS256"],
     });
 
+    if (typeof decoded !== "object") {
+      return unauthorized(res, "Token inválido");
+    }
+
+    if ((decoded as M2MPayload).type === JWT_TYPE_M2M) {
+      const payload = decoded as M2MPayload & { permissions: string[]; name: string };
+      if (!payload.clientId) {
+        return unauthorized(res, "Token M2M inválido");
+      }
+
+      const client = await Client.findOne({
+        where: { clientId: payload.clientId },
+        attributes: ["id", "clientId", "name", "active", "permissions"],
+      });
+
+      if (!client || !client.active) {
+        return unauthorized(res, "Cliente inválido o inactivo");
+      }
+
+      req.client = client;
+      req.user = {
+        id: -1,
+        name: client.name,
+        email: `${client.clientId}@m2m.internal`,
+        role: "admin",
+        tokenVersion: 0,
+      } as User;
+
+      return next();
+    }
+
     if (
-      typeof decoded !== "object" ||
       !("id" in decoded) ||
       !("tokenVersion" in decoded) ||
       typeof (decoded as JwtPayloadWithId).id !== "number" ||

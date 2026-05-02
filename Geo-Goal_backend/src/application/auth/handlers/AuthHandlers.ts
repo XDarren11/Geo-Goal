@@ -11,6 +11,7 @@ import {
   RequestConfirmationCodeRequest,
   UpdatePasswordRequest,
   ValidateTokenRequest,
+  ClientCredentialsRequest,
 } from "../requests/AuthRequests";
 
 export class CreateAccountHandler implements RequestHandler<CreateAccountRequest, string> {
@@ -95,5 +96,18 @@ export class LogoutAllHandler implements RequestHandler<LogoutAllRequest, string
 
   handle(request: LogoutAllRequest): Promise<string> {
     return this.authService.revokeAllSessions(request.userId);
+  }
+}
+
+export class ClientCredentialsHandler
+  implements RequestHandler<ClientCredentialsRequest, Awaited<ReturnType<IAuthService["clientCredentialsGrant"]>>>
+{
+  constructor(private readonly authService: IAuthService) {}
+
+  handle(request: ClientCredentialsRequest): ReturnType<IAuthService["clientCredentialsGrant"]> {
+    return this.authService.clientCredentialsGrant(
+      request.payload.clientId,
+      request.payload.clientSecret,
+    );
   }
 }
