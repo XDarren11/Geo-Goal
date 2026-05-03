@@ -3,6 +3,13 @@ import type { League, Team, FixtureByRound, MatchAnalyticsResponse } from "@/typ
 
 const BASE = "/league";
 
+function resolveMediaUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${value}`;
+}
+
 export async function getLeagues(): Promise<League[]> {
   const { data } = await api.get<League[]>(BASE);
   return data;
@@ -13,8 +20,14 @@ export async function getLeagueById(leagueId: number): Promise<League & { teams:
   return data;
 }
 
-export async function createLeague(body: { name: string; description: string }): Promise<string> {
-  const { data } = await api.post<string>(BASE, body);
+export async function createLeague(body: { name: string; description: string; logo?: File }): Promise<string> {
+  const formData = new FormData();
+  formData.append("name", body.name);
+  formData.append("description", body.description);
+  if (body.logo) formData.append("logo", body.logo);
+  const { data } = await api.post<string>(BASE, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 }
 
@@ -88,9 +101,7 @@ export async function getFixture(leagueId: number): Promise<FixtureByRound> {
 }
 
 export function leagueLogoUrl(logoPath: string | null | undefined): string {
-  if (!logoPath) return "";
-  const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${logoPath}`;
+  return resolveMediaUrl(logoPath);
 }
 
 // Alias semántico para uso en LeagueDetail

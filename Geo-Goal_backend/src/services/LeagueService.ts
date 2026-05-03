@@ -10,8 +10,10 @@ import {MatchGenerator} from "../utils/MatchGenerator";
 import {AppError} from "../types/errors";
 import {NotificationService} from "./NotificationService";
 import {AuditService} from "./AuditService";
-import fs from "fs";
-import path from "path";
+import {
+  uploadImageToSupabase,
+  type UploadedImageFile,
+} from "../utils/supabaseStorage";
 
 export class LeagueService {
   private static async resolveActiveSeasonIdForLeague(
@@ -205,9 +207,17 @@ export class LeagueService {
 
   static async createLeague(
     managerId: number,
-    data: { name: string; description: string }
+    data: { name: string; description: string; logoFile?: UploadedImageFile | null }
   ): Promise<string> {
-    const league = new League({ ...data, managerId });
+    const league = new League({
+      name: data.name,
+      description: data.description,
+      managerId,
+    });
+    if (data.logoFile) {
+      const uploadedLogo = await uploadImageToSupabase(data.logoFile, "leagues");
+      league.logoUrl = uploadedLogo.url;
+    }
     await league.save();
     return "Liga Creada Correctamente";
   }
@@ -926,18 +936,15 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
 
   static async updateLeagueLogo(
     leagueId: string,
-    logoFilename: string
+    logoFile: UploadedImageFile
   ): Promise<{ logoUrl: string }> {
     const league = await League.findByPk(leagueId);
     if (!league) {
       throw new AppError(404, "Liga no encontrada");
     }
-    if (league.logoUrl) {
-      const oldPath = path.resolve("public/uploads", league.logoUrl);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
-    league.logoUrl = logoFilename;
+    const uploadedLogo = await uploadImageToSupabase(logoFile, "leagues", league.logoUrl);
+    league.logoUrl = uploadedLogo.url;
     await league.save();
-    return { logoUrl: logoFilename };
+    return { logoUrl: uploadedLogo.url };
   }
 }

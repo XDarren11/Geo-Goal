@@ -3,6 +3,13 @@ import type { Team, Player, CoachDashboardSummary, PlayerDashboardSummary } from
 
 const BASE = "/teams";
 
+function resolveMediaUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${value}`;
+}
+
 export async function getMyTeams(): Promise<Team[]> {
   const { data } = await api.get<Team[]>(BASE);
   return data;
@@ -98,9 +105,7 @@ export async function removePlayerFromTeam(
 }
 
 export function teamLogoUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 
 export const getActiveLeagues = async () => {
@@ -125,8 +130,6 @@ export async function updatePlayerAvatar(teamId: number, avatar: File): Promise<
 }
 
 export function avatarUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 

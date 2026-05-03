@@ -192,7 +192,7 @@ export class UpdateLeagueLogoHandler
   constructor(private readonly leagueService: ILeagueService) {}
 
   handle(request: UpdateLeagueLogoRequest): Promise<{ logoUrl: string }> {
-    return this.leagueService.updateLeagueLogo(request.leagueId, request.logoFilename);
+    return this.leagueService.updateLeagueLogo(request.leagueId, request.logoFile);
   }
 }
 

@@ -1,5 +1,6 @@
 import type { Request } from "../../mediator/Request";
 import type { CreateTeamPayload } from "../../../services/contracts/ITeamService";
+import type { UploadedImageFile } from "../../../utils/supabaseStorage";
 
 abstract class TeamReq<T> implements Request<T> {
   abstract readonly requestName: string;
@@ -59,7 +60,7 @@ export class UpdateTeamRequest extends TeamReq<string> {
   constructor(
     public readonly teamId: string,
     public readonly trainerId: number,
-    public readonly payload: Record<string, unknown> & { logoUrl?: string }
+    public readonly payload: Record<string, unknown> & { logoFile?: UploadedImageFile }
   ) {
     super();
   }
@@ -141,7 +142,7 @@ export class UpdatePlayerAvatarRequest extends TeamReq<{ avatarUrl: string }> {
   constructor(
     public readonly teamId: string,
     public readonly userId: number,
-    public readonly avatarFilename: string
+    public readonly avatarFile: UploadedImageFile
   ) {
     super();
   }

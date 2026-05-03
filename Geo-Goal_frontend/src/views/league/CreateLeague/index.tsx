@@ -12,7 +12,7 @@ type Form = { name: string; description: string };
 
 export default function CreateLeagueView() {
   const navigate = useNavigate();
-  const [_logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<Form>({
     defaultValues: { name: "", description: "" },
@@ -39,11 +39,11 @@ export default function CreateLeagueView() {
         Crear liga
       </h1>
       <p className="mt-2 text-[var(--geo-text-muted)]">
-        Nombre, descripción y logo de la liga (logo próximamente en API).
+        Nombre, descripción y logo de la liga.
       </p>
 
       <form
-        onSubmit={handleSubmit((data) => mutate(data))}
+        onSubmit={handleSubmit((data) => mutate({ ...data, logo: logoFile ?? undefined }))}
         className="card-pitch mt-8 max-w-xl space-y-5 p-6"
       >
         <div>
@@ -74,7 +74,7 @@ export default function CreateLeagueView() {
         </div>
         <div>
           <label className="block text-sm font-semibold text-[var(--geo-text)]">
-            Logo de la liga (próximamente)
+            Logo de la liga (opcional)
           </label>
           <input
             type="file"
@@ -82,6 +82,11 @@ export default function CreateLeagueView() {
             className="mt-1 text-sm text-[var(--geo-text-muted)]"
             onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
           />
+          {logoFile ? (
+            <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
+              Archivo seleccionado: {logoFile.name}
+            </p>
+          ) : null}
         </div>
         <button
           type="submit"

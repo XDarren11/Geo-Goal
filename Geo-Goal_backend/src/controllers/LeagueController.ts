@@ -27,8 +27,12 @@ const leagueMediator = buildLeagueMediator(new LeagueServiceAdapter());
  */
 export class LeagueController {
   static createLeague = async (req: Request, res: Response): Promise<void> => {
+    const logoFile = req.file ?? null;
     const result = await leagueMediator.send(
-      new CreateLeagueRequest(req.user!.id, req.body)
+      new CreateLeagueRequest(req.user!.id, {
+        ...req.body,
+        logoFile,
+      })
     );
     res.send(result);
   };
@@ -153,13 +157,13 @@ export class LeagueController {
 
   static updateLeagueLogo = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
-    const logoFilename = req.file?.filename ?? null;
-    if (!logoFilename) {
+    const logoFile = req.file ?? null;
+    if (!logoFile) {
       res.status(400).json({ error: "No se recibió ningún archivo" });
       return;
     }
     const data = await leagueMediator.send(
-      new UpdateLeagueLogoRequest(leagueId, logoFilename)
+      new UpdateLeagueLogoRequest(leagueId, logoFile)
     );
     res.json(data);
   };

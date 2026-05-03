@@ -48,6 +48,7 @@ router.use(authenticate);
  */
 router.post('/',
     hasRole('admin'),
+    uploadLeagueLogo.single('logo'),
     body('name')
         .notEmpty().withMessage('El nombre de la liga es obligatorio'),
     body('description')

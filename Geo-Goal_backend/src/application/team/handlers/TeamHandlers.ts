@@ -133,7 +133,7 @@ export class UpdatePlayerAvatarHandler
 {
   constructor(private readonly svc: ITeamService) {}
   handle(request: UpdatePlayerAvatarRequest): Promise<{ avatarUrl: string }> {
-    return this.svc.updatePlayerAvatar(request.teamId, request.userId, request.avatarFilename);
+    return this.svc.updatePlayerAvatar(request.teamId, request.userId, request.avatarFile);
   }
 }
 

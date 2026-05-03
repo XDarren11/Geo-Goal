@@ -1,5 +1,6 @@
 import { TeamService } from "./TeamService";
 import type { CreateTeamPayload, ITeamService } from "./contracts/ITeamService";
+import type { UploadedImageFile } from "../utils/supabaseStorage";
 
 export class TeamServiceAdapter implements ITeamService {
   getPlayerDashboard(userId: number): Promise<unknown> {
@@ -29,7 +30,7 @@ export class TeamServiceAdapter implements ITeamService {
   updateTeam(
     teamId: string,
     trainerId: number,
-    payload: Record<string, unknown> & { logoUrl?: string }
+    payload: Record<string, unknown> & { logoFile?: UploadedImageFile }
   ): Promise<string> {
     return TeamService.updateTeam(teamId, trainerId, payload as never);
   }
@@ -73,8 +74,8 @@ export class TeamServiceAdapter implements ITeamService {
   updatePlayerAvatar(
     teamId: string,
     userId: number,
-    avatarFilename: string
+    avatarFile: UploadedImageFile
   ): Promise<{ avatarUrl: string }> {
-    return TeamService.updatePlayerAvatar(teamId, userId, avatarFilename);
+    return TeamService.updatePlayerAvatar(teamId, userId, avatarFile);
   }
 }
