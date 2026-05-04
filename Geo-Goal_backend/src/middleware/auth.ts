@@ -73,6 +73,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         id: -1,
         name: client.name,
         email: `${client.clientId}@m2m.internal`,
+        username: null,
+        confirmed: true,
         role: "admin",
         tokenVersion: 0,
       } as User;
@@ -91,7 +93,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     const payload = decoded as JwtPayloadWithId;
     const user = await User.findByPk(payload.id, {
-      attributes: ["id", "name", "email", "role", "tokenVersion"],
+      attributes: ["id", "name", "email", "username", "confirmed", "role", "tokenVersion"],
     });
 
     if (!user) {

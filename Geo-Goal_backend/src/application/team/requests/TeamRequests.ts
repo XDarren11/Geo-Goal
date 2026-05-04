@@ -148,3 +148,22 @@ export class UpdatePlayerAvatarRequest extends TeamReq<{ avatarUrl: string }> {
   }
 }
 
+export class UpdatePlayerProfileRequest extends TeamReq<{
+  playerName: string | null;
+  jerseyNumber: number | null;
+  avatarUrl: string | null;
+}> {
+  readonly requestName = "team.updatePlayerProfile";
+  constructor(
+    public readonly teamId: string,
+    public readonly userId: number,
+    public readonly payload: {
+      playerName?: string;
+      jerseyNumber?: number | null;
+      avatarFile?: UploadedImageFile | null;
+    }
+  ) {
+    super();
+  }
+}
+

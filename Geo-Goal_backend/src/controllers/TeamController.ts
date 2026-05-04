@@ -16,6 +16,7 @@ import {
   GetTeamDashboardRequest,
   RemovePlayerFromTeamRequest,
   UpdatePlayerAvatarRequest,
+  UpdatePlayerProfileRequest,
   UpdateTeamRequest,
 } from "../application/team/requests/TeamRequests";
 
@@ -139,6 +140,23 @@ export class TeamController {
     const data = await teamMediator.send(
       new UpdatePlayerAvatarRequest(teamId, userId, avatarFile)
     );
+    res.json(data);
+  };
+
+  static updatePlayerProfile = async (req: Request, res: Response): Promise<void> => {
+    const { id: teamId } = req.params;
+    const userId = req.user!.id;
+    const avatarFile = req.file ?? null;
+    const { playerName, jerseyNumber } = req.body;
+
+    const data = await teamMediator.send(
+      new UpdatePlayerProfileRequest(teamId, userId, {
+        playerName,
+        jerseyNumber: jerseyNumber != null ? Number(jerseyNumber) : undefined,
+        avatarFile,
+      })
+    );
+
     res.json(data);
   };
 }

@@ -78,4 +78,12 @@ export class TeamServiceAdapter implements ITeamService {
   ): Promise<{ avatarUrl: string }> {
     return TeamService.updatePlayerAvatar(teamId, userId, avatarFile);
   }
+
+  updatePlayerProfile(
+    teamId: string,
+    userId: number,
+    payload: { playerName?: string; jerseyNumber?: number | null; avatarFile?: UploadedImageFile | null }
+  ): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }> {
+    return TeamService.updatePlayerProfile(teamId, userId, payload);
+  }
 }

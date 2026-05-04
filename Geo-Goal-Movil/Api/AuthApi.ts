@@ -113,6 +113,46 @@ export async function getUser() {
     }
 }
 
+export async function updateAccountUsername(username: string) {
+    try {
+        const { data } = await api.patch('/account/username', { username });
+        return data as { username: string | null };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
+export async function updateAccountPassword(formData: {
+    currentPassword: string;
+    newPassword: string;
+    newPasswordConfirmation: string;
+}) {
+    try {
+        const { data } = await api.patch('/account/password', formData);
+        return data as { message: string };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
+export async function resendAccountConfirmationEmail() {
+    try {
+        const { data } = await api.post('/account/resend-confirmation');
+        return data as { message: string };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
 export async function logout() {
     try {
         await AsyncStorage.removeItem('AUTH_TOKEN');

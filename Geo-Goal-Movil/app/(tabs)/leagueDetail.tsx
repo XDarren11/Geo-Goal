@@ -2,12 +2,13 @@ import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getLeagueById, getLeagueMatches, getStandings, updateMatchSchedule } from '@/Api/leagueAPI';
+import { getLeagueById, getLeagueMatches, getStandings, updateMatchSchedule, leagueLogoUrl } from '@/Api/leagueAPI';
 import { Ionicons } from '@expo/vector-icons';
 import type { FixtureByRound } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import Loader from '@/components/Loader';
 import { getApiErrorMessage } from '@/lib/getApiErrorMessage';
+import { Image } from 'expo-image';
 
 export default function LeagueDetailScreen() {
   const router = useRouter();
@@ -93,9 +94,14 @@ export default function LeagueDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} className="mr-4">
           <Ionicons name="arrow-back" size={24} color="#39FF14" />
         </TouchableOpacity>
-        <View className="flex-1">
+        <View className="flex-1 flex-row items-center gap-3">
+          {effectiveLeague.logoUrl ? (
+            <Image source={{ uri: leagueLogoUrl(effectiveLeague.logoUrl) }} style={{ width: 42, height: 42, borderRadius: 21 }} contentFit="cover" />
+          ) : null}
+          <View className="flex-1">
           <Text className="text-white font-bold text-lg">{effectiveLeague.name}</Text>
           <Text className="text-gray-400 text-xs">{effectiveLeague.teams?.length || 0} equipos</Text>
+          </View>
         </View>
       </View>
 

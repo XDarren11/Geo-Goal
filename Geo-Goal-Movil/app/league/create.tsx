@@ -41,7 +41,7 @@ export default function CreateLeagueView() {
         Crear liga
       </Text>
       <Text className="mt-2 text-gray-400 mb-8">
-        Nombre, descripción y logo de la liga.
+        Nombre y descripción de la liga.
       </Text>
 
       <View className="bg-gray-900 border border-geo-green/30 rounded-xl p-5 mb-10">
@@ -92,17 +92,6 @@ export default function CreateLeagueView() {
           {errors.description && (
             <Text className="text-red-500 text-sm mt-1">{errors.description.message}</Text>
           )}
-        </View>
-
-        {/* Campo visual: Logo (Placeholder) */}
-        <View className="mb-8">
-          <Text className="text-white font-bold mb-2">Logo de la liga (próximamente en API)</Text>
-          <View className="bg-geo-black border border-gray-700 border-dashed rounded-lg p-6 items-center justify-center opacity-60">
-            <Ionicons name="image-outline" size={32} color="#9ca3af" />
-            <Text className="text-gray-400 mt-2 text-center text-sm">
-              La carga de imágenes estará disponible pronto
-            </Text>
-          </View>
         </View>
 
         {/* Botón Submit */}

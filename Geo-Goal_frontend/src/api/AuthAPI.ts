@@ -148,3 +148,43 @@ export async function getUser() {
     throw error;
   }
 }
+
+export async function updateAccountUsername(username: string) {
+  try {
+    const { data } = await api.patch<{ username: string | null }>("/account/username", { username });
+    return data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw error;
+  }
+}
+
+export async function updateAccountPassword(formData: {
+  currentPassword: string;
+  newPassword: string;
+  newPasswordConfirmation: string;
+}) {
+  try {
+    const { data } = await api.patch<{ message: string }>("/account/password", formData);
+    return data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw error;
+  }
+}
+
+export async function resendAccountConfirmationEmail() {
+  try {
+    const { data } = await api.post<{ message: string }>("/account/resend-confirmation");
+    return data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw error;
+  }
+}

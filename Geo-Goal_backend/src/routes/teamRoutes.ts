@@ -59,7 +59,7 @@ router.post(
   "/:id/player/find",
   hasRole("coach"),
   param("id").isNumeric().withMessage("ID del equipo no válido"),
-  body("email").isEmail().withMessage("E-mail no válido"),
+  body("email").isString().trim().notEmpty().withMessage("Debes escribir un correo o username"),
   handleInputError,
   asyncHandler(TeamController.findPlayer)
 );
@@ -98,6 +98,17 @@ router.patch(
   handleInputError,
   uploadAvatar.single("avatar"),
   asyncHandler(TeamController.updatePlayerAvatar)
+);
+
+router.patch(
+  "/:id/member/profile",
+  hasRole("player"),
+  param("id").isInt().withMessage("ID no válido"),
+  body("playerName").optional().isString().trim().notEmpty().withMessage("El nombre de jugador es obligatorio"),
+  body("jerseyNumber").optional().isInt({ min: 1, max: 99 }).withMessage("El dorsal debe ser un número entre 1 y 99"),
+  handleInputError,
+  uploadAvatar.single("avatar"),
+  asyncHandler(TeamController.updatePlayerProfile)
 );
 
 router.get('/leagues/coach/active',

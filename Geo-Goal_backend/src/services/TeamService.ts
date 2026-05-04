@@ -883,7 +883,7 @@ export class TeamService {
   static async findPlayer(
     teamId: string,
     trainerId: number,
-    email: string
+    emailOrUsername: string
   ) {
     const team = await Team.findOne({
       where: { id: teamId, trainerId },
@@ -891,9 +891,15 @@ export class TeamService {
     if (!team) {
       throw new AppError(404, "Equipo no encontrado o no eres el DT");
     }
+    const normalizedSearch = emailOrUsername.trim().replace(/^@+/, "").toLowerCase();
     const player = await User.findOne({
-      where: { email },
-      attributes: ["id", "name", "email"],
+      where: {
+        [Op.or]: [
+          { email: emailOrUsername.trim().toLowerCase() },
+          { username: normalizedSearch },
+        ],
+      },
+      attributes: ["id", "name", "email", "username"],
     });
     if (!player) {
       throw new AppError(404, "Usuario no encontrado");
@@ -1097,15 +1103,67 @@ export class TeamService {
     userId: number,
     avatarFile: UploadedImageFile
   ): Promise<{ avatarUrl: string }> {
+    const result = await this.updatePlayerProfile(teamId, userId, { avatarFile });
+    return { avatarUrl: result.avatarUrl ?? "" };
+  }
+
+  static async updatePlayerProfile(
+    teamId: string,
+    userId: number,
+    payload: {
+      playerName?: string;
+      jerseyNumber?: number | null;
+      avatarFile?: UploadedImageFile | null;
+    }
+  ): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }> {
     const member = await TeamMember.findOne({
       where: { teamId: Number(teamId), userId },
     });
+
     if (!member) {
       throw new AppError(404, "No perteneces a este equipo");
     }
-    const uploadedAvatar = await uploadImageToSupabase(avatarFile, "avatars", member.avatarUrl);
-    member.avatarUrl = uploadedAvatar.url;
+
+    if (typeof payload.playerName === "string") {
+      const normalizedPlayerName = payload.playerName.trim();
+      member.playerName = normalizedPlayerName.length > 0 ? normalizedPlayerName : null;
+    }
+
+    if (payload.jerseyNumber !== undefined) {
+      const normalizedJersey = payload.jerseyNumber === null ? null : Number(payload.jerseyNumber);
+
+      if (normalizedJersey !== null) {
+        if (!Number.isInteger(normalizedJersey) || normalizedJersey < 1 || normalizedJersey > 99) {
+          throw new AppError(400, "El dorsal debe ser un número entre 1 y 99");
+        }
+
+        const conflict = await TeamMember.findOne({
+          where: {
+            teamId: Number(teamId),
+            jerseyNumber: normalizedJersey,
+            userId: { [Op.ne]: userId },
+          },
+        });
+
+        if (conflict) {
+          throw new AppError(409, `El dorsal ${normalizedJersey} ya está en uso en este equipo`);
+        }
+      }
+
+      member.jerseyNumber = normalizedJersey;
+    }
+
+    if (payload.avatarFile) {
+      const uploadedAvatar = await uploadImageToSupabase(payload.avatarFile, "avatars", member.avatarUrl);
+      member.avatarUrl = uploadedAvatar.url;
+    }
+
     await member.save();
-    return { avatarUrl: uploadedAvatar.url };
+
+    return {
+      playerName: member.playerName,
+      jerseyNumber: member.jerseyNumber,
+      avatarUrl: member.avatarUrl,
+    };
   }
 }

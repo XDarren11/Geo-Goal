@@ -32,4 +32,9 @@ export interface ITeamService {
   getCoachActiveLeagues(trainerId: number): Promise<unknown>;
   getTeamDashboard(leagueId: string, teamId: string): Promise<unknown>;
   updatePlayerAvatar(teamId: string, userId: number, avatarFile: UploadedImageFile): Promise<{ avatarUrl: string }>;
+  updatePlayerProfile(
+    teamId: string,
+    userId: number,
+    payload: { playerName?: string; jerseyNumber?: number | null; avatarFile?: UploadedImageFile | null }
+  ): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }>;
 }
