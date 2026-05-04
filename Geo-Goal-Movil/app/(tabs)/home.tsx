@@ -70,6 +70,10 @@ export default function HomeScreen() {
     return new Date(date).toLocaleString();
   };
 
+  const openMatchDetail = (matchId: number) => {
+    router.push(`/(tabs)/matchDetail?id=${matchId}`);
+  };
+
   if (userLoading) {
     return <Loader fullScreen label="Cargando tu sesión..." />;
   }
@@ -153,6 +157,7 @@ export default function HomeScreen() {
                   key={`a-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={m.league?.name || 'Liga'}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -195,6 +200,7 @@ export default function HomeScreen() {
                   key={`c-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={formatDate(m.date)}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -251,6 +257,7 @@ export default function HomeScreen() {
                   key={`p-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={formatDate(m.date)}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -282,6 +289,7 @@ export default function HomeScreen() {
                   key={`r-up-${a.id}`}
                   title={`${a.match?.homeTeam?.name || 'Local'} vs ${a.match?.awayTeam?.name || 'Visitante'}`}
                   subtitle={`${(a.match as any)?.league?.name || 'Liga'} · ${formatDate(a.match?.date)}`}
+                  onPress={() => openMatchDetail(a.matchId)}
                 />
               ))}
             </Section>
@@ -313,6 +321,7 @@ export default function HomeScreen() {
                   key={`r-h-${h.assignmentId}`}
                   title={`${h.match?.homeTeam?.name || 'Local'} vs ${h.match?.awayTeam?.name || 'Visitante'}`}
                   subtitle={`Ev:${h.metrics?.eventsCount ?? 0} Gol:${h.metrics?.goals ?? 0} Tar:${h.metrics?.cards ?? 0} Trk:${h.metrics?.trackingFrames ?? 0}`}
+                  onPress={() => openMatchDetail(h.matchId ?? h.match?.id)}
                 />
               ))}
             </Section>
@@ -393,12 +402,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SimpleRow({ title, subtitle }: { title: string; subtitle?: string }) {
+function SimpleRow({ title, subtitle, onPress }: { title: string; subtitle?: string; onPress?: () => void }) {
+  const Container = onPress ? TouchableOpacity : View;
+
   return (
-    <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2">
-      <Text className="text-white font-bold">{title}</Text>
-      {subtitle ? <Text className="text-gray-400 text-xs mt-1">{subtitle}</Text> : null}
-    </View>
+    <Container onPress={onPress} className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2 active:opacity-90">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-white font-bold">{title}</Text>
+          {subtitle ? <Text className="text-gray-400 text-xs mt-1">{subtitle}</Text> : null}
+        </View>
+        {onPress ? <Ionicons name="chevron-forward" size={16} color="#39FF14" /> : null}
+      </View>
+    </Container>
   );
 }
 

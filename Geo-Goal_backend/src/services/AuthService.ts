@@ -2,11 +2,13 @@ import { User } from "../models/User";
 import Token from "../models/Token";
 import { checkPassword, hashPassword } from "../utils/auth";
 import { generateToken } from "../utils/token";
-import { generateJWT } from "../utils/jwt";
+import { generateJWT, generateM2MJWT } from "../utils/jwt";
 import { AuthEmail } from "../emails/AuthEmail";
 import { AppError } from "../types/errors";
 import { RefreshToken } from "../models/RefreshToken";
 import { generateRefreshToken, hashRefreshToken } from "../utils/refreshToken";
+import { ClientService } from "./ClientService";
+import type { ClientCredentialsResult } from "./contracts/IAuthService";
 
 const VALID_ROLES = ["coach", "player", "admin", "referee"] as const;
 
@@ -286,5 +288,43 @@ export class AuthService {
     );
 
     return "Se cerraron todas las sesiones";
+  }
+
+  static async clientCredentialsGrant(
+    clientId: string,
+    clientSecret: string
+  ): Promise<ClientCredentialsResult> {
+    const client = await ClientService.validateClient(clientId, clientSecret);
+    const defaultExpiresIn = 3600;
+    const expiresIn = process.env.M2M_JWT_EXPIRES_IN
+      ? parseDuration(process.env.M2M_JWT_EXPIRES_IN)
+      : defaultExpiresIn;
+
+    const accessToken = generateM2MJWT({
+      type: "m2m",
+      clientId: client.clientId,
+      name: client.name,
+      permissions: client.permissions,
+    });
+
+    return {
+      accessToken,
+      tokenType: "Bearer",
+      expiresIn,
+    };
+  }
+}
+
+function parseDuration(value: string): number {
+  const match = value.match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return 3600;
+  const num = parseInt(match[1], 10);
+  const unit = match[2];
+  switch (unit) {
+    case "s": return num;
+    case "m": return num * 60;
+    case "h": return num * 3600;
+    case "d": return num * 86400;
+    default: return 3600;
   }
 }

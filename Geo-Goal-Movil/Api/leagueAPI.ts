@@ -3,6 +3,13 @@ import type { League, Team, FixtureByRound, Match } from "@/types";
 
 const BASE = "/league";
 
+function resolveMediaUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = process.env.EXPO_PUBLIC_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${value}`;
+}
+
 export async function getLeagues(): Promise<League[]> {
   const { data } = await api.get<League[]>(BASE);
   return data;
@@ -39,12 +46,9 @@ export async function updateMatchSchedule(matchId: number, date: string) {
 }
 
 export function leagueLogoUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = process.env.EXPO_PUBLIC_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 
-// 👇👇👇 ¡AQUÍ ESTÁ LA MAGIA NUEVA PARA CREAR LIGAS! 👇👇👇
 export async function createLeague(body: { name: string; description: string }): Promise<string> {
   const { data } = await api.post<string>(BASE, body);
   return data;

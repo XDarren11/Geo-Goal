@@ -24,7 +24,9 @@ export const userSchema = authSchema.pick({
     email: true,
     role: true
 }).extend({
-    id: z.number()
+  id: z.number(),
+  username: z.string().nullable().optional(),
+  confirmed: z.boolean().optional()
 })
 
 export type User = z.infer<typeof userSchema>

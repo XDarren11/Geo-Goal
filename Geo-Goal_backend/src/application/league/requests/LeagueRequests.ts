@@ -5,6 +5,7 @@ import type {
   RestructureFixtureAuditDTO,
   UpdateLeagueDTO,
 } from "../dto/LeagueDTOs";
+import type { UploadedImageFile } from "../../../utils/supabaseStorage";
 
 abstract class LeagueRequest<TResponse> implements Request<TResponse> {
   abstract readonly requestName: string;
@@ -168,7 +169,7 @@ export class UpdateLeagueLogoRequest extends LeagueRequest<{ logoUrl: string }> 
   readonly requestName = "league.updateLogo";
   constructor(
     public readonly leagueId: string,
-    public readonly logoFilename: string
+    public readonly logoFile: UploadedImageFile
   ) {
     super();
   }

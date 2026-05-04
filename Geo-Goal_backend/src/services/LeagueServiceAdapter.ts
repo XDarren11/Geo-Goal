@@ -1,5 +1,6 @@
 import { LeagueService } from "./LeagueService";
 import type { ILeagueService } from "./contracts/ILeagueService";
+import type { UploadedImageFile } from "../utils/supabaseStorage";
 import type {
   CreateLeagueDTO,
   GenerateFixtureOptionsDTO,
@@ -92,7 +93,7 @@ export class LeagueServiceAdapter implements ILeagueService {
     return LeagueService.restructureFixture(leagueId, audit);
   }
 
-  updateLeagueLogo(leagueId: string, logoFilename: string): Promise<{ logoUrl: string }> {
-    return LeagueService.updateLeagueLogo(leagueId, logoFilename);
+  updateLeagueLogo(leagueId: string, logoFile: UploadedImageFile): Promise<{ logoUrl: string }> {
+    return LeagueService.updateLeagueLogo(leagueId, logoFile);
   }
 }

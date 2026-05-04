@@ -24,7 +24,9 @@ export const userSchema = authSchema.pick({
     email: true,
     role: true,
 }).extend({
-    id: z.number()
+  id: z.number(),
+  username: z.string().nullable().optional(),
+  confirmed: z.boolean().optional()
 })
 
 export type User = z.infer<typeof userSchema>
@@ -35,6 +37,7 @@ export interface League {
   id: number
   name: string
   description?: string
+  logoUrl?: string | null
   managerId?: number
   teams?: Team[]
 }
@@ -141,6 +144,10 @@ export interface Player {
   id: number
   name: string
   email: string
+  username?: string | null
+  playerName?: string | null
+  jerseyNumber?: number | null
+  avatarUrl?: string | null
 }
 
 export interface NotificationItem {

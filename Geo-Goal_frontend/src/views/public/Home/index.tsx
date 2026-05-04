@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/context/ThemeContext";
 import { getPublicFixture, getPublicLeagues, getPublicNews, getPublicStandings } from "@/api/publicAPI";
 import Logo from "@/components/Logo";
+import MobileDownloadCard from "@/components/MobileDownloadCard";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
@@ -160,6 +161,10 @@ export default function PublicHomeView() {
                 <p className="text-sm text-[var(--geo-text-muted)]">Consulta equipos, ubicaciones y datos públicos.</p>
               </div>
             </div>
+
+            <MobileDownloadCard 
+              apkUrl="/downloads/geo-goal-android.apk"
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="card-pitch p-4">

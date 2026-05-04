@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { Op } from "sequelize";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
@@ -12,8 +10,11 @@ import { MatchDetail } from "../models/MatchDetail";
 import { Notification } from "../models/Notification";
 import { AppError } from "../types/errors";
 import { NewsService } from "./NewsService";
-
-const UPLOADS_DIR = "public/uploads";
+import {
+  deleteSupabaseObject,
+  uploadImageToSupabase,
+  type UploadedImageFile,
+} from "../utils/supabaseStorage";
 
 export class TeamService {
   static async getPlayerDashboard(userId: number) {
@@ -816,17 +817,23 @@ export class TeamService {
       lat: number;
       lng: number;
       fieldAddress: string;
-      logoUrl?: string | null;
+      logoFile?: UploadedImageFile | null;
     }
   ): Promise<string> {
     // Un coach puede tener varios equipos, pero solo uno por liga.
     // La restricción por liga se aplica al momento de inscribir el equipo.
     const team = new Team({
-      ...data,
+      name: data.name,
+      lat: data.lat,
+      lng: data.lng,
+      fieldAddress: data.fieldAddress,
       trainerId,
       leagueId: null,
-      logoUrl: data.logoUrl ?? null,
     });
+    if (data.logoFile) {
+      const uploadedLogo = await uploadImageToSupabase(data.logoFile, "teams");
+      team.logoUrl = uploadedLogo.url;
+    }
     await team.save();
     return "Equipo creado correctamente";
   }
@@ -839,7 +846,7 @@ export class TeamService {
       lat?: number;
       lng?: number;
       fieldAddress?: string;
-      logoUrl?: string | null;
+      logoFile?: UploadedImageFile;
     }
   ): Promise<string> {
     const team = await Team.findOne({
@@ -852,12 +859,9 @@ export class TeamService {
     if (data.lat != null) team.lat = Number(data.lat);
     if (data.lng != null) team.lng = Number(data.lng);
     if (data.fieldAddress != null) team.fieldAddress = data.fieldAddress;
-    if (data.logoUrl !== undefined) {
-      if (team.logoUrl) {
-        const oldPath = path.resolve(UPLOADS_DIR, team.logoUrl);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      team.logoUrl = data.logoUrl ?? null;
+    if (data.logoFile) {
+      const uploadedLogo = await uploadImageToSupabase(data.logoFile, "teams", team.logoUrl);
+      team.logoUrl = uploadedLogo.url;
     }
     await team.save();
     return "Equipo actualizado correctamente";
@@ -871,10 +875,7 @@ export class TeamService {
       throw new AppError(404, "Equipo no encontrado o no eres el DT");
     }
     const name = team.name;
-    if (team.logoUrl) {
-      const oldPath = path.resolve(UPLOADS_DIR, team.logoUrl);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-    }
+    await deleteSupabaseObject(team.logoUrl);
     await team.destroy();
     return `El equipo ${name} ha sido eliminado correctamente`;
   }
@@ -882,7 +883,7 @@ export class TeamService {
   static async findPlayer(
     teamId: string,
     trainerId: number,
-    email: string
+    emailOrUsername: string
   ) {
     const team = await Team.findOne({
       where: { id: teamId, trainerId },
@@ -890,9 +891,15 @@ export class TeamService {
     if (!team) {
       throw new AppError(404, "Equipo no encontrado o no eres el DT");
     }
+    const normalizedSearch = emailOrUsername.trim().replace(/^@+/, "").toLowerCase();
     const player = await User.findOne({
-      where: { email },
-      attributes: ["id", "name", "email"],
+      where: {
+        [Op.or]: [
+          { email: emailOrUsername.trim().toLowerCase() },
+          { username: normalizedSearch },
+        ],
+      },
+      attributes: ["id", "name", "email", "username"],
     });
     if (!player) {
       throw new AppError(404, "Usuario no encontrado");
@@ -1094,22 +1101,69 @@ export class TeamService {
   static async updatePlayerAvatar(
     teamId: string,
     userId: number,
-    avatarFilename: string
+    avatarFile: UploadedImageFile
   ): Promise<{ avatarUrl: string }> {
+    const result = await this.updatePlayerProfile(teamId, userId, { avatarFile });
+    return { avatarUrl: result.avatarUrl ?? "" };
+  }
+
+  static async updatePlayerProfile(
+    teamId: string,
+    userId: number,
+    payload: {
+      playerName?: string;
+      jerseyNumber?: number | null;
+      avatarFile?: UploadedImageFile | null;
+    }
+  ): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }> {
     const member = await TeamMember.findOne({
       where: { teamId: Number(teamId), userId },
     });
+
     if (!member) {
       throw new AppError(404, "No perteneces a este equipo");
     }
-    if (member.avatarUrl) {
-      const fs = await import("fs");
-      const path = await import("path");
-      const oldPath = path.resolve("public/uploads", member.avatarUrl);
-      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+
+    if (typeof payload.playerName === "string") {
+      const normalizedPlayerName = payload.playerName.trim();
+      member.playerName = normalizedPlayerName.length > 0 ? normalizedPlayerName : null;
     }
-    member.avatarUrl = avatarFilename;
+
+    if (payload.jerseyNumber !== undefined) {
+      const normalizedJersey = payload.jerseyNumber === null ? null : Number(payload.jerseyNumber);
+
+      if (normalizedJersey !== null) {
+        if (!Number.isInteger(normalizedJersey) || normalizedJersey < 1 || normalizedJersey > 99) {
+          throw new AppError(400, "El dorsal debe ser un número entre 1 y 99");
+        }
+
+        const conflict = await TeamMember.findOne({
+          where: {
+            teamId: Number(teamId),
+            jerseyNumber: normalizedJersey,
+            userId: { [Op.ne]: userId },
+          },
+        });
+
+        if (conflict) {
+          throw new AppError(409, `El dorsal ${normalizedJersey} ya está en uso en este equipo`);
+        }
+      }
+
+      member.jerseyNumber = normalizedJersey;
+    }
+
+    if (payload.avatarFile) {
+      const uploadedAvatar = await uploadImageToSupabase(payload.avatarFile, "avatars", member.avatarUrl);
+      member.avatarUrl = uploadedAvatar.url;
+    }
+
     await member.save();
-    return { avatarUrl: avatarFilename };
+
+    return {
+      playerName: member.playerName,
+      jerseyNumber: member.jerseyNumber,
+      avatarUrl: member.avatarUrl,
+    };
   }
 }

@@ -1,19 +1,21 @@
-import multer from 'multer';
-import path from 'path';
+import multer from "multer";
 
-function createUpload(prefix: string) {
-    const storage = multer.diskStorage({
-        destination: (_req, _file, cb) => {
-            cb(null, 'public/uploads/');
+function createUpload() {
+    return multer({
+        storage: multer.memoryStorage(),
+        limits: {
+            fileSize: 5 * 1024 * 1024,
         },
-        filename: (_req, file, cb) => {
-            cb(null, `${prefix}-${Date.now()}${path.extname(file.originalname)}`);
+        fileFilter: (_req, file, cb) => {
+            if (!file.mimetype.startsWith("image/")) {
+                cb(new Error("Solo se permiten archivos de imagen"));
+                return;
+            }
+            cb(null, true);
         },
     });
-    return multer({ storage });
 }
 
-// Instancias exportadas por entidad
-export const upload = createUpload('team');
-export const uploadLeagueLogo = createUpload('league');
-export const uploadAvatar = createUpload('avatar');
+export const upload = createUpload();
+export const uploadLeagueLogo = createUpload();
+export const uploadAvatar = createUpload();

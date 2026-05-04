@@ -11,6 +11,7 @@ import {
   RequestConfirmationCodeHandler,
   UpdatePasswordHandler,
   ValidateTokenHandler,
+  ClientCredentialsHandler,
 } from "./handlers/AuthHandlers";
 import {
   ConfirmAccountRequest,
@@ -23,6 +24,7 @@ import {
   RequestConfirmationCodeRequest,
   UpdatePasswordRequest,
   ValidateTokenRequest,
+  ClientCredentialsRequest,
 } from "./requests/AuthRequests";
 
 export function buildAuthMediator(authService: IAuthService): Mediator {
@@ -41,6 +43,7 @@ export function buildAuthMediator(authService: IAuthService): Mediator {
   mediator.register("auth.refreshAccessToken", new RefreshAccessTokenHandler(authService));
   mediator.register("auth.logout", new LogoutHandler(authService));
   mediator.register("auth.logoutAll", new LogoutAllHandler(authService));
+  mediator.register("auth.clientCredentialsGrant", new ClientCredentialsHandler(authService));
 
   return mediator;
 }
@@ -55,4 +58,5 @@ export type AuthRequests =
   | UpdatePasswordRequest
   | RefreshAccessTokenRequest
   | LogoutRequest
-  | LogoutAllRequest;
+  | LogoutAllRequest
+  | ClientCredentialsRequest;

@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getTeamDashboard } from "@/api/teamAPI";
+import { getTeamDashboard, teamLogoUrl } from "@/api/teamAPI";
 import { ChartBarIcon } from "@heroicons/react/24/outline";
 import {
   VictoryChart,
@@ -182,9 +182,7 @@ export default function TeamDashboardView() {
 
 function DashboardMatchCard({ match }: { match: any }) {
   const getLogoUrl = (team: any) => {
-    if (team?.logoUrl) {
-      return `http://localhost:4000/uploads/${team.logoUrl}`;
-    }
+    if (team?.logoUrl) return teamLogoUrl(team.logoUrl);
     const initials = team?.name ? team.name.substring(0, 2).toUpperCase() : 'EQ';
     // Mantenemos un fondo oscuro neutro para los avatares generados, se ve elegante en ambos modos
     return `https://ui-avatars.com/api/?name=${initials}&background=27272a&color=fff&rounded=true&bold=true`;

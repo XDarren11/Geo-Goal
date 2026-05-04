@@ -1,9 +1,11 @@
+import type { UploadedImageFile } from "../../utils/supabaseStorage";
+
 export type CreateTeamPayload = {
   name: string;
   lat: number;
   lng: number;
   fieldAddress: string;
-  logoUrl: string | null;
+  logoFile?: UploadedImageFile | null;
 };
 
 export interface ITeamService {
@@ -16,7 +18,7 @@ export interface ITeamService {
   updateTeam(
     teamId: string,
     trainerId: number,
-    payload: Record<string, unknown> & { logoUrl?: string }
+    payload: Record<string, unknown> & { logoFile?: UploadedImageFile }
   ): Promise<string>;
   deleteTeam(teamId: string, trainerId: number): Promise<string>;
   findPlayer(teamId: string, trainerId: number, email: string): Promise<unknown>;
@@ -29,5 +31,10 @@ export interface ITeamService {
   ): Promise<string>;
   getCoachActiveLeagues(trainerId: number): Promise<unknown>;
   getTeamDashboard(leagueId: string, teamId: string): Promise<unknown>;
-  updatePlayerAvatar(teamId: string, userId: number, avatarFilename: string): Promise<{ avatarUrl: string }>;
+  updatePlayerAvatar(teamId: string, userId: number, avatarFile: UploadedImageFile): Promise<{ avatarUrl: string }>;
+  updatePlayerProfile(
+    teamId: string,
+    userId: number,
+    payload: { playerName?: string; jerseyNumber?: number | null; avatarFile?: UploadedImageFile | null }
+  ): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }>;
 }

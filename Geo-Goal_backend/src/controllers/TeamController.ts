@@ -16,6 +16,7 @@ import {
   GetTeamDashboardRequest,
   RemovePlayerFromTeamRequest,
   UpdatePlayerAvatarRequest,
+  UpdatePlayerProfileRequest,
   UpdateTeamRequest,
 } from "../application/team/requests/TeamRequests";
 
@@ -52,14 +53,14 @@ export class TeamController {
 
   static createTeam = async (req: Request, res: Response): Promise<void> => {
     const { name, lat, lng, fieldAddress } = req.body;
-    const logoUrl = req.file?.filename ?? null;
+    const logoFile = req.file ?? null;
     const result = await teamMediator.send(
       new CreateTeamRequest(req.user!.id, {
         name,
         lat: Number(lat),
         lng: Number(lng),
         fieldAddress,
-        logoUrl,
+        logoFile,
       })
     );
     res.send(result);
@@ -67,11 +68,11 @@ export class TeamController {
 
   static updateTeam = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
-    const logoUrl = req.file?.filename ?? undefined;
+    const logoFile = req.file ?? undefined;
     const result = await teamMediator.send(
       new UpdateTeamRequest(id, req.user!.id, {
         ...req.body,
-        logoUrl,
+        logoFile,
       })
     );
     res.send(result);
@@ -131,14 +132,31 @@ export class TeamController {
   static updatePlayerAvatar = async (req: Request, res: Response): Promise<void> => {
     const { id: teamId } = req.params;
     const userId = req.user!.id;
-    const avatarFilename = req.file?.filename ?? null;
-    if (!avatarFilename) {
+    const avatarFile = req.file ?? null;
+    if (!avatarFile) {
       res.status(400).json({ error: "No se recibió ningún archivo" });
       return;
     }
     const data = await teamMediator.send(
-      new UpdatePlayerAvatarRequest(teamId, userId, avatarFilename)
+      new UpdatePlayerAvatarRequest(teamId, userId, avatarFile)
     );
+    res.json(data);
+  };
+
+  static updatePlayerProfile = async (req: Request, res: Response): Promise<void> => {
+    const { id: teamId } = req.params;
+    const userId = req.user!.id;
+    const avatarFile = req.file ?? null;
+    const { playerName, jerseyNumber } = req.body;
+
+    const data = await teamMediator.send(
+      new UpdatePlayerProfileRequest(teamId, userId, {
+        playerName,
+        jerseyNumber: jerseyNumber != null ? Number(jerseyNumber) : undefined,
+        avatarFile,
+      })
+    );
+
     res.json(data);
   };
 }
