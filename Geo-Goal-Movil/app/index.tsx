@@ -1,11 +1,16 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { StatusBar } from 'expo-status-bar';
+import { checkAuthToken } from "@/hooks/useAuth";
+import { getUser } from "@/Api/AuthApi";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function index() {
   const [isReady, setIsReady] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -15,10 +20,32 @@ export default function index() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const hasToken = await checkAuthToken();
+        if (!hasToken) {
+          setIsCheckingSession(false);
+          return;
+        }
+
+        const user = await getUser();
+        queryClient.setQueryData(['user'], user);
+        router.replace('/(tabs)/home');
+      } catch {
+        // Token inválido o expirado, se muestra la pantalla de inicio
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+
+    restoreSession();
+  }, [queryClient, router]);
+
   return (
     <>
       <StatusBar style='auto'/>
-      {!isReady ? (
+      {!isReady || isCheckingSession ? (
         <View className="flex-1 bg-geo-green justify-center items-center">
           <Image
             source={require("../assets/logo.png")}
@@ -28,6 +55,7 @@ export default function index() {
           <Text className="text-geo-black font-geo text-6xl font-bold tracking-wide">
             Geo-Goal
           </Text>
+          <ActivityIndicator color="#0a0a0a" className="mt-4" />
         </View>
       ) : (
         <View className="flex-1 bg-geo-black justify-center items-center">

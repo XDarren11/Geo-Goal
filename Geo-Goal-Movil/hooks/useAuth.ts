@@ -21,7 +21,9 @@ export const useAuth = () => {
 export const checkAuthToken = async (): Promise<boolean> => {
     try {
         const token = await AsyncStorage.getItem('AUTH_TOKEN');
-        return !!token;
+        if (token) return true;
+        const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+        return !!refreshToken;
     } catch (error) {
         return false;
     }
