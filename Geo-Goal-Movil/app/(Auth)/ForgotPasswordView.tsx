@@ -69,7 +69,7 @@ export default function ForgotPasswordView() {
 
                     {/* Contenedor Negro */}
                     {/* Nota: Mantenemos el pb-40 para evitar el bug visual del teclado */}
-                    <View className="flex-1 bg-geo-black rounded-t-[60px] px-8 pt-12 pb-40 justify-start">
+                    <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-40 justify-start">
 
                         {/* Texto descriptivo adaptado del web */}
                         <Text className="text-white text-lg font-light mb-8 text-center">
@@ -102,7 +102,7 @@ export default function ForgotPasswordView() {
                                         onBlur={onBlur}
                                         onChangeText={onChange}
                                         value={value}
-                                        className={`bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30 ${errors.email ? 'border-2 border-red-500' : ''}`}
+                                        className={`bg-gray-800/80 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/20 ${errors.email ? 'border-2 border-red-500' : ''}`}
                                     />
                                 )}
                             />

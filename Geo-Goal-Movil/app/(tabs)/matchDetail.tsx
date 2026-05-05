@@ -144,18 +144,18 @@ export default function MatchDetailMobileScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-geo-black px-4 py-4">
+    <ScrollView className="flex-1 bg-geo-black px-4 py-5">
       <View className="flex-row items-center mb-4">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#39FF14" />
+        <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80 border border-geo-green/20">
+          <Ionicons name="arrow-back" size={20} color="#39FF14" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-white font-bold text-lg">{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
+          <Text className="text-white font-extrabold text-lg" numberOfLines={1}>{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
           <Text className="text-gray-400 text-xs">{match.roundName}</Text>
         </View>
       </View>
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-4">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
         <Text className="text-geo-green font-bold text-base">Marcador</Text>
         <Text className="text-white font-black text-3xl mt-1">{match.played ? `${match.homeScore} - ${match.awayScore}` : 'Pendiente'}</Text>
         <Text className="text-gray-400 text-xs mt-2">
@@ -164,7 +164,7 @@ export default function MatchDetailMobileScreen() {
         </Text>
       </View>
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-4">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
         <Text className="text-geo-green font-bold mb-3">Datos del partido</Text>
         <View className="flex-row flex-wrap gap-2">
           <MetaPill label="Árbitro" value={detail.referee || '—'} />
@@ -176,7 +176,7 @@ export default function MatchDetailMobileScreen() {
       </View>
 
       {analytics ? (
-        <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-4">
+        <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
           <Text className="text-geo-green font-bold mb-3">Resumen analítico</Text>
           <View className="flex-row flex-wrap gap-2">
             <MetaPill label="Jugadores" value={String(analytics.summary.totalPlayersWithStats)} />
@@ -187,7 +187,7 @@ export default function MatchDetailMobileScreen() {
         </View>
       ) : null}
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-4">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
         <Text className="text-geo-green font-bold mb-3">Alineaciones</Text>
         <View className="mb-3">
           <Text className="text-white font-semibold mb-2">Local</Text>
@@ -218,7 +218,7 @@ export default function MatchDetailMobileScreen() {
         </View>
       </View>
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-6">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-6">
         <Text className="text-geo-green font-bold mb-2">Replay táctico</Text>
 
         <View className="flex-row items-center justify-between mb-2">

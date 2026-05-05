@@ -53,3 +53,23 @@ export async function createLeague(body: { name: string; description: string }):
   const { data } = await api.post<string>(BASE, body);
   return data;
 }
+
+export async function updateLeague(
+  leagueId: number,
+  body: { name?: string; description?: string | null; logo?: { uri: string; name?: string; type?: string } | null }
+): Promise<string> {
+  const formData = new FormData();
+  if (body.name != null) formData.append('name', body.name);
+  if (body.description != null) formData.append('description', body.description);
+  if (body.logo) {
+    formData.append('logoFile', {
+      uri: body.logo.uri,
+      name: body.logo.name || 'logo.jpg',
+      type: body.logo.type || 'image/jpeg',
+    } as any);
+  }
+  const { data } = await api.patch<string>(`${BASE}/${leagueId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}

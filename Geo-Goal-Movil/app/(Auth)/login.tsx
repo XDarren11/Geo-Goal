@@ -67,7 +67,7 @@ export default function LoginScreen() {
                     </Text>
                 </View>
 
-                <View className="flex-1 bg-geo-black rounded-t-[60px] px-8 pt-12 pb-10 justify-start">
+                <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-10 justify-start">
                     
                     {/* --- Input: Email --- */}
                     <View className="mb-6">
@@ -87,7 +87,7 @@ export default function LoginScreen() {
                                 <TextInput 
                                     placeholder="tu@email.com"
                                     placeholderTextColor="#888"
-                                    className="bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30"
+                                    className="bg-gray-800/80 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/20"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
@@ -104,7 +104,7 @@ export default function LoginScreen() {
                     {/* --- Input: Password --- */}
                     <View className="mb-8">
                         <Text className="text-geo-green font-bold mb-2 ml-5">Contraseña</Text>
-                        <View className="flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30">
+                        <View className="flex-row items-center bg-gray-800/80 rounded-xl px-6 py-1 border border-geo-green/20">
                             <Controller
                                 control={control}
                                 name="password" // Asegúrate que coincida con tu Type
@@ -138,7 +138,7 @@ export default function LoginScreen() {
                     <View className=" justify-center items-center">
                         {/* Botón de Ingresar */}
                         <TouchableOpacity
-                            className={`bg-geo-green w-3/5 py-4 rounded-xl items-center mt-7 shadow-lg ${isPending ? 'opacity-50' : ''}`}
+                            className={`bg-geo-green w-3/5 py-4 rounded-xl items-center mt-7 shadow-lg shadow-geo-green/30 ${isPending ? 'opacity-50' : ''}`}
                             onPress={handleSubmit(handleLogin)}
                             disabled={isPending}
                         >

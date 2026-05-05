@@ -46,14 +46,14 @@ export default function index() {
           </View>
 
           <TouchableOpacity
-            className="bg-geo-green w-3/5 py-4 rounded-xl items-center mt-7 shadow-lg"
+            className="bg-geo-green w-3/5 py-4 rounded-2xl items-center mt-7 shadow-lg shadow-geo-green/30"
             onPress={() => router.push('/(Auth)/login')}
           >
             <Text className="text-geo-black font-bold text-2xl tracking-wide">Ingresar</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="bg-geo-bg-card w-3/5 py-4 rounded-xl items-center mt-5 border-2 border-geo-green"
+            className="bg-geo-bg-card w-3/5 py-4 rounded-2xl items-center mt-5 border-2 border-geo-green"
             onPress={() => router.push('/(Auth)/RegisterView')}
           >
             <Text className="text-geo-green font-bold text-2xl tracking-wide">

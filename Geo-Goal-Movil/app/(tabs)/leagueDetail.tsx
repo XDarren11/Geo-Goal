@@ -2,13 +2,14 @@ import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, FlatList, TextInput, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getLeagueById, getLeagueMatches, getStandings, updateMatchSchedule, leagueLogoUrl } from '@/Api/leagueAPI';
+import { getLeagueById, getLeagueMatches, getStandings, updateMatchSchedule, leagueLogoUrl, updateLeague } from '@/Api/leagueAPI';
 import { Ionicons } from '@expo/vector-icons';
 import type { FixtureByRound } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import Loader from '@/components/Loader';
 import { getApiErrorMessage } from '@/lib/getApiErrorMessage';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function LeagueDetailScreen() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function LeagueDetailScreen() {
   const [activeTab, setActiveTab] = React.useState<'info' | 'fixture' | 'standings'>('info');
   const [selectedMatchId, setSelectedMatchId] = React.useState<number | null>(null);
   const [scheduleInput, setScheduleInput] = React.useState('');
+  const [leagueLogoAsset, setLeagueLogoAsset] = React.useState<any | null>(null);
+  const [leagueDescriptionInput, setLeagueDescriptionInput] = React.useState<string | undefined>(undefined);
   const { data: user } = useAuth();
 
   const leagueId = typeof id === 'string' ? parseInt(id, 10) : typeof id === 'number' ? id : 0;
@@ -49,6 +52,53 @@ export default function LeagueDetailScreen() {
     },
     onError: (error: any) => {
       Alert.alert('Error', getApiErrorMessage(error, 'No se pudo programar el partido'));
+    },
+  });
+
+  React.useEffect(() => {
+    if (league) {
+      setLeagueDescriptionInput(league.description ?? undefined);
+    }
+  }, [league?.description]);
+
+  const pickLeagueLogo = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos para subir el logo de la liga');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      quality: 0.8,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setLeagueLogoAsset(result.assets[0]);
+    }
+  };
+
+  const handleLeagueLogoPress = () => {
+    Alert.alert('Logo de la Liga', '', [
+      { text: 'Cambiar logo', onPress: pickLeagueLogo },
+      { text: 'Eliminar logo', onPress: () => setLeagueLogoAsset(null), style: 'destructive' },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const updateLeagueMutation = useMutation({
+    mutationFn: () =>
+      updateLeague(leagueId, {
+        description: leagueDescriptionInput ?? null,
+        logo: leagueLogoAsset ? { uri: leagueLogoAsset.uri, name: leagueLogoAsset.fileName || 'logo.jpg', type: leagueLogoAsset.mimeType || 'image/jpeg' } : undefined,
+      }),
+    onSuccess: () => {
+      Alert.alert('Listo', 'Liga actualizada correctamente');
+    },
+    onError: (error: any) => {
+      Alert.alert('Error', error?.message || 'No se pudo actualizar la liga');
     },
   });
 
@@ -90,31 +140,40 @@ export default function LeagueDetailScreen() {
   return (
     <View className="flex-1 bg-geo-black">
       {/* Header */}
-      <View className="bg-gray-900 border-b border-geo-green px-4 py-4 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4">
-          <Ionicons name="arrow-back" size={24} color="#39FF14" />
+      <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-6 pb-5 flex-row items-center">
+        <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80">
+          <Ionicons name="arrow-back" size={20} color="#39FF14" />
         </TouchableOpacity>
         <View className="flex-1 flex-row items-center gap-3">
-          {effectiveLeague.logoUrl ? (
-            <Image source={{ uri: leagueLogoUrl(effectiveLeague.logoUrl) }} style={{ width: 42, height: 42, borderRadius: 21 }} contentFit="cover" />
-          ) : null}
+          <View className="h-14 w-14 rounded-2xl overflow-hidden bg-gray-800 items-center justify-center border border-geo-green/30">
+            {effectiveLeague.logoUrl ? (
+              <Image source={{ uri: leagueLogoUrl(effectiveLeague.logoUrl) }} style={{ width: 56, height: 56 }} contentFit="cover" />
+            ) : (
+              <Ionicons name="trophy-outline" size={26} color="#39FF14" />
+            )}
+          </View>
           <View className="flex-1">
-          <Text className="text-white font-bold text-lg">{effectiveLeague.name}</Text>
-          <Text className="text-gray-400 text-xs">{effectiveLeague.teams?.length || 0} equipos</Text>
+            <Text className="text-white font-extrabold text-lg" numberOfLines={1}>{effectiveLeague.name}</Text>
+            <View className="flex-row items-center gap-2 mt-1">
+              <Text className="text-gray-400 text-xs">{effectiveLeague.teams?.length || 0} equipos</Text>
+              <View className="h-1 w-1 rounded-full bg-gray-600" />
+              <Text className="text-geo-green text-xs font-semibold">Liga activa</Text>
+            </View>
           </View>
         </View>
       </View>
 
       {/* Tabs */}
-      <View className="flex-row border-b border-geo-green/30 px-4 gap-2">
+      <View className="px-4 py-3 bg-geo-black">
+        <View className="flex-row rounded-2xl bg-gray-900/80 border border-geo-green/20 p-1">
         {(['info', 'fixture', 'standings'] as const).map((tab) => (
           <TouchableOpacity
             key={tab}
             onPress={() => setActiveTab(tab)}
-            className={`py-3 px-2 border-b-2 flex-1 ${activeTab === tab ? 'border-geo-green' : 'border-transparent'}`}
+            className={`py-2 px-2 flex-1 rounded-xl ${activeTab === tab ? 'bg-geo-green/15' : ''}`}
           >
             <Text
-              className={`font-bold text-xs text-center capitalize ${
+              className={`font-semibold text-xs text-center capitalize ${
                 activeTab === tab ? 'text-geo-green' : 'text-gray-400'
               }`}
             >
@@ -122,25 +181,69 @@ export default function LeagueDetailScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+        </View>
       </View>
 
       {/* Content */}
       {activeTab === 'info' && (
         <ScrollView className="flex-1 px-4 py-4">
-          <View className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-4">
+          <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-4 mb-4">
             <Text className="text-geo-green font-bold mb-2">Descripción</Text>
-            <Text className="text-gray-300">{effectiveLeague.description || 'Información disponible en versión web de administrador'}</Text>
+            {user?.role === 'admin' ? (
+              <View>
+                <TextInput
+                  value={leagueDescriptionInput ?? ''}
+                  onChangeText={setLeagueDescriptionInput}
+                  placeholder="Descripción de la liga"
+                  placeholderTextColor="#777"
+                  multiline
+                  className="bg-gray-800/80 rounded-xl border border-gray-700/80 p-3 text-white h-24 mb-3"
+                />
+                <View className="flex-row items-center gap-4 mb-3">
+                  <TouchableOpacity
+                    onPress={handleLeagueLogoPress}
+                    className="relative w-16 h-16 rounded-2xl bg-gray-800 items-center justify-center border-2 border-geo-green/50"
+                  >
+                    {effectiveLeague.logoUrl || leagueLogoAsset ? (
+                      <Image
+                        source={{ uri: leagueLogoAsset ? leagueLogoAsset.uri : leagueLogoUrl(effectiveLeague.logoUrl!) }}
+                        style={{ width: 64, height: 64, borderRadius: 16 }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <Ionicons name="image-outline" size={22} color="#39FF14" />
+                    )}
+                    <View className="absolute -bottom-1 -right-1 bg-geo-green rounded-full w-6 h-6 items-center justify-center border-2 border-gray-900">
+                      <Ionicons name="add" size={16} color="#000" />
+                    </View>
+                  </TouchableOpacity>
+                  <View className="flex-1">
+                    <Text className="text-gray-400 text-xs mb-2">Toca el logo para editar</Text>
+                    <TouchableOpacity
+                      onPress={() => updateLeagueMutation.mutate()}
+                      disabled={updateLeagueMutation.isPending}
+                      className="rounded-xl bg-geo-green px-3 py-2 items-center"
+                    >
+                      <Text className="text-geo-black font-bold text-xs">Guardar cambios</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <Text className="text-gray-300">{effectiveLeague.description || 'Información disponible en versión web de administrador'}</Text>
+            )}
           </View>
 
-          <View className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-4">
+          <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-4 mb-4">
             <Text className="text-geo-green font-bold mb-2">Equipos ({effectiveLeague.teams?.length || 0})</Text>
             <FlatList
               scrollEnabled={false}
               data={effectiveLeague.teams || []}
               keyExtractor={(item) => `team-${item.id}`}
               renderItem={({ item }) => (
-                <View className="bg-gray-800 rounded-lg p-3 mb-2 flex-row justify-between items-center">
-                  <Text className="text-white flex-1">{item.name}</Text>
+                <View className="bg-gray-800/80 rounded-xl p-3 mb-2 flex-row justify-between items-center border border-gray-700/60">
+                  <Text className="text-white flex-1 font-semibold">{item.name}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#6b7280" />
                 </View>
               )}
             />

@@ -59,7 +59,7 @@ export default function RegisterView() {
                         </Text>
                     </View>
 
-                    <View className="flex-1 bg-geo-black rounded-t-[60px] px-8 pt-12 pb-40 justify-start">
+                    <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-40 justify-start">
 
                         {/* --- Input: Nombre --- */}
                         <View className="mb-6">
@@ -75,7 +75,7 @@ export default function RegisterView() {
                                         onBlur={onBlur}
                                         onChangeText={onChange}
                                         value={value}
-                                        className={`bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30 ${errors.name ? 'border-2 border-red-500' : ''}`}
+                                        className={`bg-gray-800/80 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/20 ${errors.name ? 'border-2 border-red-500' : ''}`}
                                     />
                                 )}
                             />
@@ -101,7 +101,7 @@ export default function RegisterView() {
                                         onBlur={onBlur}
                                         onChangeText={onChange}
                                         value={value}
-                                        className={`bg-gray-800 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/30 ${errors.email ? 'border-2 border-red-500' : ''}`}
+                                        className={`bg-gray-800/80 rounded-xl py-4 px-6 text-white text-lg border border-geo-green/20 ${errors.email ? 'border-2 border-red-500' : ''}`}
                                     />
                                 )}
                             />
@@ -116,7 +116,7 @@ export default function RegisterView() {
                                 name="password"
                                 rules={{ required: "El Password es obligatorio", minLength: { value: 8, message: 'Mínimo 8 caracteres' } }}
                                 render={({ field: { onChange, onBlur, value } }) => (
-                                    <View className={`flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30 ${errors.password ? 'border-2 border-red-500' : ''}`}>
+                                    <View className={`flex-row items-center bg-gray-800/80 rounded-xl px-6 py-1 border border-geo-green/20 ${errors.password ? 'border-2 border-red-500' : ''}`}>
                                         <TextInput
                                             placeholder="••••••••"
                                             placeholderTextColor="#888"
@@ -143,7 +143,7 @@ export default function RegisterView() {
                                 name="password_confirmation"
                                 rules={{ required: "Repetir Password es obligatorio", validate: value => value === password || 'Los Passwords no coinciden' }}
                                 render={({ field: { onChange, onBlur, value } }) => (
-                                    <View className={`flex-row items-center bg-gray-800 rounded-xl px-6 py-1 border border-geo-green/30 ${errors.password_confirmation ? 'border-2 border-red-500' : ''}`}>
+                                    <View className={`flex-row items-center bg-gray-800/80 rounded-xl px-6 py-1 border border-geo-green/20 ${errors.password_confirmation ? 'border-2 border-red-500' : ''}`}>
                                         <TextInput
                                             placeholder="••••••••"
                                             placeholderTextColor="#888"
@@ -179,7 +179,7 @@ export default function RegisterView() {
                                                 <TouchableOpacity
                                                     key={option.key}
                                                     onPress={() => onChange(option.key)}
-                                                    className={`rounded-xl border px-4 py-2 ${active ? 'border-geo-green bg-geo-green/20' : 'border-gray-700 bg-gray-800'}`}
+                                                    className={`rounded-xl border px-4 py-2 ${active ? 'border-geo-green bg-geo-green/20' : 'border-gray-700/80 bg-gray-800/80'}`}
                                                 >
                                                     <Text className={`${active ? 'text-geo-green' : 'text-white'} font-bold`}>{option.label}</Text>
                                                 </TouchableOpacity>

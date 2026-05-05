@@ -37,6 +37,7 @@ export default function CreateLeagueView() {
         <Text className="text-geo-green ml-2 font-bold text-lg">Volver</Text>
       </TouchableOpacity>
 
+      <Text className="text-gray-400 text-xs">Administración</Text>
       <Text className="font-geo text-4xl text-white tracking-wide">
         Crear liga
       </Text>
@@ -44,7 +45,7 @@ export default function CreateLeagueView() {
         Nombre y descripción de la liga.
       </Text>
 
-      <View className="bg-gray-900 border border-geo-green/30 rounded-xl p-5 mb-10">
+      <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-5 mb-10">
         
         {/* Campo: Nombre de la liga */}
         <View className="mb-5">
@@ -55,7 +56,7 @@ export default function CreateLeagueView() {
             rules={{ required: "El nombre es obligatorio" }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className={`bg-geo-black border ${errors.name ? 'border-red-500' : 'border-gray-700'} text-white rounded-lg p-4 focus:border-geo-green`}
+                className={`bg-geo-black border ${errors.name ? 'border-red-500' : 'border-gray-700/80'} text-white rounded-xl p-4 focus:border-geo-green`}
                 placeholder="Ej: Liga Municipal 2026"
                 placeholderTextColor="#6b7280"
                 onBlur={onBlur}
@@ -78,7 +79,7 @@ export default function CreateLeagueView() {
             rules={{ required: "La descripción es obligatoria" }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className={`bg-geo-black border ${errors.description ? 'border-red-500' : 'border-gray-700'} text-white rounded-lg p-4 focus:border-geo-green h-24`}
+                className={`bg-geo-black border ${errors.description ? 'border-red-500' : 'border-gray-700/80'} text-white rounded-xl p-4 focus:border-geo-green h-24`}
                 placeholder="Descripción de la liga"
                 placeholderTextColor="#6b7280"
                 multiline

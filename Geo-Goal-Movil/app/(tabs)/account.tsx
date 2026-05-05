@@ -63,11 +63,12 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-geo-black px-4 py-4">
-      <Text className="text-geo-green text-2xl font-bold">Cuenta</Text>
-      <Text className="text-gray-400 mt-1">Gestiona la seguridad y opciones de tu perfil.</Text>
+    <ScrollView className="flex-1 bg-geo-black px-4 py-5">
+      <Text className="text-gray-400 text-xs">Perfil</Text>
+      <Text className="text-geo-green text-2xl font-extrabold">Cuenta</Text>
+      <Text className="text-gray-500 mt-1">Gestiona la seguridad y opciones de tu perfil.</Text>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
         <Text className="text-white font-bold text-lg">{user.name}</Text>
         <Text className="text-gray-400 mt-1">{user.email}</Text>
         <Text className="text-gray-400 mt-1">{user.username ? `@${user.username}` : 'Sin username'}</Text>
@@ -77,7 +78,7 @@ export default function AccountScreen() {
         </Text>
       </View>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
         <Text className="text-white font-bold text-lg mb-3">Nombre de usuario</Text>
         <TextInput
           value={username}
@@ -85,7 +86,7 @@ export default function AccountScreen() {
           placeholder="@tuusuario"
           placeholderTextColor="#777"
           autoCapitalize="none"
-          className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3"
+          className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3"
         />
         <TouchableOpacity
           onPress={() => usernameMutation.mutate()}
@@ -107,12 +108,12 @@ export default function AccountScreen() {
         ) : null}
       </View>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
         <Text className="text-white font-bold text-lg mb-3">Seguridad</Text>
 
         <TouchableOpacity
           onPress={() => router.push('/(Auth)/ForgotPasswordView')}
-          className="mb-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 flex-row items-center justify-between"
+          className="mb-3 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 flex-row items-center justify-between"
         >
           <View>
             <Text className="text-white font-semibold">Cambiar contraseña</Text>
@@ -121,7 +122,7 @@ export default function AccountScreen() {
           <Ionicons name="key" size={18} color="#39FF14" />
         </TouchableOpacity>
 
-        <View className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3">
+        <View className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3">
           <Text className="text-white font-semibold mb-3">Cambio directo de contraseña</Text>
           <TextInput
             value={currentPassword}
@@ -129,7 +130,7 @@ export default function AccountScreen() {
             placeholder="Contraseña actual"
             placeholderTextColor="#777"
             secureTextEntry
-            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white mb-2"
+            className="rounded-lg border border-gray-700/80 bg-gray-900/80 px-3 py-2 text-white mb-2"
           />
           <TextInput
             value={newPassword}
@@ -137,7 +138,7 @@ export default function AccountScreen() {
             placeholder="Nueva contraseña"
             placeholderTextColor="#777"
             secureTextEntry
-            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white mb-2"
+            className="rounded-lg border border-gray-700/80 bg-gray-900/80 px-3 py-2 text-white mb-2"
           />
           <TextInput
             value={newPasswordConfirmation}
@@ -145,7 +146,7 @@ export default function AccountScreen() {
             placeholder="Confirmar nueva contraseña"
             placeholderTextColor="#777"
             secureTextEntry
-            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-white mb-3"
+            className="rounded-lg border border-gray-700/80 bg-gray-900/80 px-3 py-2 text-white mb-3"
           />
           <TouchableOpacity
             onPress={() => passwordMutation.mutate()}

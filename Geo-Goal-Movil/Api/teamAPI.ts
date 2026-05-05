@@ -88,3 +88,32 @@ export async function updatePlayerProfile(
   );
   return data;
 }
+
+export async function updateTeam(
+  teamId: number,
+  body: {
+    name?: string;
+    lat?: number;
+    lng?: number;
+    fieldAddress?: string;
+    logo?: { uri: string; name?: string; type?: string } | null;
+  }
+): Promise<string> {
+  const formData = new FormData();
+  if (body.name != null) formData.append('name', body.name);
+  if (body.lat != null) formData.append('lat', String(body.lat));
+  if (body.lng != null) formData.append('lng', String(body.lng));
+  if (body.fieldAddress != null) formData.append('fieldAddress', body.fieldAddress);
+  if (body.logo) {
+    formData.append('logoFile', {
+      uri: body.logo.uri,
+      name: body.logo.name || 'logo.jpg',
+      type: body.logo.type || 'image/jpeg',
+    } as any);
+  }
+
+  const { data } = await api.patch<string>(`${BASE}/${teamId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
