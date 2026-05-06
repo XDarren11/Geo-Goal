@@ -177,15 +177,40 @@ export default function HomeScreen() {
 
             <Section title="Próximos partidos">
               {coachLoading ? <Loader label="Cargando..." /> : (coachDashboard?.upcomingMatches ?? []).slice(0, 4).map((m: any) => (
-                <View key={`c-up-${m.id}`} className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2">
+                
+                <TouchableOpacity 
+                  key={`c-up-${m.id}`} 
+                  className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2"
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/matchDetail",
+                      params: { id: m.id } 
+                    });
+                  }}
+                >
                   <Text className="text-white font-bold">{m.teamName} vs {m.opponentName}</Text>
                   <Text className="text-gray-400 text-xs">{m.leagueName} · {formatDate(m.date)}</Text>
+                  
                   {m.location?.lat != null && m.location?.lng != null ? (
-                    <TouchableOpacity onPress={() => openDirections(m.location?.lat, m.location?.lng)} className="mt-2 self-start border border-geo-green rounded px-2 py-1">
-                      <Text className="text-geo-green text-xs font-bold">Cómo llegar</Text>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        router.push({
+                          pathname: "/navigation",
+                          params: { 
+                            destLat: m.location.lat, 
+                            destLng: m.location.lng,
+                            fieldName: m.location.fieldName
+                          }
+                        });
+                      }} 
+                      className="mt-2 self-start border border-geo-green rounded px-2 py-1"
+                    >
+                      <Text className="text-geo-green text-xs font-bold">Cómo llegar (GPS)</Text>
                     </TouchableOpacity>
                   ) : null}
-                </View>
+                </TouchableOpacity>
+                
               ))}
             </Section>
 
