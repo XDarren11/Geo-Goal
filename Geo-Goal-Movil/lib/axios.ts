@@ -2,7 +2,7 @@ import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 1. Configuración de la URL
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = (process.env.EXPO_PUBLIC_API_URL || "https://geo-goal.onrender.com/api/").replace(/\/+$/, "");
 
 const api = axios.create({
     baseURL: API_URL
