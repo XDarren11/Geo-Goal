@@ -20,8 +20,8 @@ export class GetNewsHandler implements RequestHandler<GetNewsRequest, unknown> {
 
 export class GetLeaguesHandler implements RequestHandler<GetLeaguesRequest, unknown> {
   constructor(private readonly svc: IPublicService) {}
-  handle(_request: GetLeaguesRequest): Promise<unknown> {
-    return this.svc.getLeagues();
+  handle(request: GetLeaguesRequest): Promise<unknown> {
+    return this.svc.getLeagues(request.page, request.pageSize);
   }
 }
 

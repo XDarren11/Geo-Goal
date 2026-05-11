@@ -1,6 +1,6 @@
 export interface IPublicService {
   getNews(limit: number): Promise<unknown>;
-  getLeagues(): Promise<unknown>;
+  getLeagues(page?: number, pageSize?: number): Promise<unknown>;
   getLeagueDetail(leagueId: string): Promise<unknown>;
   getStandings(leagueId: string): Promise<unknown>;
   getFixture(leagueId: string): Promise<unknown>;

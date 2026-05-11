@@ -113,7 +113,9 @@ export class GetUpcomingLeagueMatchesRequest extends MFR<unknown> {
   readonly requestName = "matchDetail.getUpcomingLeagueMatches";
   constructor(
     public readonly leagueId: number,
-    public readonly actorUserId: number
+    public readonly actorUserId: number,
+    public readonly page = 1,
+    public readonly pageSize = 50
   ) {
     super();
   }

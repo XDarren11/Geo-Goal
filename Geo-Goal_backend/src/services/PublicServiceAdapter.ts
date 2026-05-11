@@ -6,8 +6,8 @@ export class PublicServiceAdapter implements IPublicService {
     return PublicService.getNews(limit);
   }
 
-  getLeagues(): Promise<unknown> {
-    return PublicService.getLeagues();
+  getLeagues(page = 1, pageSize = 50): Promise<unknown> {
+    return PublicService.getLeagues(page, pageSize);
   }
 
   getLeagueDetail(leagueId: string): Promise<unknown> {

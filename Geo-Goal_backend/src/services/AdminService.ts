@@ -396,11 +396,18 @@ export class AdminService {
     });
   }
 
-  static async listUsers() {
-    return User.findAll({
+  static async listUsers(page = 1, pageSize = 50) {
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await User.findAndCountAll({
       attributes: ["id", "name", "email", "role", "confirmed", "createdAt", "updatedAt"],
       order: [["id", "ASC"]],
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async createUser(input: CreateUserInput): Promise<string> {
@@ -619,14 +626,21 @@ export class AdminService {
     return "Admin removido de la liga correctamente";
   }
 
-  static async listFields() {
-    return Field.findAll({
+  static async listFields(page = 1, pageSize = 50) {
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await Field.findAndCountAll({
       include: [
         { model: League, attributes: ["id", "name"] },
         { model: Team, attributes: ["id", "name"] },
       ],
       order: [["id", "ASC"]],
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getFieldById(fieldId: string) {

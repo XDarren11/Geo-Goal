@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { TeamMember } from "../models/TeamMember";
@@ -604,13 +604,20 @@ export class TeamService {
       : [];
     const detailMap = new Map(detailRows.map((row) => [row.matchId, row]));
 
-    const playerCountByTeamEntries = await Promise.all(
-      teamIds.map(async (teamId) => {
-        const count = await TeamMember.count({ where: { teamId } });
-        return [teamId, count] as const;
-      })
+    const playerCountRows = teamIds.length
+      ? await TeamMember.findAll({
+          where: { teamId: { [Op.in]: teamIds } },
+          attributes: ["teamId", [fn("COUNT", col("TeamMember.id")), "count"]],
+          group: ["teamId"],
+          raw: true,
+        })
+      : [];
+    const playerCountByTeam = new Map(
+      (playerCountRows as unknown as Array<{ teamId: number; count: string }>).map((row) => [
+        row.teamId,
+        Number(row.count),
+      ])
     );
-    const playerCountByTeam = new Map(playerCountByTeamEntries);
 
     const preMatchChecklist = upcomingMatches.slice(0, 6).map((match) => {
       const isHome = teamIds.includes(match.homeTeamId);

@@ -13,8 +13,8 @@ export class LeagueServiceAdapter implements ILeagueService {
     return LeagueService.createLeague(managerId, payload);
   }
 
-  getAllLeagues(managerId: number): Promise<unknown> {
-    return LeagueService.getAllLeagues(managerId);
+  getAllLeagues(managerId: number, page = 1, pageSize = 50): Promise<unknown> {
+    return LeagueService.getAllLeagues(managerId, page, pageSize);
   }
 
   getLeagueById(leagueId: string, managerId: number): Promise<unknown> {

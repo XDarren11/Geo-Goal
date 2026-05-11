@@ -223,10 +223,17 @@ export class LeagueService {
     return "Liga Creada Correctamente";
   }
 
-  static async getAllLeagues(managerId: number) {
-    return League.findAll({
+  static async getAllLeagues(managerId: number, page = 1, pageSize = 50) {
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await League.findAndCountAll({
       where: { managerId },
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getLeagueById(leagueId: string, _managerId: number) {

@@ -35,7 +35,10 @@ export class AdminListUsersByLeagueRequest extends AR<unknown> {
 
 export class AdminListUsersRequest extends AR<unknown> {
   readonly requestName = "admin.listUsers";
-  constructor() {
+  constructor(
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }
@@ -128,7 +131,10 @@ export class AdminRemoveLeagueAdminRequest extends AR<string> {
 
 export class AdminListFieldsRequest extends AR<unknown> {
   readonly requestName = "admin.listFields";
-  constructor() {
+  constructor(
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }

@@ -67,8 +67,8 @@ export class MatchFlowServiceAdapter implements IMatchFlowService {
     return RefereeService.getLeagueReferees(leagueId, actorUserId);
   }
 
-  getUpcomingLeagueMatches(leagueId: number, actorUserId: number): Promise<unknown> {
-    return RefereeService.getUpcomingLeagueMatches(leagueId, actorUserId);
+  getUpcomingLeagueMatches(leagueId: number, actorUserId: number, page = 1, pageSize = 50): Promise<unknown> {
+    return RefereeService.getUpcomingLeagueMatches(leagueId, actorUserId, page, pageSize);
   }
 
   getMatchAnalytics(matchId: number): Promise<unknown> {

@@ -108,7 +108,7 @@ export class GetUpcomingLeagueMatchesHandler
 {
   constructor(private readonly svc: IMatchFlowService) {}
   handle(request: GetUpcomingLeagueMatchesRequest): Promise<unknown> {
-    return this.svc.getUpcomingLeagueMatches(request.leagueId, request.actorUserId);
+    return this.svc.getUpcomingLeagueMatches(request.leagueId, request.actorUserId, request.page, request.pageSize);
   }
 }
 

@@ -318,12 +318,14 @@ export class RefereeService {
     return rows.map((row) => row.adminUser);
   }
 
-  static async getUpcomingLeagueMatches(leagueId: number, actorUserId: number) {
+  static async getUpcomingLeagueMatches(leagueId: number, actorUserId: number, page = 1, pageSize = 50) {
     await this.ensureLeagueAdmin(leagueId, actorUserId);
 
     const now = new Date();
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
 
-    return Match.findAll({
+    const { rows, count } = await Match.findAndCountAll({
       where: {
         leagueId,
         played: false,
@@ -336,7 +338,11 @@ export class RefereeService {
         { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
       ],
       order: [["date", "ASC"]],
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getTodayAssignedMatches(userId: number) {

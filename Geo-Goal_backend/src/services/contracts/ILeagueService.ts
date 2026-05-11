@@ -9,7 +9,7 @@ import type {
 
 export interface ILeagueService {
   createLeague(managerId: number, payload: CreateLeagueDTO): Promise<string>;
-  getAllLeagues(managerId: number): Promise<unknown>;
+  getAllLeagues(managerId: number, page?: number, pageSize?: number): Promise<unknown>;
   getLeagueById(leagueId: string, managerId: number): Promise<unknown>;
   updateLeague(leagueId: string, managerId: number, payload: UpdateLeagueDTO): Promise<string>;
   deleteLeague(leagueId: string, managerId: number): Promise<string>;

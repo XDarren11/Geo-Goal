@@ -123,8 +123,10 @@ export class MatchDetailController {
 
   static getUpcomingLeagueMatches = async (req: Request, res: Response): Promise<void> => {
     const { leagueId } = req.params;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
     const data = await matchDetailMediator.send(
-      new GetUpcomingLeagueMatchesRequest(Number(leagueId), req.user!.id)
+      new GetUpcomingLeagueMatchesRequest(Number(leagueId), req.user!.id, page, pageSize)
     );
     res.json(data);
   };

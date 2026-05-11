@@ -43,8 +43,8 @@ export class AdminListUsersByLeagueHandler
 }
 
 export class AdminListUsersHandler implements RequestHandler<AdminListUsersRequest, unknown> {
-  handle(_request: AdminListUsersRequest): Promise<unknown> {
-    return AdminOrchestrator.listUsers();
+  handle(request: AdminListUsersRequest): Promise<unknown> {
+    return AdminOrchestrator.listUsers(request.page, request.pageSize);
   }
 }
 
@@ -126,8 +126,8 @@ export class AdminRemoveLeagueAdminHandler
 }
 
 export class AdminListFieldsHandler implements RequestHandler<AdminListFieldsRequest, unknown> {
-  handle(_request: AdminListFieldsRequest): Promise<unknown> {
-    return AdminOrchestrator.listFields();
+  handle(request: AdminListFieldsRequest): Promise<unknown> {
+    return AdminOrchestrator.listFields(request.page, request.pageSize);
   }
 }
 

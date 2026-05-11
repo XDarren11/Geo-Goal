@@ -64,8 +64,10 @@ export class AdminController {
     res.json(data);
   };
 
-  static listUsers = async (_req: Request, res: Response): Promise<void> => {
-    const data = await adminMediator.send(new AdminListUsersRequest());
+  static listUsers = async (req: Request, res: Response): Promise<void> => {
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
+    const data = await adminMediator.send(new AdminListUsersRequest(page, pageSize));
     res.json(data);
   };
 
@@ -148,8 +150,10 @@ export class AdminController {
     res.send(result);
   };
 
-  static listFields = async (_req: Request, res: Response): Promise<void> => {
-    const data = await adminMediator.send(new AdminListFieldsRequest());
+  static listFields = async (req: Request, res: Response): Promise<void> => {
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
+    const data = await adminMediator.send(new AdminListFieldsRequest(page, pageSize));
     res.json(data);
   };
 
