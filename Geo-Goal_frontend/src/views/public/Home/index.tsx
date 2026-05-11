@@ -162,9 +162,7 @@ export default function PublicHomeView() {
               </div>
             </div>
 
-            <MobileDownloadCard 
-              apkUrl="/downloads/geo-goal-android.apk"
-            />
+            <MobileDownloadCard />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="card-pitch p-4">
