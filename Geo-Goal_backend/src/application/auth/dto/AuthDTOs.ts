@@ -18,3 +18,8 @@ export type UpdatePasswordDTO = {
   token: string;
   password: string;
 };
+
+export type ClientCredentialsDTO = {
+  clientId: string;
+  clientSecret: string;
+};

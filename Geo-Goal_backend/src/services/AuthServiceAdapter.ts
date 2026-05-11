@@ -4,7 +4,7 @@ import {
   type CreateAccountInput,
   type LoginInput,
 } from "./AuthService";
-import type { IAuthService } from "./contracts/IAuthService";
+import type { IAuthService, ClientCredentialsResult } from "./contracts/IAuthService";
 
 export class AuthServiceAdapter implements IAuthService {
   createAccount(input: CreateAccountInput): Promise<string> {
@@ -45,5 +45,9 @@ export class AuthServiceAdapter implements IAuthService {
 
   revokeAllSessions(userId: number): Promise<string> {
     return AuthService.revokeAllSessions(userId);
+  }
+
+  clientCredentialsGrant(clientId: string, clientSecret: string): Promise<ClientCredentialsResult> {
+    return AuthService.clientCredentialsGrant(clientId, clientSecret);
   }
 }

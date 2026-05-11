@@ -80,12 +80,13 @@ export default function CodesScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-geo-black px-4 py-4">
-      <Text className="text-geo-green text-2xl font-bold">Códigos</Text>
-      <Text className="text-gray-400 mt-1">Genera o usa códigos de invitación según tu rol.</Text>
+    <ScrollView className="flex-1 bg-geo-black px-4 py-5">
+      <Text className="text-gray-400 text-xs">Invitaciones</Text>
+      <Text className="text-geo-green text-2xl font-extrabold">Códigos</Text>
+      <Text className="text-gray-500 mt-1">Genera o usa códigos de invitación según tu rol.</Text>
 
       {role === 'admin' && (
-        <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+        <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">Generar código de liga</Text>
           {leaguesLoading ? (
             <Loader label="Cargando ligas..." />
@@ -97,7 +98,7 @@ export default function CodesScreen() {
               renderItem={({ item }: { item: League }) => (
                 <TouchableOpacity
                   onPress={() => setSelectedLeagueId(item.id)}
-                  className={`mb-2 rounded-xl border px-4 py-3 ${selectedLeagueId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700 bg-gray-800'}`}
+                  className={`mb-2 rounded-xl border px-4 py-3 ${selectedLeagueId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700/80 bg-gray-800/80'}`}
                 >
                   <Text className="text-white font-semibold">{item.name}</Text>
                 </TouchableOpacity>
@@ -111,7 +112,7 @@ export default function CodesScreen() {
             placeholder="Expira en minutos (opcional)"
             placeholderTextColor="#777"
             keyboardType="numeric"
-            className="mt-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white"
+            className="mt-3 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white"
           />
 
           <TouchableOpacity
@@ -127,7 +128,7 @@ export default function CodesScreen() {
       )}
 
       {role === 'coach' && (
-        <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+        <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">Código para tu equipo</Text>
           {teamsLoading ? (
             <Loader label="Cargando equipos..." />
@@ -139,7 +140,7 @@ export default function CodesScreen() {
               renderItem={({ item }: { item: Team }) => (
                 <TouchableOpacity
                   onPress={() => setSelectedTeamId(item.id)}
-                  className={`mb-2 rounded-xl border px-4 py-3 ${selectedTeamId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700 bg-gray-800'}`}
+                  className={`mb-2 rounded-xl border px-4 py-3 ${selectedTeamId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700/80 bg-gray-800/80'}`}
                 >
                   <Text className="text-white font-semibold">{item.name}</Text>
                   <Text className="text-gray-400 text-xs mt-1">{item.league?.name || 'Sin liga'}</Text>
@@ -154,7 +155,7 @@ export default function CodesScreen() {
             placeholder="Expira en minutos (opcional)"
             placeholderTextColor="#777"
             keyboardType="numeric"
-            className="mt-3 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white"
+            className="mt-3 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white"
           />
 
           <TouchableOpacity
@@ -170,7 +171,7 @@ export default function CodesScreen() {
       )}
 
       {(role === 'coach' || role === 'referee') && (
-        <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+        <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">
             {role === 'referee' ? 'Unirme a una liga como árbitro' : 'Unir tu equipo a una liga'}
           </Text>
@@ -180,7 +181,7 @@ export default function CodesScreen() {
             placeholder="Código de liga"
             placeholderTextColor="#777"
             autoCapitalize="characters"
-            className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white tracking-[6px]"
+            className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white tracking-[6px]"
           />
           <TouchableOpacity
             disabled={(role !== 'referee' && !selectedTeamId) || !leagueCode.trim() || joinLeagueMutation.isPending}
@@ -193,7 +194,7 @@ export default function CodesScreen() {
       )}
 
       {role === 'player' && (
-        <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+        <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">Unirse a un equipo</Text>
           <TextInput
             value={teamCode}
@@ -201,7 +202,7 @@ export default function CodesScreen() {
             placeholder="Código del equipo"
             placeholderTextColor="#777"
             autoCapitalize="characters"
-            className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white tracking-[6px]"
+            className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white tracking-[6px]"
           />
           <TouchableOpacity
             disabled={!teamCode.trim() || joinTeamMutation.isPending}

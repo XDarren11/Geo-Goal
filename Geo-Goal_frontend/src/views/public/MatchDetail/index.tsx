@@ -1,9 +1,10 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getPublicMatchAnalytics, getPublicMatchDetail } from "@/api/publicAPI";
-import type { MatchDetailLineupEntry, MatchSquadPlayerView } from "@/types";
+import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useState } from "react";
+import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro";
@@ -564,6 +565,17 @@ export default function PublicMatchDetailView() {
       }))
     : detail.awayBench;
 
+    const finalLat = data?.detail?.field?.lat;
+    const finalLng = data?.detail?.field?.lng;
+    const finalAddress = data?.detail?.field?.address 
+      ? `${data.detail.field.name} - ${data.detail.field.address}` 
+      : "Dirección del campo pendiente";
+
+    const handleStartNavigation = () => {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${finalLat},${finalLng}&travelmode=driving&dir_action=navigate`;
+      window.open(url, "_blank");
+    };
+
   return (
     <div className="min-h-screen bg-[var(--geo-bg)] pitch-stripes text-[var(--geo-text)]">
       <main className="mx-auto max-w-7xl px-4 py-8 lg:px-6">
@@ -620,6 +632,38 @@ export default function PublicMatchDetailView() {
               Actualizando eventos y tracking automaticamente cada 8s.
             </p>
           ) : null}
+
+          <div className="bg-[var(--geo-bg-card)] rounded-2xl overflow-hidden border border-[var(--geo-border)]">
+            <div className="p-4 border-b border-[var(--geo-border)]">
+              <h3 className="font-bold text-[var(--geo-text)]">Ruta al Encuentro</h3>
+              <p className="text-xs text-[var(--geo-text-muted)]">{finalAddress}</p>
+            </div>
+
+            <div className="p-2 space-y-4">
+              {finalLat && finalLng ? (
+                <>
+                  <LiveRouteMap 
+                    destinationLat={finalLat} 
+                    destinationLng={finalLng} 
+                  />
+                  
+                  <button
+                    onClick={handleStartNavigation}
+                    className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-transform active:scale-95"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    Iniciar Viaje en Google Maps
+                  </button>
+                </>
+              ) : (
+                <div className="p-6 text-center text-[var(--geo-text-muted)] bg-[var(--geo-bg)] rounded-xl">
+                  <p>Aún no se ha asignado una ubicación para este partido.</p>
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">

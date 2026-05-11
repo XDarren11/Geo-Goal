@@ -15,6 +15,7 @@ import {
   GetTeamDashboardRequest,
   RemovePlayerFromTeamRequest,
   UpdatePlayerAvatarRequest,
+  UpdatePlayerProfileRequest,
   UpdateTeamRequest,
 } from "../requests/TeamRequests";
 
@@ -133,7 +134,16 @@ export class UpdatePlayerAvatarHandler
 {
   constructor(private readonly svc: ITeamService) {}
   handle(request: UpdatePlayerAvatarRequest): Promise<{ avatarUrl: string }> {
-    return this.svc.updatePlayerAvatar(request.teamId, request.userId, request.avatarFilename);
+    return this.svc.updatePlayerAvatar(request.teamId, request.userId, request.avatarFile);
+  }
+}
+
+export class UpdatePlayerProfileHandler
+  implements RequestHandler<UpdatePlayerProfileRequest, { playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }>
+{
+  constructor(private readonly svc: ITeamService) {}
+  handle(request: UpdatePlayerProfileRequest): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }> {
+    return this.svc.updatePlayerProfile(request.teamId, request.userId, request.payload);
   }
 }
 

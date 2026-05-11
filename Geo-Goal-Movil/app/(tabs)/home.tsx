@@ -70,6 +70,10 @@ export default function HomeScreen() {
     return new Date(date).toLocaleString();
   };
 
+  const openMatchDetail = (matchId: number) => {
+    router.push(`/(tabs)/matchDetail?id=${matchId}`);
+  };
+
   if (userLoading) {
     return <Loader fullScreen label="Cargando tu sesión..." />;
   }
@@ -85,19 +89,19 @@ export default function HomeScreen() {
   return (
     <ScrollView className="flex-1 bg-geo-black">
       {/* Header */}
-      <View className="bg-geo-black border-b border-geo-green px-4 py-6">
+      <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-7 pb-6">
         <View className="flex-row justify-between items-center">
-          <View>
-            <Text className="text-white text-sm">Bienvenido</Text>
-            <Text className="text-geo-green text-2xl font-bold">{user.name}</Text>
-            <Text className="text-gray-400 text-xs mt-1">{user.role}</Text>
+          <View className="flex-1">
+            <Text className="text-gray-400 text-xs">Bienvenido</Text>
+            <Text className="text-geo-green text-2xl font-extrabold" numberOfLines={1}>{user.name}</Text>
+            <Text className="text-gray-500 text-xs mt-1 capitalize">{user.role}</Text>
           </View>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => setNotificationsOpen(true)}
-              className="bg-geo-green/10 p-3 rounded-lg relative"
+              className="bg-gray-800/80 p-3 rounded-2xl border border-geo-green/20 relative"
             >
-              <Ionicons name="notifications-outline" size={24} color="#39FF14" />
+              <Ionicons name="notifications-outline" size={20} color="#39FF14" />
               {unreadCount > 0 ? (
                 <View className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-geo-green items-center justify-center">
                   <Text className="text-[10px] font-black text-geo-black">{unreadCount > 99 ? '99+' : unreadCount}</Text>
@@ -107,9 +111,9 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               onPress={handleLogout}
-              className="bg-geo-green/10 p-3 rounded-lg"
+              className="bg-gray-800/80 p-3 rounded-2xl border border-geo-green/20"
             >
-              <Ionicons name="log-out" size={24} color="#39FF14" />
+              <Ionicons name="log-out" size={20} color="#39FF14" />
             </TouchableOpacity>
           </View>
         </View>
@@ -153,6 +157,7 @@ export default function HomeScreen() {
                   key={`a-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={m.league?.name || 'Liga'}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -172,15 +177,40 @@ export default function HomeScreen() {
 
             <Section title="Próximos partidos">
               {coachLoading ? <Loader label="Cargando..." /> : (coachDashboard?.upcomingMatches ?? []).slice(0, 4).map((m: any) => (
-                <View key={`c-up-${m.id}`} className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2">
+                
+                <TouchableOpacity 
+                  key={`c-up-${m.id}`} 
+                  className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2"
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/matchDetail",
+                      params: { id: m.id } 
+                    });
+                  }}
+                >
                   <Text className="text-white font-bold">{m.teamName} vs {m.opponentName}</Text>
                   <Text className="text-gray-400 text-xs">{m.leagueName} · {formatDate(m.date)}</Text>
+                  
                   {m.location?.lat != null && m.location?.lng != null ? (
-                    <TouchableOpacity onPress={() => openDirections(m.location?.lat, m.location?.lng)} className="mt-2 self-start border border-geo-green rounded px-2 py-1">
-                      <Text className="text-geo-green text-xs font-bold">Cómo llegar</Text>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        router.push({
+                          pathname: "/navigation",
+                          params: { 
+                            destLat: m.location.lat, 
+                            destLng: m.location.lng,
+                            fieldName: m.location.fieldName
+                          }
+                        });
+                      }} 
+                      className="mt-2 self-start border border-geo-green rounded px-2 py-1"
+                    >
+                      <Text className="text-geo-green text-xs font-bold">Cómo llegar (GPS)</Text>
                     </TouchableOpacity>
                   ) : null}
-                </View>
+                </TouchableOpacity>
+                
               ))}
             </Section>
 
@@ -195,6 +225,7 @@ export default function HomeScreen() {
                   key={`c-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={formatDate(m.date)}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -251,6 +282,7 @@ export default function HomeScreen() {
                   key={`p-res-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} ${m.homeScore} - ${m.awayScore} ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={formatDate(m.date)}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -282,6 +314,7 @@ export default function HomeScreen() {
                   key={`r-up-${a.id}`}
                   title={`${a.match?.homeTeam?.name || 'Local'} vs ${a.match?.awayTeam?.name || 'Visitante'}`}
                   subtitle={`${(a.match as any)?.league?.name || 'Liga'} · ${formatDate(a.match?.date)}`}
+                  onPress={() => openMatchDetail(a.matchId)}
                 />
               ))}
             </Section>
@@ -313,6 +346,7 @@ export default function HomeScreen() {
                   key={`r-h-${h.assignmentId}`}
                   title={`${h.match?.homeTeam?.name || 'Local'} vs ${h.match?.awayTeam?.name || 'Visitante'}`}
                   subtitle={`Ev:${h.metrics?.eventsCount ?? 0} Gol:${h.metrics?.goals ?? 0} Tar:${h.metrics?.cards ?? 0} Trk:${h.metrics?.trackingFrames ?? 0}`}
+                  onPress={() => openMatchDetail(h.matchId ?? h.match?.id)}
                 />
               ))}
             </Section>
@@ -377,9 +411,9 @@ export default function HomeScreen() {
 
 function KPI({ label, value }: { label: string; value: string | number }) {
   return (
-    <View className="flex-1 bg-gray-900 border border-geo-green/30 rounded-lg p-3">
-      <Text className="text-gray-400 text-[11px] uppercase">{label}</Text>
-      <Text className="text-geo-green text-xl font-bold mt-1">{value}</Text>
+    <View className="flex-1 bg-gray-900/80 border border-geo-green/20 rounded-2xl p-3">
+      <Text className="text-gray-500 text-[10px] uppercase tracking-wide">{label}</Text>
+      <Text className="text-geo-green text-xl font-extrabold mt-1">{value}</Text>
     </View>
   );
 }
@@ -388,17 +422,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <View>
       <Text className="text-white text-base font-bold mb-2">{title}</Text>
-      <View className="bg-gray-900 border border-geo-green/20 rounded-xl p-3">{children}</View>
+      <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-3">{children}</View>
     </View>
   );
 }
 
-function SimpleRow({ title, subtitle }: { title: string; subtitle?: string }) {
+function SimpleRow({ title, subtitle, onPress }: { title: string; subtitle?: string; onPress?: () => void }) {
+  const Container = onPress ? TouchableOpacity : View;
+
   return (
-    <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-3 mb-2">
-      <Text className="text-white font-bold">{title}</Text>
-      {subtitle ? <Text className="text-gray-400 text-xs mt-1">{subtitle}</Text> : null}
-    </View>
+    <Container onPress={onPress} className="bg-gray-800/80 border border-gray-700/60 rounded-2xl p-3 mb-2 active:opacity-90">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-white font-semibold">{title}</Text>
+          {subtitle ? <Text className="text-gray-400 text-xs mt-1">{subtitle}</Text> : null}
+        </View>
+        {onPress ? <Ionicons name="chevron-forward" size={16} color="#39FF14" /> : null}
+      </View>
+    </Container>
   );
 }
 

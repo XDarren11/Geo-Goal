@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getLeagueMatches, getMatchAnalytics } from "@/api/leagueAPI";
+import { teamLogoUrl } from "@/api/teamAPI";
 import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import { useMemo, useState } from "react";
 import type { MatchAnalyticsResponse } from "@/types";
@@ -121,9 +122,7 @@ function MatchCard({ match }: { match: any }) {
   }, [analytics?.heatmaps]);
 
   const getLogoUrl = (team: any) => {
-    if (team?.logoUrl) {
-      return `http://localhost:4000/uploads/${team.logoUrl}`;
-    }
+    if (team?.logoUrl) return teamLogoUrl(team.logoUrl);
     const initials = team?.name ? team.name.substring(0, 2).toUpperCase() : 'EQ';
     return `https://ui-avatars.com/api/?name=${initials}&background=27272a&color=fff&rounded=true&bold=true`;
   };

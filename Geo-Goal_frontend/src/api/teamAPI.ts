@@ -3,6 +3,13 @@ import type { Team, Player, CoachDashboardSummary, PlayerDashboardSummary } from
 
 const BASE = "/teams";
 
+function resolveMediaUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${value}`;
+}
+
 export async function getMyTeams(): Promise<Team[]> {
   const { data } = await api.get<Team[]>(BASE);
   return data;
@@ -98,9 +105,7 @@ export async function removePlayerFromTeam(
 }
 
 export function teamLogoUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 
 export const getActiveLeagues = async () => {
@@ -124,9 +129,27 @@ export async function updatePlayerAvatar(teamId: number, avatar: File): Promise<
   return data;
 }
 
+export async function updatePlayerProfile(
+  teamId: number,
+  body: {
+    playerName?: string;
+    jerseyNumber?: number;
+    avatar?: File;
+  }
+): Promise<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }> {
+  const formData = new FormData();
+  if (body.playerName != null) formData.append("playerName", body.playerName);
+  if (body.jerseyNumber != null) formData.append("jerseyNumber", String(body.jerseyNumber));
+  if (body.avatar) formData.append("avatar", body.avatar);
+  const { data } = await api.patch<{ playerName: string | null; jerseyNumber: number | null; avatarUrl: string | null }>(
+    `${BASE}/${teamId}/member/profile`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data;
+}
+
 export function avatarUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = import.meta.env.VITE_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 

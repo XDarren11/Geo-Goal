@@ -106,11 +106,12 @@ export default function RefereeScreen() {
   }
 
   return (
-    <ScrollView className="flex-1 bg-geo-black px-4 py-4">
-      <Text className="text-geo-green text-2xl font-bold">Modo Árbitro</Text>
-      <Text className="text-gray-400 mt-1">Partidos del día y registro en vivo.</Text>
+    <ScrollView className="flex-1 bg-geo-black px-4 py-5">
+      <Text className="text-gray-400 text-xs">Control</Text>
+      <Text className="text-geo-green text-2xl font-extrabold">Modo Árbitro</Text>
+      <Text className="text-gray-500 mt-1">Partidos del día y registro en vivo.</Text>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
         <Text className="text-white font-bold text-lg mb-3">Partidos asignados hoy</Text>
         {isLoading ? (
           <Loader label="Cargando partidos..." />
@@ -124,7 +125,7 @@ export default function RefereeScreen() {
                 setSelectedMatchId(a.matchId);
                 setTeamId(String(a.match?.homeTeamId ?? ''));
               }}
-              className={`mb-2 rounded-xl border px-4 py-3 ${selectedMatchId === a.matchId ? 'border-geo-green bg-geo-green/10' : 'border-gray-700 bg-gray-800'}`}
+              className={`mb-2 rounded-xl border px-4 py-3 ${selectedMatchId === a.matchId ? 'border-geo-green bg-geo-green/10' : 'border-gray-700/80 bg-gray-800/80'}`}
             >
               <Text className="text-white font-semibold">
                 {a.match?.homeTeam?.name || 'Local'} vs {a.match?.awayTeam?.name || 'Visitante'}
@@ -137,7 +138,7 @@ export default function RefereeScreen() {
         )}
       </View>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
         <Text className="text-white font-bold text-lg mb-3">Registrar evento</Text>
 
         <Text className="text-gray-400 mb-1 text-xs">Tipo</Text>
@@ -146,16 +147,16 @@ export default function RefereeScreen() {
             <TouchableOpacity
               key={evt}
               onPress={() => setEventType(evt)}
-              className={`px-3 py-2 rounded-lg border ${eventType === evt ? 'border-geo-green bg-geo-green/20' : 'border-gray-700 bg-gray-800'}`}
+              className={`px-3 py-2 rounded-lg border ${eventType === evt ? 'border-geo-green bg-geo-green/20' : 'border-gray-700/80 bg-gray-800/80'}`}
             >
               <Text className={`${eventType === evt ? 'text-geo-green' : 'text-gray-300'} text-xs font-semibold`}>{evt}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <TextInput value={minute} onChangeText={setMinute} placeholder="Minuto" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3" />
-        <TextInput value={teamId} onChangeText={setTeamId} placeholder="teamId (opcional)" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3" />
-        <TextInput value={playerId} onChangeText={setPlayerId} placeholder="playerId (opcional)" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3" />
+        <TextInput value={minute} onChangeText={setMinute} placeholder="Minuto" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3" />
+        <TextInput value={teamId} onChangeText={setTeamId} placeholder="teamId (opcional)" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3" />
+        <TextInput value={playerId} onChangeText={setPlayerId} placeholder="playerId (opcional)" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3" />
 
         <TouchableOpacity
           disabled={!selected || eventMutation.isPending}
@@ -166,15 +167,15 @@ export default function RefereeScreen() {
         </TouchableOpacity>
       </View>
 
-      <View className="mt-5 rounded-2xl border border-geo-green/30 bg-gray-900 p-4 mb-12">
+      <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-12">
         <Text className="text-white font-bold text-lg mb-3">Registrar tracking</Text>
-        <TextInput value={timestampMs} onChangeText={setTimestampMs} placeholder="timestampMs" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3" />
-        <TextInput value={period} onChangeText={(v) => setPeriod((v as any) || '1H')} placeholder="period (1H, 2H...)" placeholderTextColor="#777" className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3" />
+        <TextInput value={timestampMs} onChangeText={setTimestampMs} placeholder="timestampMs" placeholderTextColor="#777" keyboardType="numeric" className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3" />
+        <TextInput value={period} onChangeText={(v) => setPeriod((v as any) || '1H')} placeholder="period (1H, 2H...)" placeholderTextColor="#777" className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3" />
 
         <View className="flex-row gap-2 mb-3">
-          <TextInput value={ballX} onChangeText={setBallX} placeholder="ballX" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white" />
-          <TextInput value={ballY} onChangeText={setBallY} placeholder="ballY" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white" />
-          <TextInput value={ballZ} onChangeText={setBallZ} placeholder="ballZ" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white" />
+          <TextInput value={ballX} onChangeText={setBallX} placeholder="ballX" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white" />
+          <TextInput value={ballY} onChangeText={setBallY} placeholder="ballY" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white" />
+          <TextInput value={ballZ} onChangeText={setBallZ} placeholder="ballZ" placeholderTextColor="#777" keyboardType="numeric" className="flex-1 rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white" />
         </View>
 
         <TextInput
@@ -184,7 +185,7 @@ export default function RefereeScreen() {
           placeholderTextColor="#777"
           multiline
           numberOfLines={5}
-          className="rounded-xl border border-gray-700 bg-gray-800 px-4 py-3 text-white mb-3"
+          className="rounded-xl border border-gray-700/80 bg-gray-800/80 px-4 py-3 text-white mb-3"
           textAlignVertical="top"
         />
 

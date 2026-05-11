@@ -15,7 +15,6 @@ connectDB();
 const app = express();
 
 app.use(cors(corsConfig));
-app.use("/uploads", express.static("public/uploads"));
 app.use(morgan("dev"));
 app.use(express.json());
 

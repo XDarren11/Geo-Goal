@@ -42,16 +42,20 @@ export async function requestConfirmationCode(formData: RequestConfirmationCodeF
 export async function authenticateUser(formData: UserLoginForm) {
     try {
         const url = '/auth/login';
-        const { data } = await api.post<string | { token?: string }>(url, formData);
-        const token = typeof data === 'string' ? data : data?.token;
+        const { data } = await api.post<string | { token?: string; accessToken?: string; refreshToken?: string }>(url, formData);
+        const accessToken = typeof data === 'string' ? data : (data?.accessToken || data?.token);
+        const refreshToken = typeof data === 'string' ? null : (data?.refreshToken || null);
 
-        if (!token) {
+        if (!accessToken) {
             throw new Error('No se recibió token de autenticación');
         }
 
-        await AsyncStorage.setItem('AUTH_TOKEN', token);
+        await AsyncStorage.setItem('AUTH_TOKEN', accessToken);
+        if (refreshToken) {
+            await AsyncStorage.setItem('REFRESH_TOKEN', refreshToken);
+        }
 
-        return token;
+        return accessToken;
     } catch (error) {
         if (isAxiosError(error) && error.response) {
             throw new Error(error.response.data.error);
@@ -113,9 +117,54 @@ export async function getUser() {
     }
 }
 
+export async function updateAccountUsername(username: string) {
+    try {
+        const { data } = await api.patch('/account/username', { username });
+        return data as { username: string | null };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
+export async function updateAccountPassword(formData: {
+    currentPassword: string;
+    newPassword: string;
+    newPasswordConfirmation: string;
+}) {
+    try {
+        const { data } = await api.patch('/account/password', formData);
+        return data as { message: string };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
+export async function resendAccountConfirmationEmail() {
+    try {
+        const { data } = await api.post('/account/resend-confirmation');
+        return data as { message: string };
+    } catch (error) {
+        if (isAxiosError(error) && error.response) {
+            throw new Error(error.response.data.error);
+        }
+        throw error;
+    }
+}
+
 export async function logout() {
     try {
+        const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+        if (refreshToken) {
+            await api.post('/auth/logout', { refreshToken });
+        }
         await AsyncStorage.removeItem('AUTH_TOKEN');
+        await AsyncStorage.removeItem('REFRESH_TOKEN');
     } catch (error) {
         console.error("Error al cerrar sesión", error);
     }

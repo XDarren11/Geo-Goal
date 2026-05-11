@@ -37,14 +37,15 @@ export default function CreateLeagueView() {
         <Text className="text-geo-green ml-2 font-bold text-lg">Volver</Text>
       </TouchableOpacity>
 
+      <Text className="text-gray-400 text-xs">Administración</Text>
       <Text className="font-geo text-4xl text-white tracking-wide">
         Crear liga
       </Text>
       <Text className="mt-2 text-gray-400 mb-8">
-        Nombre, descripción y logo de la liga.
+        Nombre y descripción de la liga.
       </Text>
 
-      <View className="bg-gray-900 border border-geo-green/30 rounded-xl p-5 mb-10">
+      <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-5 mb-10">
         
         {/* Campo: Nombre de la liga */}
         <View className="mb-5">
@@ -55,7 +56,7 @@ export default function CreateLeagueView() {
             rules={{ required: "El nombre es obligatorio" }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className={`bg-geo-black border ${errors.name ? 'border-red-500' : 'border-gray-700'} text-white rounded-lg p-4 focus:border-geo-green`}
+                className={`bg-geo-black border ${errors.name ? 'border-red-500' : 'border-gray-700/80'} text-white rounded-xl p-4 focus:border-geo-green`}
                 placeholder="Ej: Liga Municipal 2026"
                 placeholderTextColor="#6b7280"
                 onBlur={onBlur}
@@ -78,7 +79,7 @@ export default function CreateLeagueView() {
             rules={{ required: "La descripción es obligatoria" }}
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                className={`bg-geo-black border ${errors.description ? 'border-red-500' : 'border-gray-700'} text-white rounded-lg p-4 focus:border-geo-green h-24`}
+                className={`bg-geo-black border ${errors.description ? 'border-red-500' : 'border-gray-700/80'} text-white rounded-xl p-4 focus:border-geo-green h-24`}
                 placeholder="Descripción de la liga"
                 placeholderTextColor="#6b7280"
                 multiline
@@ -92,17 +93,6 @@ export default function CreateLeagueView() {
           {errors.description && (
             <Text className="text-red-500 text-sm mt-1">{errors.description.message}</Text>
           )}
-        </View>
-
-        {/* Campo visual: Logo (Placeholder) */}
-        <View className="mb-8">
-          <Text className="text-white font-bold mb-2">Logo de la liga (próximamente en API)</Text>
-          <View className="bg-geo-black border border-gray-700 border-dashed rounded-lg p-6 items-center justify-center opacity-60">
-            <Ionicons name="image-outline" size={32} color="#9ca3af" />
-            <Text className="text-gray-400 mt-2 text-center text-sm">
-              La carga de imágenes estará disponible pronto
-            </Text>
-          </View>
         </View>
 
         {/* Botón Submit */}

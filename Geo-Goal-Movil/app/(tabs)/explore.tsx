@@ -77,29 +77,32 @@ export default function ExploreScreen() {
   return (
     <View className="flex-1 bg-geo-black">
       {/* Header */}
-      <View className="bg-geo-black border-b border-geo-green px-4 py-4">
-        <Text className="text-geo-green text-2xl font-bold">Explorar</Text>
+      <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-6 pb-5">
+        <Text className="text-white text-xs tracking-wide">Descubre</Text>
+        <Text className="text-geo-green text-2xl font-extrabold">Explorar</Text>
       </View>
 
       {/* Tabs */}
-      <View className="flex-row border-b border-geo-green/30 px-4 gap-4">
-        <TouchableOpacity
-          onPress={() => setActiveTab('leagues')}
-          className={`py-4 px-2 border-b-2 ${activeTab === 'leagues' ? 'border-geo-green' : 'border-transparent'}`}
-        >
-          <Text className={`font-bold ${activeTab === 'leagues' ? 'text-geo-green' : 'text-gray-400'}`}>
-            Ligas
-          </Text>
-        </TouchableOpacity>
+      <View className="px-4 py-3">
+        <View className="flex-row rounded-2xl bg-gray-900/80 border border-geo-green/20 p-1">
+          <TouchableOpacity
+            onPress={() => setActiveTab('leagues')}
+            className={`py-2 px-2 flex-1 rounded-xl ${activeTab === 'leagues' ? 'bg-geo-green/15' : ''}`}
+          >
+            <Text className={`font-semibold text-center ${activeTab === 'leagues' ? 'text-geo-green' : 'text-gray-400'}`}>
+              Ligas
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() => setActiveTab('teams')}
-          className={`py-4 px-2 border-b-2 ${activeTab === 'teams' ? 'border-geo-green' : 'border-transparent'}`}
-        >
-          <Text className={`font-bold ${activeTab === 'teams' ? 'text-geo-green' : 'text-gray-400'}`}>
-            Equipos
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setActiveTab('teams')}
+            className={`py-2 px-2 flex-1 rounded-xl ${activeTab === 'teams' ? 'bg-geo-green/15' : ''}`}
+          >
+            <Text className={`font-semibold text-center ${activeTab === 'teams' ? 'text-geo-green' : 'text-gray-400'}`}>
+              Equipos
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Content */}
@@ -119,15 +122,15 @@ export default function ExploreScreen() {
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     onPress={() => handleLeaguePress(item.id, item.name)}
-                    className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-3"
+                    className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-4 mb-3"
                   >
                     <View className="flex-row justify-between items-start">
                       <View className="flex-1">
-                        <Text className="text-geo-green font-bold text-lg">{item.name}</Text>
+                        <Text className="text-white font-bold text-lg">{item.name}</Text>
                         <Text className="text-gray-400 text-sm mt-1">{item.teams?.length || 0} equipos</Text>
-                        <Text className="text-gray-500 text-xs mt-2">{item.description}</Text>
+                        {item.description ? <Text className="text-gray-500 text-xs mt-2">{item.description}</Text> : null}
                       </View>
-                      <Ionicons name="chevron-forward" size={20} color="#39FF14" />
+                      <Ionicons name="chevron-forward" size={18} color="#6b7280" />
                     </View>
                   </TouchableOpacity>
                 )}
@@ -154,16 +157,16 @@ export default function ExploreScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   onPress={() => handleTeamPress(item)}
-                  className="bg-gray-900 border border-geo-green/30 rounded-lg p-4 mb-3"
+                  className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-4 mb-3"
                 >
                   <View className="flex-row justify-between items-start">
                     <View className="flex-1">
-                      <Text className="text-geo-green font-bold text-lg">{item.name}</Text>
+                      <Text className="text-white font-bold text-lg">{item.name}</Text>
                       <Text className="text-gray-400 text-sm mt-1">
                         {item.league?.name || (item.leagueId ? `Liga ${item.leagueId}` : 'Sin liga')}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#39FF14" />
+                    <Ionicons name="chevron-forward" size={18} color="#6b7280" />
                   </View>
                 </TouchableOpacity>
               )}

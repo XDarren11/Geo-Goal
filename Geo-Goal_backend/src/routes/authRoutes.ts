@@ -96,5 +96,13 @@ router.post(
 
 router.post("/logout-all", authenticate, asyncHandler(AuthController.logoutAll));
 
+router.post(
+  "/oauth/token",
+  body("grant_type").equals("client_credentials").withMessage('grant_type debe ser "client_credentials"'),
+  body("client_id").notEmpty().withMessage("client_id es obligatorio"),
+  body("client_secret").notEmpty().withMessage("client_secret es obligatorio"),
+  handleInputError,
+  asyncHandler(AuthController.clientCredentialsToken)
+);
 
 export default router

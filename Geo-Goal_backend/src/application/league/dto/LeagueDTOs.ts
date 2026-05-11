@@ -1,6 +1,7 @@
 export type CreateLeagueDTO = {
   name: string;
   description: string;
+  logoFile?: import("../../../utils/supabaseStorage").UploadedImageFile | null;
 };
 
 export type UpdateLeagueDTO = {

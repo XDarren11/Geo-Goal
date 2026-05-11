@@ -4,6 +4,12 @@ import type {
   LoginInput,
 } from "../AuthService";
 
+export type ClientCredentialsResult = {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+};
+
 export interface IAuthService {
   createAccount(input: CreateAccountInput): Promise<string>;
   confirmAccount(token: string): Promise<string>;
@@ -15,4 +21,5 @@ export interface IAuthService {
   refreshAccessToken(refreshToken: string): Promise<AuthTokens>;
   revokeRefreshToken(refreshToken: string): Promise<string>;
   revokeAllSessions(userId: number): Promise<string>;
+  clientCredentialsGrant(clientId: string, clientSecret: string): Promise<ClientCredentialsResult>;
 }

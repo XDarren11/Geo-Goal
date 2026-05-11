@@ -3,6 +3,13 @@ import type { League, Team, FixtureByRound, Match } from "@/types";
 
 const BASE = "/league";
 
+function resolveMediaUrl(value: string | null | undefined): string {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  const base = process.env.EXPO_PUBLIC_API_URL || "";
+  return `${base.replace(/\/$/, "")}/uploads/${value}`;
+}
+
 export async function getLeagues(): Promise<League[]> {
   const { data } = await api.get<League[]>(BASE);
   return data;
@@ -39,13 +46,30 @@ export async function updateMatchSchedule(matchId: number, date: string) {
 }
 
 export function leagueLogoUrl(path: string | null | undefined): string {
-  if (!path) return "";
-  const base = process.env.EXPO_PUBLIC_API_URL || "";
-  return `${base.replace(/\/$/, "")}/uploads/${path}`;
+  return resolveMediaUrl(path);
 }
 
-// 👇👇👇 ¡AQUÍ ESTÁ LA MAGIA NUEVA PARA CREAR LIGAS! 👇👇👇
 export async function createLeague(body: { name: string; description: string }): Promise<string> {
   const { data } = await api.post<string>(BASE, body);
+  return data;
+}
+
+export async function updateLeague(
+  leagueId: number,
+  body: { name?: string; description?: string | null; logo?: { uri: string; name?: string; type?: string } | null }
+): Promise<string> {
+  const formData = new FormData();
+  if (body.name != null) formData.append('name', body.name);
+  if (body.description != null) formData.append('description', body.description);
+  if (body.logo) {
+    formData.append('logoFile', {
+      uri: body.logo.uri,
+      name: body.logo.name || 'logo.jpg',
+      type: body.logo.type || 'image/jpeg',
+    } as any);
+  }
+  const { data } = await api.patch<string>(`${BASE}/${leagueId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 }

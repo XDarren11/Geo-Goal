@@ -1,3 +1,5 @@
+import type { UploadedImageFile } from "../../utils/supabaseStorage";
+
 import type {
   CreateLeagueDTO,
   GenerateFixtureOptionsDTO,
@@ -38,5 +40,5 @@ export interface ILeagueService {
     leagueId: string,
     audit: RestructureFixtureAuditDTO
   ): Promise<{ message: string; newMatchesGenerated: number }>;
-  updateLeagueLogo(leagueId: string, logoFilename: string): Promise<{ logoUrl: string }>;
+  updateLeagueLogo(leagueId: string, logoFile: UploadedImageFile): Promise<{ logoUrl: string }>;
 }

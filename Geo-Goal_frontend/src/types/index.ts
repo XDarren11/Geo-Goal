@@ -24,7 +24,9 @@ export const userSchema = authSchema.pick({
     email: true,
     role: true
 }).extend({
-    id: z.number()
+  id: z.number(),
+  username: z.string().nullable().optional(),
+  confirmed: z.boolean().optional()
 })
 
 export type User = z.infer<typeof userSchema>
@@ -94,11 +96,27 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  lat?: number;
+  lng?: number;
+  fieldAddress?: string;
   location?: {
     lat: number
     lng: number
     fieldAddress?: string
   } | null
+
+  detail?: {
+    field?: {
+      id?: number;
+      name?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      lat?: number;
+      lng?: number;
+    }
+  };
 }
 
 export interface MatchDetailLineupEntry {
@@ -150,6 +168,8 @@ export interface PublicMatchDetail {
     city?: string | null
     state?: string | null
     country?: string | null
+    lat?: number
+    lng?: number
   } | null
   homeCoachId?: number | null
   awayCoachId?: number | null

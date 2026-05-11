@@ -8,10 +8,10 @@ import {
   removePlayerFromTeam,
   teamLogoUrl,
   updateTeam,
-  updatePlayerAvatar,
+  updatePlayerProfile,
   avatarUrl as playerAvatarUrl,
 } from "@/api/teamAPI";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { UserGroupIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { TeamInvitationMenu } from "@/components/InvitationMenus/TeamInvitationMenu";
@@ -29,6 +29,9 @@ export default function TeamDetailView() {
   const [playerEmail, setPlayerEmail] = useState("");
   const [foundPlayer, setFoundPlayer] = useState<{ id: number; name: string; email: string } | null>(null);
   const [searching, setSearching] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileJersey, setProfileJersey] = useState("");
+  const [profileAvatar, setProfileAvatar] = useState<File | null>(null);
   const backToTeamsPath =
     currentUser?.role === "player"
       ? "/my-teams"
@@ -48,6 +51,15 @@ export default function TeamDetailView() {
     enabled: isValidTeamId,
   });
 
+  const currentMembership = players?.find((player) => player.id === currentUser?.id) ?? null;
+
+  useEffect(() => {
+    if (!currentMembership) return;
+    setProfileName(currentMembership.playerName || currentMembership.name || "");
+    setProfileJersey(currentMembership.jerseyNumber != null ? String(currentMembership.jerseyNumber) : "");
+    setProfileAvatar(null);
+  }, [currentMembership]);
+
   const addPlayerMutation = useMutation({
     mutationFn: (playerId: number) => addPlayerToTeam(id, playerId),
     onSuccess: () => {
@@ -66,6 +78,21 @@ export default function TeamDetailView() {
       toast.success("Jugador eliminado");
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo quitar el jugador")),
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: () =>
+      updatePlayerProfile(id, {
+        playerName: profileName.trim(),
+        jerseyNumber: profileJersey.trim() ? Number(profileJersey) : undefined,
+        avatar: profileAvatar ?? undefined,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["team-players", id] });
+      setProfileAvatar(null);
+      toast.success("Perfil actualizado");
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "No se pudo actualizar el perfil")),
   });
 
   async function handleFindPlayer() {
@@ -210,6 +237,57 @@ export default function TeamDetailView() {
         </div>
       </div>
 
+      {currentMembership ? (
+        <div className="card-pitch p-4 opacity-0 animate-in-up stagger-1">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid flex-1 gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">Tu nombre de jugador</span>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] px-3 py-2 text-[var(--geo-text)]"
+                  placeholder="Nombre visible en el equipo"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">Tu dorsal</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={profileJersey}
+                  onChange={(e) => setProfileJersey(e.target.value)}
+                  className="w-full rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] px-3 py-2 text-[var(--geo-text)]"
+                  placeholder="#"
+                />
+              </label>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--geo-border)] px-3 py-2 text-sm font-semibold text-[var(--geo-text)]">
+                <PlusIcon className="h-4 w-4 text-geo-green" />
+                {profileAvatar ? profileAvatar.name : "Cambiar foto"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => setProfileAvatar(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => updateProfileMutation.mutate()}
+                disabled={updateProfileMutation.isPending}
+                className="rounded-lg bg-geo-green px-4 py-2 font-bold text-geo-black hover:bg-geo-green-hover disabled:opacity-60"
+              >
+                {updateProfileMutation.isPending ? "Guardando…" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 opacity-0 animate-in-up stagger-2 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Coach" value={team.trainer?.name ?? "—"} accent="text-[var(--geo-text)]" />
         <MetricCard label="Cancha" value={team.fieldAddress ?? "—"} accent="text-[var(--geo-text)]" />
@@ -299,12 +377,12 @@ export default function TeamDetailView() {
         {canManagePlayers ? (
         <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
           <p className="text-sm font-semibold text-[var(--geo-text)]">
-            Buscar jugador por email para agregar
+            Buscar jugador por correo o @username para agregar
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <input
-              type="email"
-              placeholder="email@jugador.com"
+              type="text"
+              placeholder="correo@jugador.com o @usuario"
               value={playerEmail}
               onChange={(e) => setPlayerEmail(e.target.value)}
               className="min-w-[200px] flex-1 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg-card)] px-3 py-2 text-[var(--geo-text)]"
@@ -359,25 +437,9 @@ export default function TeamDetailView() {
                       </div>
                     )}
                     {isCurrentPlayer && (
-                      <label className="absolute -bottom-1 -right-1 cursor-pointer rounded-full bg-geo-green p-0.5 shadow" title="Cambiar mi foto">
+                      <span className="absolute -bottom-1 -right-1 rounded-full bg-geo-green p-0.5 shadow" title="Foto editable en el bloque superior">
                         <PlusIcon className="h-2.5 w-2.5 text-geo-black" />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            try {
-                              await updatePlayerAvatar(id, file);
-                              void queryClient.invalidateQueries({ queryKey: ["team-players", id] });
-                              toast.success("Foto actualizada");
-                            } catch {
-                              toast.error("No se pudo actualizar la foto");
-                            }
-                          }}
-                        />
-                      </label>
+                      </span>
                     )}
                   </div>
                   <span className="font-medium text-[var(--geo-text)]">
@@ -408,7 +470,7 @@ export default function TeamDetailView() {
           </ul>
         ) : (
           <p className="mt-4 text-[var(--geo-text-muted)]">
-            Aún no hay jugadores. Busca por email para agregar.
+            Aún no hay jugadores. Busca por correo o @username para agregar.
           </p>
         )}
       </div>

@@ -13,6 +13,7 @@ import {
   RequestConfirmationCodeRequest,
   UpdatePasswordRequest,
   ValidateTokenRequest,
+  ClientCredentialsRequest,
 } from "../application/auth/requests/AuthRequests";
 
 const authMediator = buildAuthMediator(new AuthServiceAdapter());
@@ -91,6 +92,14 @@ export class AuthController {
       return;
     }
     const result = await authMediator.send(new LogoutAllRequest(req.user.id));
+    res.send(result);
+  };
+
+  static clientCredentialsToken = async (req: Request, res: Response): Promise<void> => {
+    const { client_id, client_secret } = req.body;
+    const result = await authMediator.send(
+      new ClientCredentialsRequest({ clientId: client_id, clientSecret: client_secret })
+    );
     res.send(result);
   };
 }

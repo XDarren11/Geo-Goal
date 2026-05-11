@@ -116,6 +116,8 @@ export default function MatchDetailMobileScreen() {
   const { match, detail } = data;
   const home = normalizeLineup(detail.homeStartingXI);
   const away = normalizeLineup(detail.awayStartingXI);
+  const homeBench = normalizeLineup(detail.homeBench);
+  const awayBench = normalizeLineup(detail.awayBench);
   const incidents = buildIncidentMap(analytics);
   const currentFrame = frames.length ? frames[Math.min(frameIndex, frames.length - 1)] : null;
 
@@ -142,23 +144,81 @@ export default function MatchDetailMobileScreen() {
   };
 
   return (
-    <ScrollView className="flex-1 bg-geo-black px-4 py-4">
+    <ScrollView className="flex-1 bg-geo-black px-4 py-5">
       <View className="flex-row items-center mb-4">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3">
-          <Ionicons name="arrow-back" size={24} color="#39FF14" />
+        <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80 border border-geo-green/20">
+          <Ionicons name="arrow-back" size={20} color="#39FF14" />
         </TouchableOpacity>
         <View className="flex-1">
-          <Text className="text-white font-bold text-lg">{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
+          <Text className="text-white font-extrabold text-lg" numberOfLines={1}>{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
           <Text className="text-gray-400 text-xs">{match.roundName}</Text>
         </View>
       </View>
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-4">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
         <Text className="text-geo-green font-bold text-base">Marcador</Text>
         <Text className="text-white font-black text-3xl mt-1">{match.played ? `${match.homeScore} - ${match.awayScore}` : 'Pendiente'}</Text>
+        <Text className="text-gray-400 text-xs mt-2">
+          {detail.kickoffTime ? `Inicio: ${new Date(detail.kickoffTime).toLocaleString()}` : 'Inicio no programado'}
+          {detail.matchDay ? ` · Jornada ${detail.matchDay}` : ''}
+        </Text>
       </View>
 
-      <View className="rounded-xl border border-geo-green/30 bg-gray-900 p-4 mb-6">
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+        <Text className="text-geo-green font-bold mb-3">Datos del partido</Text>
+        <View className="flex-row flex-wrap gap-2">
+          <MetaPill label="Árbitro" value={detail.referee || '—'} />
+          <MetaPill label="Clima" value={detail.weather || '—'} />
+          <MetaPill label="Asistencia" value={typeof detail.attendance === 'number' ? detail.attendance.toLocaleString() : '—'} />
+          <MetaPill label="Duración" value={typeof detail.durationMinutes === 'number' ? `${detail.durationMinutes} min` : '—'} />
+        </View>
+        {detail.notes ? <Text className="text-gray-400 text-xs mt-3">{detail.notes}</Text> : null}
+      </View>
+
+      {analytics ? (
+        <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+          <Text className="text-geo-green font-bold mb-3">Resumen analítico</Text>
+          <View className="flex-row flex-wrap gap-2">
+            <MetaPill label="Jugadores" value={String(analytics.summary.totalPlayersWithStats)} />
+            <MetaPill label="Pases" value={String(analytics.summary.totalPassEdges)} />
+            <MetaPill label="Eventos espaciales" value={String(analytics.summary.totalSpatialEvents)} />
+            <MetaPill label="Frames" value={String(analytics.trackingFrames.length)} />
+          </View>
+        </View>
+      ) : null}
+
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+        <Text className="text-geo-green font-bold mb-3">Alineaciones</Text>
+        <View className="mb-3">
+          <Text className="text-white font-semibold mb-2">Local</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {home.map((p) => (
+              <LineupChip key={`home-${p.userId ?? p.name}-${p.idx}`} number={p.number} name={p.name} incident={p.userId ? incidents.get(p.userId) : undefined} />
+            ))}
+          </View>
+        </View>
+        <View className="mb-3">
+          <Text className="text-white font-semibold mb-2">Visitante</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {away.map((p) => (
+              <LineupChip key={`away-${p.userId ?? p.name}-${p.idx}`} number={p.number} name={p.name} incident={p.userId ? incidents.get(p.userId) : undefined} away />
+            ))}
+          </View>
+        </View>
+        <View>
+          <Text className="text-white font-semibold mb-2">Banquillo</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {homeBench.slice(0, 7).map((p) => (
+              <MiniTag key={`hb-${p.userId ?? p.name}-${p.idx}`} label={`${p.number ?? '-'} ${p.name}`} />
+            ))}
+            {awayBench.slice(0, 7).map((p) => (
+              <MiniTag key={`ab-${p.userId ?? p.name}-${p.idx}`} label={`${p.number ?? '-'} ${p.name}`} />
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-6">
         <Text className="text-geo-green font-bold mb-2">Replay táctico</Text>
 
         <View className="flex-row items-center justify-between mb-2">
@@ -244,11 +304,43 @@ export default function MatchDetailMobileScreen() {
         <Text className="text-geo-green font-bold mb-2">Eventos recientes</Text>
         {(analytics?.timelineEvents ?? []).slice(-10).reverse().map((ev) => (
           <View key={`ev-${ev.id}`} className="rounded-lg bg-gray-800 p-3 mb-2">
-            <Text className="text-white font-semibold">{ev.minute}' · {ev.eventType}{ev.outcome ? ` (${ev.outcome})` : ''}</Text>
+            <Text className="text-white font-semibold">{ev.minute}&#39; · {ev.eventType}{ev.outcome ? ` (${ev.outcome})` : ''}</Text>
             <Text className="text-gray-400 text-xs">source: {ev.source || '—'} · conf: {typeof ev.confidence === 'number' ? ev.confidence.toFixed(2) : '—'}</Text>
           </View>
         ))}
       </View>
     </ScrollView>
+  );
+}
+
+function MetaPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="min-w-[46%] flex-1 rounded-xl border border-geo-green/20 bg-gray-800 px-3 py-2">
+      <Text className="text-[10px] uppercase tracking-wide text-gray-400">{label}</Text>
+      <Text className="text-sm font-bold text-white mt-1" numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
+function LineupChip({ number, name, incident, away = false }: { number?: number; name: string; incident?: { yellow: number; red: number; subOut: number; subIn: number }; away?: boolean }) {
+  const hasRed = Boolean(incident?.red);
+  const hasYellow = Boolean(incident?.yellow);
+
+  return (
+    <View className={`rounded-full border px-3 py-2 ${away ? 'border-sky-300/40 bg-sky-300/10' : 'border-emerald-300/40 bg-emerald-300/10'}`}>
+      <Text className={`text-xs font-semibold ${away ? 'text-sky-100' : 'text-emerald-100'}`} numberOfLines={1}>
+        {number != null ? `${number}. ` : ''}{name}
+        {hasYellow ? ' 🟨' : ''}
+        {hasRed ? ' 🟥' : ''}
+      </Text>
+    </View>
+  );
+}
+
+function MiniTag({ label }: { label: string }) {
+  return (
+    <View className="rounded-full border border-gray-700 bg-gray-800 px-3 py-2">
+      <Text className="text-[10px] text-gray-300" numberOfLines={1}>{label}</Text>
+    </View>
   );
 }

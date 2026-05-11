@@ -10,6 +10,7 @@ import {
   TrophyIcon,
   UserGroupIcon,
   CalendarDaysIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, type ComponentType } from "react";
@@ -93,6 +94,7 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
     { to: "/standings", label: "Tabla de posiciones", icon: ChartBarIcon },
     { to: "/results", label: "Resultados", icon: TrophyIcon },
     { to: "/news", label: "Noticias", icon: DocumentTextIcon },
+    { to: "/account", label: "Mi cuenta", icon: UserCircleIcon },
   ];
 
   const roleLinks =

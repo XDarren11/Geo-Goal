@@ -37,6 +37,7 @@ import SeasonManagementView from "@/views/admin/SeasonManagement";
 import AuditLogsView from "@/views/admin/AuditLogs";
 import RefereeCenterView from "@/views/admin/RefereeCenter";
 import CoachTeamsView from "./views/team/TeamView/CoachTeamsView";
+import AccountManagementView from "@/views/account/AccountManagement";
 
 const ACCESS_TOKEN_KEY = "AUTH_TOKEN";
 const REFRESH_TOKEN_KEY = "AUTH_REFRESH_TOKEN";
@@ -206,6 +207,14 @@ export default function Router() {
           <Route path="/leagues/:leagueId/teams/:teamId/dashboard" element={<TeamDashboardView />} />
 
           <Route path="/news" element={<NewsView />} />
+          <Route
+            path="/account"
+            element={
+              <RoleGuard allowedRoles={["admin", "coach", "player", "referee"]}>
+                <AccountManagementView />
+              </RoleGuard>
+            }
+          />
         </Route>
 
         <Route element={<AuthLayout />}>

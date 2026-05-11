@@ -342,7 +342,7 @@ export class MatchDetailService {
     const detail = await MatchDetail.findOne({
       where: { matchId: Number(matchId) },
       include: [
-        { model: Field, attributes: ["id", "name", "address", "city", "state", "country"] },
+        { model: Field, attributes: ["id", "name", "address", "city", "state", "country","lat","lng"] },
         { model: User, as: "homeCoach", attributes: ["id", "name", "email"] },
         { model: User, as: "awayCoach", attributes: ["id", "name", "email"] },
       ],
