@@ -11,6 +11,7 @@ import {
   MatchDetailUpsertHandler,
   RegisterBulkEventsHandler,
   RegisterEventHandler,
+  RegisterTrackingBatchHandler,
   RegisterTrackingFrameHandler,
 } from "./handlers/MatchDetailHandlers";
 
@@ -24,6 +25,7 @@ export function buildMatchDetailMediator(svc: IMatchFlowService): Mediator {
   m.register("matchDetail.registerEvent", new RegisterEventHandler(svc));
   m.register("matchDetail.registerBulkEvents", new RegisterBulkEventsHandler(svc));
   m.register("matchDetail.registerTrackingFrame", new RegisterTrackingFrameHandler(svc));
+  m.register("matchDetail.registerTrackingBatch", new RegisterTrackingBatchHandler(svc));
   m.register("matchDetail.getLeagueReferees", new GetLeagueRefereesHandler(svc));
   m.register("matchDetail.getUpcomingLeagueMatches", new GetUpcomingLeagueMatchesHandler(svc));
   m.register("matchDetail.getMatchAnalytics", new GetFlowMatchAnalyticsHandler(svc));

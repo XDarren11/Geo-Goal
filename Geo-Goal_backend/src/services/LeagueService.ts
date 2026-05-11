@@ -3,6 +3,7 @@ import {League} from "../models/League";
 import {Team} from "../models/Team";
 import {User} from "../models/User";
 import {Match} from "../models/Match";
+import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
 import {Season} from "../models/Season";
 import {TeamLeagueStat} from "../models/TeamLeagueStat";
 import {TeamMember} from "../models/TeamMember";
@@ -834,6 +835,18 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     const playedMatches = await Match.findAll({
       where: { leagueId, seasonId: activeSeasonId, played: true },
     });
+
+    const unplayedMatches = await Match.findAll({
+      where: { leagueId, seasonId: activeSeasonId, played: false },
+      attributes: ["id"],
+    });
+    const unplayedMatchIds = unplayedMatches.map((m) => m.id);
+
+    if (unplayedMatchIds.length > 0) {
+      await MatchRefereeAssignment.destroy({
+        where: { matchId: { [Op.in]: unplayedMatchIds } },
+      });
+    }
 
     await Match.destroy({
       where: { leagueId, seasonId: activeSeasonId, played: false },

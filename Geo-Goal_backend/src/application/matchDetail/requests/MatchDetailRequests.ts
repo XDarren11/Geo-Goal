@@ -4,6 +4,7 @@ import type {
   MatchDetailUpsertBodyDTO,
   RegisterBulkEventsBodyDTO,
   RegisterMatchEventBodyDTO,
+  RegisterTrackingBatchBodyDTO,
   RegisterTrackingFrameBodyDTO,
 } from "../dto/MatchDetailDTOs";
 
@@ -82,6 +83,17 @@ export class RegisterTrackingFrameRequest extends MFR<unknown> {
     public readonly matchId: string,
     public readonly userId: number,
     public readonly body: RegisterTrackingFrameBodyDTO
+  ) {
+    super();
+  }
+}
+
+export class RegisterTrackingBatchRequest extends MFR<unknown> {
+  readonly requestName = "matchDetail.registerTrackingBatch";
+  constructor(
+    public readonly matchId: string,
+    public readonly userId: number,
+    public readonly body: RegisterTrackingBatchBodyDTO
   ) {
     super();
   }

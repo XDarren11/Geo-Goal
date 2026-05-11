@@ -1,7 +1,9 @@
 import { Router } from "express";
-import { param } from "express-validator";
+import { param, body } from "express-validator";
 import { asyncHandler } from "../middleware/asyncHandler";
+import { authenticate } from "../middleware/auth";
 import { handleInputError } from "../middleware/validation";
+import { uploadVideo } from "../middleware/upload";
 import { PublicController } from "../controllers/PublicController";
 import { MatchDetailController } from "../controllers/MatchDetailController";
 
@@ -59,6 +61,67 @@ router.get(
   param("matchId").isInt().withMessage("ID de partido no válido"),
   handleInputError,
   asyncHandler(PublicController.getMatchAnalytics)
+);
+
+router.post(
+  "/matches/:matchId/tracking/batch",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("frames").isArray({ min: 1 }).withMessage("frames debe ser un arreglo no vacío"),
+  handleInputError,
+  asyncHandler(MatchDetailController.registerTrackingBatch)
+);
+
+router.post(
+  "/matches/:matchId/upload-video",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  uploadVideo.single("video"),
+  handleInputError,
+  asyncHandler(MatchDetailController.uploadVideo)
+);
+
+router.get(
+  "/matches/:matchId/analysis/status",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(MatchDetailController.getAnalysisStatus)
+);
+
+router.put(
+  "/matches/:matchId/analysis/keypoints",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("srcPts")
+    .isArray({ min: 4, max: 4 })
+    .withMessage("srcPts debe ser un arreglo de exactamente 4 puntos"),
+  body("srcPts.*.x").isNumeric().withMessage("Cada punto debe tener x numérico"),
+  body("srcPts.*.y").isNumeric().withMessage("Cada punto debe tener y numérico"),
+  handleInputError,
+  asyncHandler(MatchDetailController.submitKeypoints)
+);
+
+router.put(
+  "/matches/:matchId/analysis/progress",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("status").isString().withMessage("status es requerido"),
+  body("progress").optional().isInt({ min: 0, max: 100 }),
+  body("currentStep").optional().isString(),
+  body("framesProcessed").optional().isInt(),
+  body("totalFrames").optional().isInt(),
+  body("error").optional().isString(),
+  handleInputError,
+  asyncHandler(MatchDetailController.reportProgress)
+);
+
+router.get(
+  "/matches/:matchId/analysis/frame",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(MatchDetailController.getAnalysisFrame)
 );
 
 export default router;

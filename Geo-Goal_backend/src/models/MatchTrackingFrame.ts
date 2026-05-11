@@ -50,6 +50,9 @@ export class MatchTrackingFrame extends Model {
   @Column({ type: DataType.FLOAT, allowNull: false, defaultValue: 1 })
   declare confidence: number;
 
+  @Column({ type: DataType.STRING, allowNull: false, defaultValue: "normalized" })
+  declare coordSystem: "normalized" | "meters";
+
   @ForeignKey(() => User)
   @Column({ type: DataType.INTEGER, allowNull: true })
   declare recordedBy: number | null;

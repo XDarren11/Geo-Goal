@@ -106,3 +106,30 @@ export async function uploadImageToSupabase(
 
   return { url, key };
 }
+
+export async function uploadVideoToSupabase(
+  filePath: string,
+  mimetype: string,
+  filename: string,
+  matchId: number
+): Promise<{ url: string; key: string }> {
+  requireSupabaseConfig();
+
+  const fs = await import("fs");
+  const fileBuffer = fs.readFileSync(filePath);
+
+  const ext = path.extname(filename) || ".mp4";
+  const key = `analysis/${matchId}/${Date.now()}-${randomUUID()}${ext}`;
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: SUPABASE_BUCKET!,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: mimetype,
+    })
+  );
+
+  const url = `${SUPABASE_PUBLIC_BASE_URL}/${SUPABASE_BUCKET}/${key}`;
+  return { url, key };
+}

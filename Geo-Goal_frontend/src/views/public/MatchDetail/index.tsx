@@ -1,10 +1,11 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse } from "@/api/publicAPI";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
-import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon } from "@heroicons/react/24/outline";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
+import { useAuth } from "@/hooks/useAuth";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro";
@@ -455,6 +456,253 @@ export default function PublicMatchDetailView() {
   const [tick, setTick] = useState(() => Date.now());
   const [viewMode, setViewMode] = useState<MatchViewMode>("normal");
 
+  // ---- upload-video state (admin only) ----
+  const { data: user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ---- annotation state ----
+  const [uploadStep, setUploadStep] = useState<"select" | "annotate" | "progress">("select");
+  const [srcPts, setSrcPts] = useState<Array<{ x: number; y: number }>>([]);
+  const [frameExtracting, setFrameExtracting] = useState(false);
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Extract frame from local file (browser-side, instant)
+  const extractFrameLocal = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+
+      const url = URL.createObjectURL(file);
+      let handled = false;
+
+      const drawAndResolve = () => {
+        if (handled) return;
+        handled = true;
+        const canvas = document.createElement("canvas");
+        const w = video.videoWidth || 640;
+        const h = video.videoHeight || 360;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          URL.revokeObjectURL(url);
+          reject(new Error("2D context unavailable"));
+          return;
+        }
+        ctx.drawImage(video, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        URL.revokeObjectURL(url);
+        resolve(dataUrl);
+      };
+
+      video.onloadeddata = () => {
+        setTimeout(() => { if (!handled) drawAndResolve(); }, 400);
+        video.currentTime = 0;
+      };
+
+      video.onseeked = () => drawAndResolve();
+
+      video.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Formato de video no soportado en este navegador"));
+      };
+
+      video.src = url;
+      video.load();
+    });
+  };
+
+  // When user selects a file → extract frame locally (instant) + upload in background
+  const handleFileSelected = async (file: File | null) => {
+    if (!file) return;
+    setUploadFile(file);
+    setUploadError(null);
+    setSrcPts([]);
+    setFrameError(null);
+    setFrameDataUrl(null);
+    setUploadProgress(0);
+
+    // 1. Extract frame from local file immediately in browser
+    setUploadStep("annotate");
+    setFrameExtracting(true);
+    extractFrameLocal(file).then((dataUrl) => {
+      setFrameDataUrl(dataUrl);
+      setFrameExtracting(false);
+    }).catch((err) => {
+      setFrameError(err.message ?? "No se pudo extraer el fotograma.");
+      setFrameExtracting(false);
+    });
+
+    // 2. Upload in background
+    setUploading(true);
+    try {
+      await uploadMatchVideo(id, file, (pct) => setUploadProgress(pct));
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? e?.message ?? "Error al subir el video";
+      setUploadError(msg);
+      setUploadStep("select");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Draw local frame onto canvas once it arrives
+  useEffect(() => {
+    if (uploadStep !== "annotate" || !frameDataUrl) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+    };
+    img.src = frameDataUrl;
+  }, [uploadStep, frameDataUrl]);
+
+  // Submit keypoints (video already uploaded)
+  const handleSubmitKeypoints = async () => {
+    if (srcPts.length !== 4) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      await submitAnalysisKeypoints(id, srcPts);
+      setUploadStep("progress");
+      setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? e?.message ?? "Error al iniciar el análisis";
+      setUploadError(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Step 3: Poll progress
+  useEffect(() => {
+    if (uploadStep !== "progress") return;
+    const interval = setInterval(async () => {
+      try {
+        const status = await getAnalysisStatus(id);
+        setAnalysisStatus(status);
+        if (status.status === "completed" || status.status === "failed") {
+          setUploadResult(
+            status.status === "completed"
+              ? "Análisis completado. Refresca la página para ver los resultados."
+              : `Error: ${status.error ?? "Falló el análisis"}`
+          );
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [uploadStep, id]);
+
+  const resetUpload = () => {
+    setUploadOpen(false);
+    setUploadFile(null);
+    setUploadResult(null);
+    setUploadError(null);
+    setSrcPts([]);
+    setUploadStep("select");
+    setFrameError(null);
+    setFrameDataUrl(null);
+    setAnalysisStatus(null);
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // ---- canvas annotation ----
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (srcPts.length >= 4) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+
+    setSrcPts((prev) => [...prev, { x, y }]);
+  };
+
+  const handleUndoPoint = () => {
+    setSrcPts((prev) => prev.slice(0, -1));
+  };
+
+  const handleResetPoints = () => {
+    setSrcPts([]);
+  };
+
+  // Redraw canvas markers when srcPts changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || uploadStep !== "annotate" || !frameDataUrl) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Re-draw base frame from cached image
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      drawMarkers(ctx);
+    };
+    img.src = frameDataUrl;
+  }, [srcPts, uploadStep, frameDataUrl]);
+
+  const drawMarkers = (ctx: CanvasRenderingContext2D) => {
+    // Draw connecting polygon
+    if (srcPts.length >= 2) {
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(57, 255, 20, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.moveTo(srcPts[0].x, srcPts[0].y);
+      for (let i = 1; i < srcPts.length; i++) {
+        ctx.lineTo(srcPts[i].x, srcPts[i].y);
+      }
+      if (srcPts.length === 4) {
+        ctx.lineTo(srcPts[0].x, srcPts[0].y);
+      }
+      ctx.stroke();
+    }
+
+    // Draw markers
+    srcPts.forEach((pt, i) => {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+      ctx.fillStyle = i < 2 ? "#39FF14" : "#facc15";
+      ctx.fill();
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = "#000";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(i + 1), pt.x, pt.y);
+    });
+  };
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["public-match-detail", id],
     queryFn: () => getPublicMatchDetail(id),
@@ -587,7 +835,17 @@ export default function PublicMatchDetailView() {
         <section className="mt-4 rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h1 className="font-geo text-3xl lg:text-4xl">Detalle de partido</h1>
-            <span
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <button
+                  onClick={() => setUploadOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-geo-green px-4 py-2 text-sm font-semibold text-black hover:bg-geo-green/80 transition-colors"
+                >
+                  <VideoCameraIcon className="h-5 w-5" />
+                  Analizar video
+                </button>
+              )}
+              <span
               className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${
                 liveState === "live"
                   ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-400"
@@ -598,6 +856,7 @@ export default function PublicMatchDetailView() {
             >
               {liveState === "live" ? "En curso" : liveState === "finished" ? "Finalizado" : "Programado"}
             </span>
+          </div>
           </div>
           <p className="mt-2 text-lg text-[var(--geo-text)]">
             {match.homeTeam?.name ?? "Local"} vs {match.awayTeam?.name ?? "Visitante"}
@@ -884,6 +1143,245 @@ export default function PublicMatchDetailView() {
             <p className="text-sm text-[var(--geo-text-muted)]">Sin analytics disponibles para este partido.</p>
           )}
         </section>
+
+        {/* ---- Upload Video Modal (admin only) ---- */}
+        {uploadOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">Subir video para análisis</h2>
+                <button onClick={resetUpload} className="text-[var(--geo-text-muted)] hover:text-white">
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              {uploadResult && analysisStatus?.status !== "processing" ? (
+                <div className="space-y-4">
+                  <div className={`rounded-lg border p-4 text-sm ${
+                    analysisStatus?.status === "failed"
+                      ? "border-red-500/40 bg-red-500/10 text-red-400"
+                      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                  }`}>
+                    {uploadResult}
+                  </div>
+                  <button onClick={resetUpload} className="w-full rounded-lg bg-geo-green px-4 py-2 text-sm font-semibold text-black hover:bg-geo-green/80">
+                    Entendido
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Step 1: Select file → uploads immediately */}
+                  {uploadStep === "select" && (
+                    <>
+                      <p className="text-sm text-[var(--geo-text-muted)]">
+                        Selecciona un video de cámara táctica (MP4, MOV). Se subirá automáticamente y luego podrás marcar las esquinas del campo.
+                      </p>
+
+                      {uploading ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-[var(--geo-text-muted)]">
+                            <div className="h-4 w-4 border-2 border-geo-green border-t-transparent rounded-full animate-spin" />
+                            Subiendo {uploadFile?.name}…
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs text-[var(--geo-text-muted)]">
+                              <span>Progreso de subida</span>
+                              <span>{uploadProgress}%</span>
+                            </div>
+                            <div className="w-full h-3 rounded-full bg-[var(--geo-bg)] overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-geo-green transition-all duration-300"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-[var(--geo-border)] p-6 cursor-pointer hover:border-geo-green/50 transition-colors">
+                          <VideoCameraIcon className="h-10 w-10 text-[var(--geo-text-muted)]" />
+                          <span className="text-sm font-medium">
+                            {uploadFile ? uploadFile.name : "Haz clic para seleccionar un video"}
+                          </span>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="video/mp4,video/quicktime,video/x-msvideo,video/webm"
+                            className="hidden"
+                            onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                      )}
+
+                      {uploadError && (
+                        <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">
+                          {uploadError}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Step 2: Annotate keypoints */}
+                  {uploadStep === "annotate" && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-geo-green font-semibold">Paso 1 de 2</span>
+                        <button
+                          onClick={() => { setUploadStep("select"); setSrcPts([]); }}
+                          className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
+                        >
+                          &larr; Cambiar video
+                        </button>
+                      </div>
+
+                      <div className="rounded-lg border border-geo-green/30 bg-geo-green/10 p-3 text-xs text-[var(--geo-text-muted)]">
+                        Haz clic sobre <strong className="text-white">4 esquinas del campo</strong> en orden:
+                        <ol className="list-decimal ml-4 mt-1 space-y-0.5">
+                          <li><span className="inline-block w-3 h-3 rounded-full bg-[#39FF14] mr-1" />Esquina superior izquierda</li>
+                          <li><span className="inline-block w-3 h-3 rounded-full bg-[#39FF14] mr-1" />Esquina superior derecha</li>
+                          <li><span className="inline-block w-3 h-3 rounded-full bg-[#facc15] mr-1" />Esquina inferior derecha</li>
+                          <li><span className="inline-block w-3 h-3 rounded-full bg-[#facc15] mr-1" />Esquina inferior izquierda</li>
+                        </ol>
+                      </div>
+
+                      {frameExtracting ? (
+                        <div className="flex flex-col items-center justify-center h-48 gap-3 text-[var(--geo-text-muted)]">
+                          <div className="h-8 w-8 border-2 border-geo-green border-t-transparent rounded-full animate-spin" />
+                          Extrayendo fotograma...
+                        </div>
+                      ) : frameError ? (
+                        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+                          {frameError}
+                          <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
+                            Puedes continuar sin anotación. Se usarán los puntos predeterminados.
+                          </p>
+                        </div>
+                      ) : (
+                        <canvas
+                          ref={canvasRef}
+                          onClick={handleCanvasClick}
+                          className="w-full rounded-lg border border-[var(--geo-border)] cursor-crosshair"
+                          style={{ maxHeight: "360px", objectFit: "contain" }}
+                        />
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[var(--geo-text-muted)]">
+                          Puntos: {srcPts.length} / 4
+                        </span>
+                        <div className="flex gap-2">
+                          <button onClick={handleUndoPoint} disabled={srcPts.length === 0}
+                            className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
+                            Deshacer
+                          </button>
+                          <button onClick={handleResetPoints} disabled={srcPts.length === 0}
+                            className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
+                            Reiniciar
+                          </button>
+                        </div>
+                      </div>
+
+                      {uploading && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs text-[var(--geo-text-muted)]">
+                            <span>Subiendo video…</span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-[var(--geo-bg)] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-geo-green transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {uploadError && (
+                        <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">
+                          {uploadError}
+                        </div>
+                      )}
+
+                      <button
+                        disabled={uploading || srcPts.length !== 4}
+                        onClick={handleSubmitKeypoints}
+                        className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      >
+                        {uploading ? "Esperando subida…" : "Iniciar análisis"}
+                      </button>
+
+                      <p className="text-xs text-[var(--geo-text-muted)] text-center">
+                        {uploading ? "Subiendo video en segundo plano…" : "Marca los 4 puntos para habilitar el botón de análisis."}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Step 3: Processing progress */}
+                  {uploadStep === "progress" && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-geo-green font-semibold">Paso 2 de 2</span>
+                        <span className="text-xs text-[var(--geo-text-muted)] capitalize">
+                          {analysisStatus?.status === "completed" ? "Completado" :
+                           analysisStatus?.status === "failed" ? "Falló" : "Procesando..."}
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs text-[var(--geo-text-muted)]">
+                          <span>{analysisStatus?.currentStep ?? "iniciando"}</span>
+                          <span>{analysisStatus?.progress ?? 0}%</span>
+                        </div>
+                        <div className="w-full h-3 rounded-full bg-[var(--geo-bg)] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                              analysisStatus?.status === "failed" ? "bg-red-500" : "bg-geo-green"
+                            }`}
+                            style={{ width: `${analysisStatus?.progress ?? 0}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {analysisStatus?.framesProcessed != null && analysisStatus?.totalFrames != null && (
+                        <p className="text-xs text-[var(--geo-text-muted)] text-center">
+                          {analysisStatus.framesProcessed.toLocaleString()} / {analysisStatus.totalFrames.toLocaleString()} frames
+                        </p>
+                      )}
+
+                      {analysisStatus?.status === "completed" && (
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-300">
+                            Análisis completado con éxito.
+                          </div>
+                          <button
+                            onClick={resetUpload}
+                            className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80"
+                          >
+                            Cerrar y refrescar datos
+                          </button>
+                        </div>
+                      )}
+
+                      {analysisStatus?.status === "failed" && (
+                        <div className="space-y-3">
+                          <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">
+                            {analysisStatus?.error ?? "Error desconocido durante el análisis."}
+                          </div>
+                          <button
+                            onClick={resetUpload}
+                            className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80"
+                          >
+                            Cerrar
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

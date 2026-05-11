@@ -112,14 +112,12 @@ router.patch(
 );
 
 router.get('/leagues/coach/active',
-    authenticate,
     hasRole("coach"),
     handleInputError,
     TeamController.getCoachActiveLeagues
 );
 
 router.get('/leagues/:leagueId/teams/:teamId/dashboard',
-    authenticate,
     param('leagueId').isInt(),
     param('teamId').isInt(),
     handleInputError,
@@ -154,7 +152,6 @@ router.get('/leagues/:leagueId/teams/:teamId/dashboard',
  *         description: Código generado exitosamente
  */
 router.post('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -177,7 +174,6 @@ router.post('/:teamId/invitation',
  *           type: integer
  */
 router.get('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -200,7 +196,6 @@ router.get('/:teamId/invitation',
  *           type: integer
  */
 router.delete('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -232,7 +227,6 @@ router.delete('/:teamId/invitation',
  *         description: Jugador unido al equipo
  */
 router.post('/join-by-code',
-    authenticate,
   hasRole('player'),
     body('code').notEmpty().withMessage('El código es obligatorio'),
     body('playerName').isString().trim().notEmpty().withMessage('El nombre de jugador es obligatorio'),

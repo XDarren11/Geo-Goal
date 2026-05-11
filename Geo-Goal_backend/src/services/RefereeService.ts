@@ -71,6 +71,12 @@ type RegisterTrackingInput = {
   players: Array<Record<string, unknown>>;
   source?: "manual" | "inferred" | "video" | "simulated";
   confidence?: number;
+  coordSystem?: "normalized" | "meters";
+};
+
+type RegisterTrackingBatchInput = {
+  frames: RegisterTrackingInput[];
+  pitch?: { length_m: number; width_m: number };
 };
 
 function normalizeCoordinate(value: unknown): number | null {
@@ -730,8 +736,61 @@ export class RefereeService {
       players: input.players,
       source: input.source ?? "manual",
       confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
+      coordSystem: input.coordSystem ?? "normalized",
       recordedBy: userId,
     });
+  }
+
+  static async registerTrackingBatch(matchId: string, userId: number, input: RegisterTrackingBatchInput) {
+    const frames = Array.isArray(input.frames) ? input.frames : [];
+    if (!frames.length) {
+      throw new AppError(400, "frames debe contener al menos un frame");
+    }
+
+    const match = await Match.findByPk(Number(matchId), {
+      attributes: ["id", "leagueId", "homeTeamId", "awayTeamId", "seasonId"],
+    });
+    if (!match) throw new AppError(404, "Partido no encontrado");
+
+    await this.ensureActiveSeasonForLeague(match.leagueId);
+
+    // Validate each frame
+    for (let i = 0; i < frames.length; i++) {
+      const f = frames[i];
+      if (!Array.isArray(f.players)) {
+        throw new AppError(400, `Frame ${i}: players debe ser un arreglo`);
+      }
+      if (f.players.length > 60) {
+        throw new AppError(400, `Frame ${i}: players supera el límite permitido`);
+      }
+      if (!f.timestampMs || Number.isNaN(Number(f.timestampMs))) {
+        throw new AppError(400, `Frame ${i}: timestampMs es obligatorio`);
+      }
+    }
+
+    const created = await MatchTrackingFrame.bulkCreate(
+      frames.map((f) => ({
+        matchId: Number(matchId),
+        leagueId: match.leagueId,
+        timestampMs: Number(f.timestampMs),
+        period: f.period ?? null,
+        ballX: f.ball?.x ?? null,
+        ballY: f.ball?.y ?? null,
+        ballZ: f.ball?.z ?? null,
+        players: f.players,
+        source: f.source ?? "video",
+        confidence: f.confidence != null ? Math.max(0, Math.min(1, Number(f.confidence))) : 1,
+        coordSystem: f.coordSystem ?? "meters",
+        recordedBy: userId,
+      }))
+    );
+
+    const analytics = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+
+    return {
+      created: created.length,
+      analyticsRows: analytics.rows,
+    };
   }
 
   static async getMatchAnalytics(matchId: number) {

@@ -11,6 +11,7 @@ import {
   MatchDetailUpsertRequest,
   RegisterBulkEventsRequest,
   RegisterEventRequest,
+  RegisterTrackingBatchRequest,
   RegisterTrackingFrameRequest,
 } from "../requests/MatchDetailRequests";
 
@@ -81,6 +82,15 @@ export class RegisterTrackingFrameHandler
   constructor(private readonly svc: IMatchFlowService) {}
   handle(request: RegisterTrackingFrameRequest): Promise<unknown> {
     return this.svc.registerTrackingFrame(request.matchId, request.userId, request.body);
+  }
+}
+
+export class RegisterTrackingBatchHandler
+  implements RequestHandler<RegisterTrackingBatchRequest, unknown>
+{
+  constructor(private readonly svc: IMatchFlowService) {}
+  handle(request: RegisterTrackingBatchRequest): Promise<unknown> {
+    return this.svc.registerTrackingBatch(request.matchId, request.userId, request.body);
   }
 }
 

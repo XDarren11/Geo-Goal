@@ -30,6 +30,11 @@ export interface IMatchFlowService {
     userId: number,
     body: Record<string, unknown>
   ): Promise<unknown>;
+  registerTrackingBatch(
+    matchId: string,
+    userId: number,
+    body: Record<string, unknown>
+  ): Promise<unknown>;
   getLeagueReferees(leagueId: number, actorUserId: number): Promise<unknown>;
   getUpcomingLeagueMatches(leagueId: number, actorUserId: number): Promise<unknown>;
   getMatchAnalytics(matchId: number): Promise<unknown>;

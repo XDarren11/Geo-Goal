@@ -72,3 +72,68 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
   return data;
 }
+
+export interface AnalysisStatusResponse {
+  status: "none" | "uploaded" | "annotating" | "queued" | "processing" | "completed" | "failed";
+  jobId?: number;
+  progress?: number;
+  currentStep?: string;
+  framesProcessed?: number;
+  totalFrames?: number;
+  error?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function uploadMatchVideo(
+  matchId: number,
+  videoFile: File,
+  onProgress?: (pct: number) => void
+): Promise<{ message: string; jobId: number; filename: string }> {
+  const formData = new FormData();
+  formData.append("video", videoFile);
+  const { data } = await api.post<{ message: string; jobId: number; filename: string }>(
+    `${BASE}/matches/${matchId}/upload-video`,
+    formData,
+    {
+      timeout: 300_000,
+      onUploadProgress: (event) => {
+        if (event.total && onProgress) {
+          onProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    }
+  );
+  return data;
+}
+
+export async function getAnalysisStatus(matchId: number): Promise<AnalysisStatusResponse> {
+  const { data } = await api.get<AnalysisStatusResponse>(
+    `${BASE}/matches/${matchId}/analysis/status`
+  );
+  return data;
+}
+
+export async function submitAnalysisKeypoints(
+  matchId: number,
+  srcPts: Array<{ x: number; y: number }>
+): Promise<{ message: string; jobId: number; status: string }> {
+  const { data } = await api.put<{ message: string; jobId: number; status: string }>(
+    `${BASE}/matches/${matchId}/analysis/keypoints`,
+    { srcPts }
+  );
+  return data;
+}
+
+export interface AnalysisFrameResponse {
+  frame: string;
+  width: number;
+  height: number;
+}
+
+export async function getAnalysisFrame(matchId: number): Promise<AnalysisFrameResponse> {
+  const { data } = await api.get<AnalysisFrameResponse>(
+    `${BASE}/matches/${matchId}/analysis/frame`
+  );
+  return data;
+}

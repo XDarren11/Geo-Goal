@@ -1,2 +1,9 @@
 requests
 python-dotenv
+ultralytics
+opencv-python
+numpy
+scikit-learn
+supervision
+torch
+yt-dlp
