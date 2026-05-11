@@ -6,6 +6,7 @@ const whitelist = [
     process.env.SWAGGER_URL,
     'http://localhost:4000', // Swagger UI
     'http://localhost:5173', // Frontend
+    'https://geo-goal-1.onrender.com',
     undefined // Permitir solicitudes sin origin (Swagger UI local)
 ]
 

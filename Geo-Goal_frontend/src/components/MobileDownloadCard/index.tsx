@@ -4,7 +4,18 @@ type Props = {
   apkUrl?: string;
 };
 
-export default function MobileDownloadCard({ apkUrl = "#" }: Props) {
+const SUPABASE_PUBLIC_BASE_URL = import.meta.env.VITE_SUPABASE_PUBLIC_BASE_URL as string | undefined;
+const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET as string | undefined;
+
+function buildSupabasePublicUrl(path: string): string {
+  if (!SUPABASE_PUBLIC_BASE_URL || !SUPABASE_BUCKET) return "";
+  const normalizedBase = SUPABASE_PUBLIC_BASE_URL.replace(/\/$/, "");
+  const normalizedPath = path.replace(/^\//, "");
+  return `${normalizedBase}/${SUPABASE_BUCKET}/${normalizedPath}`;
+}
+
+export default function MobileDownloadCard({ apkUrl }: Props) {
+  const resolvedApkUrl = apkUrl && apkUrl !== "#" ? apkUrl : buildSupabasePublicUrl("releases-apk/latest.apk");
   return (
     <div className="relative overflow-hidden rounded-3xl border border-geo-green/30 bg-gradient-to-br from-geo-green/10 via-transparent to-transparent p-6 shadow-sm backdrop-blur-sm transition hover:border-geo-green/60">
       {/* Subtle accent line */}
@@ -33,9 +44,9 @@ export default function MobileDownloadCard({ apkUrl = "#" }: Props) {
         {/* Download button */}
         <button
           onClick={() => {
-            if (apkUrl && apkUrl !== "#") {
+            if (resolvedApkUrl) {
               const link = document.createElement("a");
-              link.href = apkUrl;
+              link.href = resolvedApkUrl;
               link.download = "Geo-Goal.apk";
               link.click();
             }
