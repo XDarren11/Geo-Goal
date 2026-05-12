@@ -29,6 +29,7 @@ export class MatchOperationsService {
     return activeSeason?.id ?? null;
   }
 
+  // 1. REFACTORIZACIÓN: La tabla de puntos con penales independientes
   private static async updateTeamStats(teamId: number, leagueId: number): Promise<void> {
     const matches = await Match.findAll({
       where: {
@@ -56,27 +57,26 @@ export class MatchOperationsService {
       goalsFor += myGoals;
       goalsAgainst += rivalGoals;
 
+      // Tiempo Regular
       if (myGoals > rivalGoals) {
         wins++;
         points += 3;
       } else if (myGoals === rivalGoals) {
         draws++;
-
-        if (match.homePenaltiesScore !== null && match.awayPenaltiesScore !== null) {
-          const myPenalties = isHome ? match.homePenaltiesScore : match.awayPenaltiesScore;
-          const rivalPenalties = isHome ? match.awayPenaltiesScore : match.homePenaltiesScore;
-
-          if (myPenalties > rivalPenalties) {
-            points += 2;
-            penaltyWins++;
-          } else {
-            points += 1;
-          }
-        } else {
-          points += 1;
-        }
+        points += 1;
       } else {
         losses++;
+      }
+
+      // Penales Independientes del empate
+      if (match.homePenaltiesScore !== null && match.awayPenaltiesScore !== null) {
+        const myPenalties = isHome ? match.homePenaltiesScore : match.awayPenaltiesScore;
+        const rivalPenalties = isHome ? match.awayPenaltiesScore : match.homePenaltiesScore;
+
+        if (myPenalties > rivalPenalties) {
+          points += 1; // Punto extra por ganar la tanda
+          penaltyWins++;
+        }
       }
     });
 
@@ -192,12 +192,13 @@ export class MatchOperationsService {
     return { message: "Partido programado correctamente", match };
   }
 
+  // 2. REFACTORIZACIÓN: Guardar el score permitiendo penales y ceros
   static async updateScore(
     matchId: string,
     homeScore: number,
     awayScore: number,
-    homePenaltiesScore: number | undefined,
-    awayPenaltiesScore: number | undefined,
+    homePenaltiesScore: number | undefined | null, // Acepta null explícito
+    awayPenaltiesScore: number | undefined | null, // Acepta null explícito
     audit: AuditMeta
   ): Promise<{ message: string }> {
     const match = await Match.findByPk(matchId);
@@ -210,13 +211,11 @@ export class MatchOperationsService {
     match.homeScore = homeScore;
     match.awayScore = awayScore;
 
-    if (homeScore === awayScore && homePenaltiesScore !== undefined && awayPenaltiesScore !== undefined) {
-      match.homePenaltiesScore = homePenaltiesScore;
-      match.awayPenaltiesScore = awayPenaltiesScore;
-    } else {
-      match.homePenaltiesScore = null;
-      match.awayPenaltiesScore = null;
-    }
+    // Quitamos la condición de (homeScore === awayScore)
+    // El "??" garantiza que si React mandó un 0, se guarda el 0.
+    // Si React mandó null o undefined, se borra/ignora (null).
+    match.homePenaltiesScore = homePenaltiesScore ?? null;
+    match.awayPenaltiesScore = awayPenaltiesScore ?? null;
 
     match.played = true;
     await match.save();
@@ -235,6 +234,7 @@ export class MatchOperationsService {
       userAgent: audit.userAgent ?? null,
     });
 
+    // Se actualizan ambos equipos
     await Promise.all([
       MatchOperationsService.updateTeamStats(match.homeTeamId, match.leagueId),
       MatchOperationsService.updateTeamStats(match.awayTeamId, match.leagueId),
