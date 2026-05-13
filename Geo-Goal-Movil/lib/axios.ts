@@ -1,6 +1,29 @@
 import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// --- JWT Decode ---
+function decodeJwtPayload(token: string): { exp: number } | null {
+    try {
+        const base64Url = token.split('.')[1];
+        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4) base64 += '=';
+        const jsonPayload = decodeURIComponent(
+            atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+        );
+        return JSON.parse(jsonPayload);
+    } catch {
+        return null;
+    }
+}
+
+const TOKEN_REFRESH_BUFFER_MS = 30 * 60 * 1000; // 30 minutos
+
+const isTokenExpiringSoon = (token: string): boolean => {
+    const payload = decodeJwtPayload(token);
+    if (!payload?.exp) return false;
+    return payload.exp * 1000 - Date.now() < TOKEN_REFRESH_BUFFER_MS;
+};
+
 // 1. Configuración de la URL
 const API_URL = (process.env.EXPO_PUBLIC_API_URL || "https://geo-goal.onrender.com/api/").replace(/\/+$/, "");
 
@@ -19,6 +42,7 @@ const AUTH_ENDPOINTS = new Set([
     '/auth/request-code',
     '/auth/forgot-password',
     '/auth/validate-token',
+    '/auth/refresh-token',
 ]);
 
 const shouldSkipRefresh = (url?: string, config?: any) => {
@@ -27,12 +51,56 @@ const shouldSkipRefresh = (url?: string, config?: any) => {
     return AUTH_ENDPOINTS.has(url);
 };
 
-// 2. Interceptor
+// --- Refresh mutex ---
+let refreshPromise: Promise<string | null> | null = null;
+
+const refreshAccessToken = async (): Promise<string | null> => {
+    const currentRefreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+    if (!currentRefreshToken) return null;
+
+    if (!refreshPromise) {
+        refreshPromise = (async () => {
+            try {
+                const { data } = await rawApi.post<{ token?: string; accessToken?: string; refreshToken?: string }>(
+                    '/auth/refresh-token',
+                    { refreshToken: currentRefreshToken }
+                );
+                const accessToken = data?.accessToken || data?.token;
+                if (!accessToken) return null;
+
+                await AsyncStorage.setItem('AUTH_TOKEN', accessToken);
+                if (data?.refreshToken) {
+                    await AsyncStorage.setItem('REFRESH_TOKEN', data.refreshToken);
+                }
+                return accessToken;
+            } catch (error: any) {
+                const status = error?.response?.status;
+                if (status === 401 || status === 403) {
+                    await AsyncStorage.removeItem('AUTH_TOKEN');
+                    await AsyncStorage.removeItem('REFRESH_TOKEN');
+                }
+                return null;
+            } finally {
+                refreshPromise = null;
+            }
+        })();
+    }
+
+    return refreshPromise;
+};
+
+// 2. Request Interceptor — attach token + proactive refresh
 api.interceptors.request.use(async (config) => {
     try {
-        // En React Native, leer datos es una operación asíncrona (await)
-        const token = await AsyncStorage.getItem('AUTH_TOKEN');
-        
+        let token = await AsyncStorage.getItem('AUTH_TOKEN');
+
+        if (token && !shouldSkipRefresh(config.url, config) && isTokenExpiringSoon(token)) {
+            const newToken = await refreshAccessToken();
+            if (newToken) {
+                token = newToken;
+            }
+        }
+
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -44,29 +112,7 @@ api.interceptors.request.use(async (config) => {
     return Promise.reject(error);
 });
 
-const refreshAccessToken = async (): Promise<string> => {
-    const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
-    if (!refreshToken) {
-        throw new Error('No refresh token');
-    }
-
-    const { data } = await rawApi.post<{ token?: string; accessToken?: string; refreshToken?: string }>(
-        '/auth/refresh-token',
-        { refreshToken }
-    );
-    const accessToken = data?.accessToken || data?.token;
-    if (!accessToken) {
-        throw new Error('No access token');
-    }
-
-    await AsyncStorage.setItem('AUTH_TOKEN', accessToken);
-    if (data?.refreshToken) {
-        await AsyncStorage.setItem('REFRESH_TOKEN', data.refreshToken);
-    }
-
-    return accessToken;
-};
-
+// 3. Response Interceptor — reactive 401 refresh
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -81,17 +127,14 @@ api.interceptors.response.use(
                 return Promise.reject(error);
             }
             originalRequest._retry = true;
-            try {
-                const newAccessToken = await refreshAccessToken();
+
+            const newAccessToken = await refreshAccessToken();
+            if (newAccessToken) {
                 originalRequest.headers = {
                     ...(originalRequest.headers || {}),
                     Authorization: `Bearer ${newAccessToken}`,
                 };
                 return api(originalRequest);
-            } catch (refreshError) {
-                await AsyncStorage.removeItem('AUTH_TOKEN');
-                await AsyncStorage.removeItem('REFRESH_TOKEN');
-                return Promise.reject(refreshError);
             }
         }
         return Promise.reject(error);
