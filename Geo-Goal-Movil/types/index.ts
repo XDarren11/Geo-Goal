@@ -39,7 +39,19 @@ export interface League {
   description?: string
   logoUrl?: string | null
   managerId?: number
+  lineupMode?: 7 | 11
   teams?: Team[]
+}
+
+export interface Season {
+  id: number
+  leagueId?: number
+  name: string
+  year: number
+  status?: string
+  isCurrent?: boolean
+  startDate?: string
+  endDate?: string
 }
 
 // Team
@@ -68,6 +80,7 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  league?: Pick<League, 'id' | 'name' | 'lineupMode'>
 }
 
 export interface MatchDetailLineupEntry {
@@ -138,6 +151,41 @@ export interface MatchAnalyticsResponse {
   }>
 }
 
+export interface PublicLeagueSummary {
+  id: number
+  name: string
+  description?: string
+  createdAt?: string
+}
+
+export interface PublicStanding {
+  id?: number
+  teamId: number
+  leagueId: number
+  points: number
+  gamesPlayed: number
+  wins: number
+  draws: number
+  losses: number
+  goalsFor: number
+  goalsAgainst: number
+  goalDifference: number
+  team?: Pick<Team, 'id' | 'name' | 'logoUrl'>
+}
+
+export interface PublicLeagueDetail {
+  league: League
+  currentSeason?: Season | null
+  standings: PublicStanding[]
+  fixture: FixtureByRound
+  fixtureWithLocations?: Array<Match & { location?: { lat: number; lng: number; fieldAddress?: string } | null }>
+  teams?: Team[]
+  fields?: Array<Record<string, unknown>>
+  recentMatches?: Match[]
+  seasons?: Season[]
+  news?: Array<Record<string, unknown>>
+}
+
 export type FixtureByRound = Record<string, Match[]>
 
 export interface Player {
@@ -147,6 +195,7 @@ export interface Player {
   username?: string | null
   playerName?: string | null
   jerseyNumber?: number | null
+  preferredPosition?: string | null
   avatarUrl?: string | null
 }
 

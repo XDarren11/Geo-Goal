@@ -1,11 +1,12 @@
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse } from "@/api/publicAPI";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
 import { useAuth } from "@/hooks/useAuth";
+import { getPlayersTeam, updateCoachLineup } from "@/api/teamAPI";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro";
@@ -459,6 +460,17 @@ export default function PublicMatchDetailView() {
   // ---- upload-video state (admin only) ----
   const { data: user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isCoach = user?.role === "coach";
+  const queryClient = useQueryClient();
+  const [selectedStarters, setSelectedStarters] = useState<number[]>([]);
+  const [selectedBench, setSelectedBench] = useState<number[]>([]);
+  const [selectedUnavailable, setSelectedUnavailable] = useState<number[]>([]);
+  const [lineupMode, setLineupMode] = useState<7 | 11>(11);
+  const [lineupError, setLineupError] = useState<string | null>(null);
+  const [positionFilter, setPositionFilter] = useState<string>("all");
+  const lineupInitializedRef = useRef(false);
+  const MAX_BENCH = 20;
+  const MAX_UNAVAILABLE = 30;
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -739,10 +751,235 @@ export default function PublicMatchDetailView() {
     },
   });
 
+  const coachSide = isCoach && user?.id && data?.match
+    ? data.match.homeTeam?.trainerId === user.id
+      ? "home"
+      : data.match.awayTeam?.trainerId === user.id
+        ? "away"
+        : null
+    : null;
+
+  const coachTeamId = coachSide === "home"
+    ? data?.match?.homeTeam?.id
+    : coachSide === "away"
+      ? data?.match?.awayTeam?.id
+      : null;
+
+  const { data: coachRoster } = useQuery({
+    queryKey: ["coach-match-roster", coachTeamId],
+    queryFn: () => getPlayersTeam(coachTeamId as number),
+    enabled: Number.isInteger(coachTeamId) && (coachTeamId as number) > 0,
+  });
+
+  const lineupMutation = useMutation({
+    mutationFn: (payload: {
+      startingXI: Array<Record<string, unknown>>;
+      bench?: Array<Record<string, unknown>>;
+      unavailable?: Array<Record<string, unknown>>;
+    }) => updateCoachLineup(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["public-match-detail", id] });
+      queryClient.invalidateQueries({ queryKey: ["coachDashboard", user?.id] });
+      setLineupError(null);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error ?? error?.message ?? "No se pudo guardar la alineación";
+      setLineupError(message);
+    },
+  });
+
   useEffect(() => {
     const timer = setInterval(() => setTick(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
+
+  const match = data?.match;
+  const detail = data?.detail;
+
+  const homeStarters = detail?.squads?.home?.starters?.length
+    ? detail.squads.home.starters.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail?.homeStartingXI;
+
+  const homeBench = detail?.squads?.home?.bench?.length
+    ? detail.squads.home.bench.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail?.homeBench;
+
+  const awayStarters = detail?.squads?.away?.starters?.length
+    ? detail.squads.away.starters.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail?.awayStartingXI;
+
+  const awayBench = detail?.squads?.away?.bench?.length
+    ? detail.squads.away.bench.map((p) => ({
+        userId: p.id,
+        name: p.name ?? undefined,
+        number: p.jerseyNumber ?? undefined,
+        position: p.position ?? undefined,
+      }))
+    : detail?.awayBench;
+
+  useEffect(() => {
+    if (!coachSide || lineupInitializedRef.current) return;
+    const starters = coachSide === "home" ? homeStarters : awayStarters;
+    const bench = coachSide === "home" ? detail?.squads?.home?.bench : detail?.squads?.away?.bench;
+    const unavailable = coachSide === "home" ? detail?.squads?.home?.unavailable : detail?.squads?.away?.unavailable;
+    const ids = (Array.isArray(starters) ? starters : [])
+      .map((p) => (typeof p.userId === "number" ? p.userId : null))
+      .filter((id): id is number => typeof id === "number");
+
+    if (ids.length) {
+      setSelectedStarters(ids);
+      if (ids.length === 7 || ids.length === 11) {
+        setLineupMode(ids.length as 7 | 11);
+      }
+    }
+
+    const benchIds = (Array.isArray(bench) ? bench : [])
+      .map((p) => p.id)
+      .filter((id): id is number => typeof id === "number");
+    if (benchIds.length) setSelectedBench(benchIds);
+
+    const unavailableIds = (Array.isArray(unavailable) ? unavailable : [])
+      .map((p) => p.id)
+      .filter((id): id is number => typeof id === "number");
+    if (unavailableIds.length) setSelectedUnavailable(unavailableIds);
+
+    lineupInitializedRef.current = true;
+  }, [coachSide, homeStarters, awayStarters, detail?.squads?.home?.bench, detail?.squads?.away?.bench, detail?.squads?.home?.unavailable, detail?.squads?.away?.unavailable]);
+
+  const toggleStarter = (playerId: number) => {
+    setSelectedStarters((prev) => {
+      if (prev.includes(playerId)) {
+        return prev.filter((id) => id !== playerId);
+      }
+      if (prev.length >= lineupMode) return prev;
+      return [...prev, playerId];
+    });
+    setSelectedBench((prev) => prev.filter((id) => id !== playerId));
+    setSelectedUnavailable((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const toggleBench = (playerId: number) => {
+    setSelectedBench((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= MAX_BENCH) {
+        setLineupError(`La banca admite máximo ${MAX_BENCH} jugadores`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+    setSelectedStarters((prev) => prev.filter((id) => id !== playerId));
+    setSelectedUnavailable((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const toggleUnavailable = (playerId: number) => {
+    setSelectedUnavailable((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= MAX_UNAVAILABLE) {
+        setLineupError(`No disponibles admite máximo ${MAX_UNAVAILABLE} jugadores`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+    setSelectedStarters((prev) => prev.filter((id) => id !== playerId));
+    setSelectedBench((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const handleSaveLineup = () => {
+    if (!enforcedLineupMode) {
+      setLineupError("La liga debe definir si el formato es 7 u 11");
+      return;
+    }
+    if (!coachRoster || !coachRoster.length) {
+      setLineupError("No hay jugadores en el equipo");
+      return;
+    }
+    if (selectedStarters.length !== enforcedLineupMode) {
+      setLineupError(`Selecciona exactamente ${enforcedLineupMode} titulares`);
+      return;
+    }
+
+    const rosterMap = new Map(coachRoster.map((p) => [p.id, p]));
+    const startingXI = selectedStarters.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+        position: player?.preferredPosition ?? null,
+      };
+    });
+
+    const bench = selectedBench.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+        position: player?.preferredPosition ?? null,
+      };
+    });
+
+    const unavailable = selectedUnavailable.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+        position: player?.preferredPosition ?? null,
+      };
+    });
+
+    lineupMutation.mutate({ startingXI, bench, unavailable });
+  };
+
+  const rosterPositions = useMemo(() => {
+    const set = new Set<string>();
+    (coachRoster ?? []).forEach((p) => {
+      if (p.preferredPosition) set.add(p.preferredPosition);
+    });
+    return Array.from(set).sort();
+  }, [coachRoster]);
+
+  const filteredRoster = useMemo(() => {
+    if (!coachRoster) return [];
+    if (positionFilter === "all") return coachRoster;
+    return coachRoster.filter((p) => p.preferredPosition === positionFilter);
+  }, [coachRoster, positionFilter]);
+
+  const enforcedLineupMode = [7, 11].includes(Number(data?.match?.league?.lineupMode))
+    ? (Number(data?.match?.league?.lineupMode) as 7 | 11)
+    : null;
+
+  const effectiveLineupMode = enforcedLineupMode ?? lineupMode;
+
+  useEffect(() => {
+    if (!data?.match) return;
+    if (enforcedLineupMode) {
+      setLineupMode(enforcedLineupMode);
+      setSelectedStarters((prev) => prev.slice(0, enforcedLineupMode));
+      setLineupError(null);
+    } else {
+      setLineupError("La liga debe definir si el formato es 7 u 11");
+    }
+  }, [enforcedLineupMode, data?.match]);
 
   if (isLoading) {
     return (
@@ -767,7 +1004,16 @@ export default function PublicMatchDetailView() {
     );
   }
 
-  const { match, detail } = data;
+  if (!match || !detail) {
+    return (
+      <div className="min-h-screen bg-[var(--geo-bg)] pitch-stripes px-4 py-8">
+        <div className="mx-auto max-w-3xl rounded-xl border border-red-500/40 bg-red-500/10 p-6 text-center text-red-500">
+          No se pudo cargar el detalle del partido.
+        </div>
+      </div>
+    );
+  }
+
   const liveState = resolveLiveState({
     played: match.played,
     kickoff: detail.kickoffTime ?? match.date,
@@ -777,41 +1023,6 @@ export default function PublicMatchDetailView() {
   const isLive = liveState === "live";
   const liveEvents = (analytics?.timelineEvents ?? []).slice(-12).reverse();
   const renderedEvents = viewMode === "pro" ? liveEvents : liveEvents.slice(0, 6);
-  const homeStarters = detail.squads?.home?.starters?.length
-    ? detail.squads.home.starters.map((p) => ({
-        userId: p.id,
-        name: p.name ?? undefined,
-        number: p.jerseyNumber ?? undefined,
-        position: p.position ?? undefined,
-      }))
-    : detail.homeStartingXI;
-
-  const homeBench = detail.squads?.home?.bench?.length
-    ? detail.squads.home.bench.map((p) => ({
-        userId: p.id,
-        name: p.name ?? undefined,
-        number: p.jerseyNumber ?? undefined,
-        position: p.position ?? undefined,
-      }))
-    : detail.homeBench;
-
-  const awayStarters = detail.squads?.away?.starters?.length
-    ? detail.squads.away.starters.map((p) => ({
-        userId: p.id,
-        name: p.name ?? undefined,
-        number: p.jerseyNumber ?? undefined,
-        position: p.position ?? undefined,
-      }))
-    : detail.awayStartingXI;
-
-  const awayBench = detail.squads?.away?.bench?.length
-    ? detail.squads.away.bench.map((p) => ({
-        userId: p.id,
-        name: p.name ?? undefined,
-        number: p.jerseyNumber ?? undefined,
-        position: p.position ?? undefined,
-      }))
-    : detail.awayBench;
 
     const finalLat = data?.detail?.field?.lat;
     const finalLng = data?.detail?.field?.lng;
@@ -1045,6 +1256,173 @@ export default function PublicMatchDetailView() {
             </ul>
           </div>
         </section>
+
+        {coachSide && (
+          <section className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-black text-[var(--geo-text)]">Tu alineación inicial</h2>
+                <p className="text-xs text-[var(--geo-text-muted)]">
+                  Selecciona exactamente {effectiveLineupMode} titulares antes de iniciar el partido.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {enforcedLineupMode ? (
+                  <span className="inline-flex items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                    Formato {enforcedLineupMode} vs {enforcedLineupMode}
+                  </span>
+                ) : (
+                  <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1 text-xs">
+                    {[7, 11].map((mode) => (
+                      <button
+                        key={`mode-${mode}`}
+                        type="button"
+                        onClick={() => {
+                          setLineupMode(mode as 7 | 11);
+                          setSelectedStarters((prev) => prev.slice(0, mode));
+                          setLineupError(null);
+                        }}
+                        className={`rounded-md px-3 py-1 font-semibold transition ${
+                          lineupMode === mode
+                            ? "bg-geo-green text-geo-black"
+                            : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <select
+                  value={positionFilter}
+                  onChange={(e) => setPositionFilter(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-[var(--geo-bg)] px-2 py-1 text-xs text-[var(--geo-text)]"
+                >
+                  <option value="all">Todas las posiciones</option>
+                  {rosterPositions.map((pos) => (
+                    <option key={`pos-${pos}`} value={pos}>
+                      {pos}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {lineupError ? (
+              <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {lineupError}
+              </p>
+            ) : null}
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-3">
+              <div>
+                <p className="text-sm font-bold text-geo-green">Titulares</p>
+                <p className="text-xs text-[var(--geo-text-muted)]">{selectedStarters.length}/{effectiveLineupMode}</p>
+                <div className="mt-2 grid gap-2">
+                  {filteredRoster.map((player) => {
+                    const isSelected = selectedStarters.includes(player.id);
+                    const isLocked = !isSelected && selectedStarters.length >= lineupMode;
+                    const label = player.playerName || player.name;
+                    return (
+                      <button
+                        key={`coach-starter-${player.id}`}
+                        type="button"
+                        onClick={() => toggleStarter(player.id)}
+                        disabled={isLocked}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          isSelected
+                            ? "border-emerald-400/70 bg-emerald-400/10 text-emerald-100"
+                            : "border-white/10 bg-[var(--geo-bg)] text-[var(--geo-text)] hover:border-emerald-400/40"
+                        } ${isLocked ? "opacity-50" : ""}`}
+                      >
+                        <span className="font-semibold">{label}</span>
+                        <span className="text-xs text-[var(--geo-text-muted)]">
+                          #{player.jerseyNumber ?? "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {!coachRoster?.length && (
+                    <p className="text-sm text-[var(--geo-text-muted)]">
+                      No hay jugadores registrados para este equipo.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-geo-green">Banca</p>
+                <p className="text-xs text-[var(--geo-text-muted)]">{selectedBench.length}/{MAX_BENCH}</p>
+                <div className="mt-2 grid gap-2">
+                  {filteredRoster.map((player) => {
+                    const isSelected = selectedBench.includes(player.id);
+                    const label = player.playerName || player.name;
+                    return (
+                      <button
+                        key={`coach-bench-${player.id}`}
+                        type="button"
+                        onClick={() => toggleBench(player.id)}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          isSelected
+                            ? "border-blue-400/70 bg-blue-400/10 text-blue-100"
+                            : "border-white/10 bg-[var(--geo-bg)] text-[var(--geo-text)] hover:border-blue-400/40"
+                        }`}
+                      >
+                        <span className="font-semibold">{label}</span>
+                        <span className="text-xs text-[var(--geo-text-muted)]">
+                          #{player.jerseyNumber ?? "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-geo-green">No disponibles</p>
+                <p className="text-xs text-[var(--geo-text-muted)]">{selectedUnavailable.length}/{MAX_UNAVAILABLE}</p>
+                <div className="mt-2 grid gap-2">
+                  {filteredRoster.map((player) => {
+                    const isSelected = selectedUnavailable.includes(player.id);
+                    const label = player.playerName || player.name;
+                    return (
+                      <button
+                        key={`coach-unavailable-${player.id}`}
+                        type="button"
+                        onClick={() => toggleUnavailable(player.id)}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
+                          isSelected
+                            ? "border-red-400/70 bg-red-400/10 text-red-100"
+                            : "border-white/10 bg-[var(--geo-bg)] text-[var(--geo-text)] hover:border-red-400/40"
+                        }`}
+                      >
+                        <span className="font-semibold">{label}</span>
+                        <span className="text-xs text-[var(--geo-text-muted)]">
+                          #{player.jerseyNumber ?? "—"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-[var(--geo-text-muted)]">
+                Titulares: {selectedStarters.length}/{effectiveLineupMode} · Banca: {selectedBench.length} · No disponibles: {selectedUnavailable.length}
+              </p>
+              <button
+                type="button"
+                onClick={handleSaveLineup}
+                disabled={lineupMutation.isPending}
+                className="rounded-lg bg-geo-green px-4 py-2 text-sm font-semibold text-black transition hover:bg-geo-green/80 disabled:opacity-50"
+              >
+                {lineupMutation.isPending ? "Guardando..." : "Guardar alineación"}
+              </button>
+            </div>
+          </section>
+        )}
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
           <TeamLineupCard

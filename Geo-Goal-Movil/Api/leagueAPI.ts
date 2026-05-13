@@ -49,18 +49,19 @@ export function leagueLogoUrl(path: string | null | undefined): string {
   return resolveMediaUrl(path);
 }
 
-export async function createLeague(body: { name: string; description: string }): Promise<string> {
+export async function createLeague(body: { name: string; description: string; lineupMode: 7 | 11 }): Promise<string> {
   const { data } = await api.post<string>(BASE, body);
   return data;
 }
 
 export async function updateLeague(
   leagueId: number,
-  body: { name?: string; description?: string | null; logo?: { uri: string; name?: string; type?: string } | null }
+  body: { name?: string; description?: string | null; lineupMode?: 7 | 11; logo?: { uri: string; name?: string; type?: string } | null }
 ): Promise<string> {
   const formData = new FormData();
   if (body.name != null) formData.append('name', body.name);
   if (body.description != null) formData.append('description', body.description);
+  if (body.lineupMode != null) formData.append('lineupMode', String(body.lineupMode));
   if (body.logo) {
     formData.append('logoFile', {
       uri: body.logo.uri,

@@ -1,12 +1,14 @@
 export type CreateLeagueDTO = {
   name: string;
   description: string;
+  lineupMode: 7 | 11;
   logoFile?: import("../../../utils/supabaseStorage").UploadedImageFile | null;
 };
 
 export type UpdateLeagueDTO = {
   name: string;
   description: string;
+  lineupMode?: 7 | 11;
 };
 
 export type GenerateFixtureOptionsDTO = {

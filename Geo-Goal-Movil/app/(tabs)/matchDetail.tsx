@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicMatchAnalytics, getPublicMatchDetail } from '@/Api/publicAPI';
+import { getPlayersTeam, updateCoachLineup } from '@/Api/teamAPI';
 import type { MatchAnalyticsResponse, MatchDetailLineupEntry } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/hooks/useAuth';
 
 type Incident = { yellow: number; red: number; subOut: number; subIn: number };
 
@@ -65,6 +67,18 @@ export default function MatchDetailMobileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const matchId = typeof id === 'string' ? Number(id) : typeof id === 'number' ? id : 0;
+  const { data: user } = useAuth();
+  const isCoach = user?.role === 'coach';
+  const queryClient = useQueryClient();
+  const [selectedStarters, setSelectedStarters] = React.useState<number[]>([]);
+  const [selectedBench, setSelectedBench] = React.useState<number[]>([]);
+  const [selectedUnavailable, setSelectedUnavailable] = React.useState<number[]>([]);
+  const [lineupMode, setLineupMode] = React.useState<7 | 11>(11);
+  const [lineupError, setLineupError] = React.useState<string | null>(null);
+  const [positionFilter, setPositionFilter] = React.useState<string>('all');
+  const lineupInitializedRef = React.useRef(false);
+  const MAX_BENCH = 20;
+  const MAX_UNAVAILABLE = 30;
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['mobile-public-match-detail', matchId],
@@ -76,6 +90,43 @@ export default function MatchDetailMobileScreen() {
     queryKey: ['mobile-public-match-analytics', matchId],
     queryFn: () => getPublicMatchAnalytics(matchId),
     enabled: Number.isInteger(matchId) && matchId > 0,
+  });
+
+  const coachSide = isCoach && user?.id && data?.match
+    ? data.match.homeTeam?.trainerId === user.id
+      ? 'home'
+      : data.match.awayTeam?.trainerId === user.id
+        ? 'away'
+        : null
+    : null;
+
+  const coachTeamId = coachSide === 'home'
+    ? data?.match?.homeTeam?.id
+    : coachSide === 'away'
+      ? data?.match?.awayTeam?.id
+      : null;
+
+  const { data: coachRoster } = useQuery({
+    queryKey: ['mobile-coach-roster', coachTeamId],
+    queryFn: () => getPlayersTeam(coachTeamId as number),
+    enabled: Number.isInteger(coachTeamId) && (coachTeamId as number) > 0,
+  });
+
+  const lineupMutation = useMutation({
+    mutationFn: (payload: {
+      startingXI: Array<Record<string, unknown>>;
+      bench?: Array<Record<string, unknown>>;
+      unavailable?: Array<Record<string, unknown>>;
+    }) => updateCoachLineup(matchId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mobile-public-match-detail', matchId] });
+      queryClient.invalidateQueries({ queryKey: ['coachDashboard', user?.id] });
+      setLineupError(null);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error ?? error?.message ?? 'No se pudo guardar la alineación';
+      setLineupError(message);
+    },
   });
 
   const [frameIndex, setFrameIndex] = React.useState(0);
@@ -95,6 +146,148 @@ export default function MatchDetailMobileScreen() {
     }, 700);
     return () => clearInterval(timer);
   }, [isPlaying, frames.length]);
+
+  React.useEffect(() => {
+    if (!coachSide || lineupInitializedRef.current) return;
+    const starters = coachSide === 'home'
+      ? data?.detail?.homeStartingXI
+      : data?.detail?.awayStartingXI;
+    const bench = coachSide === 'home'
+      ? data?.detail?.homeBench
+      : data?.detail?.awayBench;
+    const ids = (Array.isArray(starters) ? starters : [])
+      .map((p) => (typeof p.userId === 'number' ? p.userId : null))
+      .filter((id): id is number => typeof id === 'number');
+
+    if (ids.length) {
+      setSelectedStarters(ids);
+      if (ids.length === 7 || ids.length === 11) {
+        setLineupMode(ids.length as 7 | 11);
+      }
+    }
+
+    const benchIds = (Array.isArray(bench) ? bench : [])
+      .map((p) => (typeof p.userId === 'number' ? p.userId : null))
+      .filter((id): id is number => typeof id === 'number');
+    if (benchIds.length) setSelectedBench(benchIds);
+
+    lineupInitializedRef.current = true;
+  }, [coachSide, data?.detail?.homeStartingXI, data?.detail?.awayStartingXI, data?.detail?.homeBench, data?.detail?.awayBench]);
+
+  const toggleStarter = (playerId: number) => {
+    setSelectedStarters((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= lineupMode) return prev;
+      return [...prev, playerId];
+    });
+    setSelectedBench((prev) => prev.filter((id) => id !== playerId));
+    setSelectedUnavailable((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const toggleBench = (playerId: number) => {
+    setSelectedBench((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= MAX_BENCH) {
+        setLineupError(`La banca admite máximo ${MAX_BENCH} jugadores`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+    setSelectedStarters((prev) => prev.filter((id) => id !== playerId));
+    setSelectedUnavailable((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const toggleUnavailable = (playerId: number) => {
+    setSelectedUnavailable((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= MAX_UNAVAILABLE) {
+        setLineupError(`No disponibles admite máximo ${MAX_UNAVAILABLE} jugadores`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+    setSelectedStarters((prev) => prev.filter((id) => id !== playerId));
+    setSelectedBench((prev) => prev.filter((id) => id !== playerId));
+  };
+
+  const handleSaveLineup = () => {
+    if (!enforcedLineupMode) {
+      setLineupError('La liga debe definir si el formato es 7 u 11');
+      return;
+    }
+    if (!coachRoster || !coachRoster.length) {
+      setLineupError('No hay jugadores en el equipo');
+      return;
+    }
+    if (selectedStarters.length !== enforcedLineupMode) {
+      setLineupError(`Selecciona exactamente ${enforcedLineupMode} titulares`);
+      return;
+    }
+
+    const rosterMap = new Map(coachRoster.map((p) => [p.id, p]));
+    const startingXI = selectedStarters.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+      };
+    });
+
+    const bench = selectedBench.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+      };
+    });
+
+    const unavailable = selectedUnavailable.map((playerId) => {
+      const player = rosterMap.get(playerId);
+      return {
+        userId: playerId,
+        playerId,
+        name: player?.playerName ?? player?.name ?? `Jugador ${playerId}`,
+        number: player?.jerseyNumber ?? null,
+      };
+    });
+
+    lineupMutation.mutate({ startingXI, bench, unavailable });
+  };
+
+  const rosterPositions = React.useMemo(() => {
+    const set = new Set<string>();
+    (coachRoster ?? []).forEach((p) => {
+      if (p.preferredPosition) set.add(p.preferredPosition);
+    });
+    return Array.from(set).sort();
+  }, [coachRoster]);
+
+  const filteredRoster = React.useMemo(() => {
+    if (!coachRoster) return [];
+    if (positionFilter === 'all') return coachRoster;
+    return coachRoster.filter((p) => p.preferredPosition === positionFilter);
+  }, [coachRoster, positionFilter]);
+
+  const enforcedLineupMode = [7, 11].includes(Number(data?.match?.league?.lineupMode))
+    ? (Number(data?.match?.league?.lineupMode) as 7 | 11)
+    : null;
+
+  const effectiveLineupMode = enforcedLineupMode ?? lineupMode;
+
+  React.useEffect(() => {
+    if (!data?.match) return;
+    if (enforcedLineupMode) {
+      setLineupMode(enforcedLineupMode);
+      setSelectedStarters((prev) => prev.slice(0, enforcedLineupMode));
+      setLineupError(null);
+    } else {
+      setLineupError('La liga debe definir si el formato es 7 u 11');
+    }
+  }, [enforcedLineupMode, data?.match]);
 
   if (isLoading) {
     return (
@@ -183,6 +376,157 @@ export default function MatchDetailMobileScreen() {
             <MetaPill label="Pases" value={String(analytics.summary.totalPassEdges)} />
             <MetaPill label="Eventos espaciales" value={String(analytics.summary.totalSpatialEvents)} />
             <MetaPill label="Frames" value={String(analytics.trackingFrames.length)} />
+          </View>
+        </View>
+      ) : null}
+
+      {coachSide ? (
+        <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+          <View className="flex-row items-center justify-between mb-3">
+            <View>
+              <Text className="text-geo-green font-bold">Tu alineación inicial</Text>
+              <Text className="text-gray-400 text-xs">Selecciona {effectiveLineupMode} titulares</Text>
+            </View>
+            <View className="flex-row items-center">
+              {enforcedLineupMode ? (
+                <View className="rounded-lg border border-geo-green/40 bg-geo-green/20 px-3 py-1">
+                  <Text className="text-geo-green text-xs font-bold">Formato {enforcedLineupMode} vs {enforcedLineupMode}</Text>
+                </View>
+              ) : (
+                <View className="flex-row rounded-lg border border-gray-700 overflow-hidden mr-2">
+                  {[7, 11].map((mode) => (
+                    <TouchableOpacity
+                      key={`mode-${mode}`}
+                      onPress={() => {
+                        setLineupMode(mode as 7 | 11);
+                        setSelectedStarters((prev) => prev.slice(0, mode));
+                        setLineupError(null);
+                      }}
+                      className={`px-3 py-1 ${lineupMode === mode ? 'bg-geo-green' : 'bg-transparent'}`}
+                    >
+                      <Text className={`${lineupMode === mode ? 'text-black' : 'text-gray-300'} text-xs font-bold`}>{mode}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+
+          {rosterPositions.length ? (
+            <View className="flex-row flex-wrap gap-2 mb-3">
+              <TouchableOpacity
+                onPress={() => setPositionFilter('all')}
+                className={`rounded-full px-3 py-1 border ${positionFilter === 'all' ? 'border-geo-green bg-geo-green/20' : 'border-gray-700'}`}
+              >
+                <Text className={`text-xs ${positionFilter === 'all' ? 'text-geo-green' : 'text-gray-300'}`}>Todas</Text>
+              </TouchableOpacity>
+              {rosterPositions.map((pos) => (
+                <TouchableOpacity
+                  key={`pos-${pos}`}
+                  onPress={() => setPositionFilter(pos)}
+                  className={`rounded-full px-3 py-1 border ${positionFilter === pos ? 'border-geo-green bg-geo-green/20' : 'border-gray-700'}`}
+                >
+                  <Text className={`text-xs ${positionFilter === pos ? 'text-geo-green' : 'text-gray-300'}`}>{pos}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
+          {lineupError ? (
+            <Text className="text-red-400 text-xs mb-2">{lineupError}</Text>
+          ) : null}
+
+          <View className="mb-3">
+            <Text className="text-white text-xs font-semibold mb-2">Titulares ({selectedStarters.length}/{effectiveLineupMode})</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {filteredRoster.map((player) => {
+                const isSelected = selectedStarters.includes(player.id);
+                const isLocked = !isSelected && selectedStarters.length >= lineupMode;
+                const label = player.playerName || player.name;
+                return (
+                  <TouchableOpacity
+                    key={`coach-starter-${player.id}`}
+                    onPress={() => toggleStarter(player.id)}
+                    disabled={isLocked}
+                    className={`rounded-lg border px-3 py-2 ${
+                      isSelected
+                        ? 'border-geo-green bg-geo-green/20'
+                        : 'border-gray-700 bg-gray-800'
+                    } ${isLocked ? 'opacity-50' : ''}`}
+                  >
+                    <Text className="text-white text-xs font-semibold">{label}</Text>
+                    <Text className="text-gray-400 text-[10px]">#{player.jerseyNumber ?? '—'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View className="mb-3">
+            <Text className="text-white text-xs font-semibold mb-2">Banca ({selectedBench.length}/{MAX_BENCH})</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {filteredRoster.map((player) => {
+                const isSelected = selectedBench.includes(player.id);
+                const label = player.playerName || player.name;
+                return (
+                  <TouchableOpacity
+                    key={`coach-bench-${player.id}`}
+                    onPress={() => toggleBench(player.id)}
+                    className={`rounded-lg border px-3 py-2 ${
+                      isSelected
+                        ? 'border-blue-400 bg-blue-400/20'
+                        : 'border-gray-700 bg-gray-800'
+                    }`}
+                  >
+                    <Text className="text-white text-xs font-semibold">{label}</Text>
+                    <Text className="text-gray-400 text-[10px]">#{player.jerseyNumber ?? '—'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View>
+            <Text className="text-white text-xs font-semibold mb-2">No disponibles ({selectedUnavailable.length}/{MAX_UNAVAILABLE})</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {filteredRoster.map((player) => {
+                const isSelected = selectedUnavailable.includes(player.id);
+                const label = player.playerName || player.name;
+                return (
+                  <TouchableOpacity
+                    key={`coach-unavailable-${player.id}`}
+                    onPress={() => toggleUnavailable(player.id)}
+                    className={`rounded-lg border px-3 py-2 ${
+                      isSelected
+                        ? 'border-red-400 bg-red-400/20'
+                        : 'border-gray-700 bg-gray-800'
+                    }`}
+                  >
+                    <Text className="text-white text-xs font-semibold">{label}</Text>
+                    <Text className="text-gray-400 text-[10px]">#{player.jerseyNumber ?? '—'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {!coachRoster?.length ? (
+            <Text className="text-gray-400 text-xs">No hay jugadores registrados.</Text>
+          ) : null}
+
+          <View className="flex-row items-center justify-between mt-3">
+            <Text className="text-gray-400 text-xs">
+              Titulares: {selectedStarters.length}/{effectiveLineupMode} · Banca: {selectedBench.length} · No disponibles: {selectedUnavailable.length}
+            </Text>
+            <TouchableOpacity
+              onPress={handleSaveLineup}
+              disabled={lineupMutation.isPending}
+              className="rounded-lg bg-geo-green px-4 py-2"
+            >
+              <Text className="text-black text-xs font-bold">
+                {lineupMutation.isPending ? 'Guardando...' : 'Guardar'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       ) : null}

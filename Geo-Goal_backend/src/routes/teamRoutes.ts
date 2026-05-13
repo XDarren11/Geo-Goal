@@ -5,6 +5,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { TeamController } from "../controllers/TeamController";
 import { TeamInvitationController } from "../controllers/TeamInvitationController";
+import { MatchDetailController } from "../controllers/MatchDetailController";
 import { upload, uploadAvatar } from "../middleware/upload";
 import { asyncHandler } from "../middleware/asyncHandler";
 
@@ -122,6 +123,17 @@ router.get('/leagues/:leagueId/teams/:teamId/dashboard',
     param('teamId').isInt(),
     handleInputError,
     TeamController.getTeamDashboard
+);
+
+router.put(
+  "/matches/:matchId/lineup",
+  hasRole("coach"),
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("startingXI").isArray().withMessage("Titulares debe ser un arreglo"),
+  body("bench").optional().isArray().withMessage("Banca inválida"),
+  body("unavailable").optional().isArray().withMessage("No disponibles inválido"),
+  handleInputError,
+  asyncHandler(MatchDetailController.upsertCoachLineup)
 );
 
 /**

@@ -18,6 +18,9 @@ export class League extends Model {
     @Column({ type: DataType.STRING, allowNull: true })
     declare logoUrl: string | null;
 
+    @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 11 })
+    declare lineupMode: number;
+
     // Dueño de la Liga (Admin)
     @ForeignKey(() => User)
     @Column({ type: DataType.INTEGER })

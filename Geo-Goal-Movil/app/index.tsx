@@ -89,6 +89,15 @@ export default function index() {
             </Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            className="mt-6"
+            onPress={() => router.push('/(tabs)/public')}
+          >
+            <Text className="text-geo-green font-bold">
+              Ver resultados sin cuenta
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity className="mt-6" onPress={() => router.push('/(Auth)/ForgotPasswordView')}>
             <Text className="text-geo-green font-bold">
               ¿Has olvidado tu contraseña?

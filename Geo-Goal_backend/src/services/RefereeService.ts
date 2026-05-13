@@ -4,6 +4,7 @@ import {LeagueAdmin} from "../models/LeagueAdmin";
 import {League} from "../models/League";
 import {Match} from "../models/Match";
 import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
+import {MatchDetail} from "../models/MatchDetail";
 import {MatchEvent} from "../models/MatchEvent";
 import {MatchTrackingFrame} from "../models/MatchTrackingFrame";
 import {Season} from "../models/Season";
@@ -89,6 +90,10 @@ function normalizeCoordinate(value: unknown): number | null {
 }
 
 export class RefereeService {
+  private static isValidStartingCount(count: number, expected: number): boolean {
+    return count === expected;
+  }
+
   private static async ensureActiveSeasonForLeague(leagueId: number): Promise<void> {
     const activeSeason = await Season.findOne({
       where: {
@@ -229,6 +234,31 @@ export class RefereeService {
     // Check-in implies operational start of the match flow.
     if (input.status === "checked_in") {
       await this.ensureActiveSeasonForLeague(match.leagueId);
+
+      const detail = await MatchDetail.findOne({
+        where: { matchId: Number(matchId) },
+        attributes: ["homeStartingXI", "awayStartingXI"],
+      });
+
+      const league = await League.findByPk(match.leagueId, { attributes: ["id", "lineupMode"] });
+      const expected = Number(league?.lineupMode);
+      if (!league || ![7, 11].includes(expected)) {
+        throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
+      }
+
+      const homeCount = Array.isArray(detail?.homeStartingXI)
+        ? detail?.homeStartingXI.length
+        : 0;
+      const awayCount = Array.isArray(detail?.awayStartingXI)
+        ? detail?.awayStartingXI.length
+        : 0;
+
+      if (!this.isValidStartingCount(homeCount, expected) || !this.isValidStartingCount(awayCount, expected)) {
+        throw new AppError(
+          409,
+          `Para iniciar el partido, ambos entrenadores deben registrar su ${expected} inicial`
+        );
+      }
     }
 
     if (!match.date || new Date(match.date).getTime() <= Date.now()) {

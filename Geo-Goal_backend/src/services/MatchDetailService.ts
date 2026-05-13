@@ -3,6 +3,7 @@ import { Op } from "sequelize";
 import { Match } from "../models/Match";
 import { Season } from "../models/Season";
 import { MatchDetail } from "../models/MatchDetail";
+import { League } from "../models/League";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { Field } from "../models/Field";
@@ -87,6 +88,36 @@ export class MatchDetailService {
     ) {
       throw new AppError(400, "La asistencia no puede ser negativa");
     }
+  }
+
+  private static validateCoachLineup(
+    input: {
+      startingXI: LineupEntry[];
+      bench?: LineupEntry[];
+      unavailable?: LineupEntry[];
+    },
+    expectedStarters: number
+  ): void {
+    if (!Array.isArray(input.startingXI)) {
+      throw new AppError(400, "Titulares debe ser un arreglo");
+    }
+
+    if (input.startingXI.length !== expectedStarters) {
+      throw new AppError(409, `Debes registrar ${expectedStarters} titulares para esta liga`);
+    }
+
+    const checkOptional = (value: unknown, label: string, max: number) => {
+      if (value === undefined) return;
+      if (!Array.isArray(value)) {
+        throw new AppError(400, `${label} debe ser un arreglo`);
+      }
+      if (value.length > max) {
+        throw new AppError(400, `${label} supera el máximo permitido (${max})`);
+      }
+    };
+
+    checkOptional(input.bench, "Banca", 20);
+    checkOptional(input.unavailable, "No disponibles", 30);
   }
 
   private static async ensureForeignKeys(input: UpsertMatchDetailInput): Promise<void> {
@@ -309,6 +340,10 @@ export class MatchDetailService {
     const match = await Match.findByPk(matchId, {
       include: [
         {
+          model: League,
+          attributes: ["id", "name", "lineupMode"],
+        },
+        {
           model: Team,
           as: "homeTeam",
           attributes: ["id", "name", "logoUrl", "trainerId"],
@@ -510,6 +545,99 @@ export class MatchDetailService {
       message: created
         ? "Detalle de partido creado correctamente"
         : "Detalle de partido actualizado correctamente",
+      data: reloaded,
+    };
+  }
+
+  static async upsertCoachLineup(
+    matchId: string,
+    actorUserId: number,
+    input: {
+      startingXI: LineupEntry[];
+      bench?: LineupEntry[];
+      unavailable?: LineupEntry[];
+    }
+  ) {
+    const match = await Match.findByPk(matchId);
+    if (!match) {
+      throw new AppError(404, "Partido no encontrado");
+    }
+
+    const league = await League.findByPk(match.leagueId, {
+      attributes: ["id", "lineupMode"],
+    });
+    const expectedStarters = Number(league?.lineupMode);
+    if (!league || ![7, 11].includes(expectedStarters)) {
+      throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
+    }
+
+    this.validateCoachLineup(input, expectedStarters);
+
+    const teams = await Team.findAll({
+      where: { id: [match.homeTeamId, match.awayTeamId] },
+      attributes: ["id", "trainerId"],
+    });
+
+    const homeTeam = teams.find((t) => Number(t.id) === match.homeTeamId);
+    const awayTeam = teams.find((t) => Number(t.id) === match.awayTeamId);
+    const isHomeCoach = homeTeam?.trainerId === actorUserId;
+    const isAwayCoach = awayTeam?.trainerId === actorUserId;
+
+    if (!isHomeCoach && !isAwayCoach) {
+      throw new AppError(403, "No tienes permisos para actualizar la alineación");
+    }
+
+    const side = isHomeCoach ? "home" : "away";
+    const teamId = isHomeCoach ? match.homeTeamId : match.awayTeamId;
+    const kickoff = match.date ? new Date(match.date) : null;
+
+    const [detail] = await MatchDetail.findOrCreate({
+      where: { matchId: match.id },
+      defaults: {
+        matchId: match.id,
+        kickoffTime: kickoff,
+        durationMinutes: 90,
+        endTime: kickoff ? new Date(kickoff.getTime() + 90 * 60 * 1000) : null,
+        matchDay: kickoff ? kickoff.toISOString().slice(0, 10) : null,
+        homeStartingXI: [],
+        awayStartingXI: [],
+        homeBench: [],
+        awayBench: [],
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      },
+    });
+
+    if (side === "home") {
+      detail.homeStartingXI = input.startingXI;
+      if (input.bench !== undefined) detail.homeBench = input.bench;
+    } else {
+      detail.awayStartingXI = input.startingXI;
+      if (input.bench !== undefined) detail.awayBench = input.bench;
+    }
+
+    if (!detail.createdBy) detail.createdBy = actorUserId;
+    detail.updatedBy = actorUserId;
+    await detail.save();
+
+    await this.syncTeamSquad({
+      matchId: match.id,
+      teamId,
+      actorUserId,
+      starters: input.startingXI,
+      bench:
+        input.bench ??
+        (side === "home"
+          ? (detail.homeBench as LineupEntry[])
+          : (detail.awayBench as LineupEntry[])),
+      unavailable: input.unavailable ?? [],
+    });
+
+    await NotificationService.notifyLineupUpdated(match.id, teamId);
+
+    const reloaded = await this.getByMatchId(matchId);
+    return {
+      message: "Alineación inicial registrada correctamente",
       data: reloaded,
     };
   }

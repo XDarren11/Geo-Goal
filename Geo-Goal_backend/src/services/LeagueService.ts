@@ -208,12 +208,17 @@ export class LeagueService {
 
   static async createLeague(
     managerId: number,
-    data: { name: string; description: string; logoFile?: UploadedImageFile | null }
+    data: { name: string; description: string; lineupMode: 7 | 11; logoFile?: UploadedImageFile | null }
   ): Promise<string> {
+    const parsedLineupMode = Number(data.lineupMode);
+    if (![7, 11].includes(parsedLineupMode)) {
+      throw new AppError(400, "La liga debe definir formato 7 u 11");
+    }
     const league = new League({
       name: data.name,
       description: data.description,
       managerId,
+      lineupMode: parsedLineupMode,
     });
     if (data.logoFile) {
       const uploadedLogo = await uploadImageToSupabase(data.logoFile, "leagues");
@@ -250,7 +255,7 @@ export class LeagueService {
   static async updateLeague(
     leagueId: string,
     managerId: number,
-    data: { name: string; description: string }
+    data: { name: string; description: string; lineupMode?: 7 | 11 }
   ): Promise<string> {
     const league = await League.findOne({
       where: { id: leagueId, managerId },
@@ -260,6 +265,13 @@ export class LeagueService {
     }
     league.name = data.name;
     league.description = data.description;
+    if (data.lineupMode !== undefined) {
+      const parsedLineupMode = Number(data.lineupMode);
+      if (![7, 11].includes(parsedLineupMode)) {
+        throw new AppError(400, "La liga debe definir formato 7 u 11");
+      }
+      league.lineupMode = parsedLineupMode;
+    }
     await league.save();
     return `Liga: ${league.name} actualizada correctamente`;
   }

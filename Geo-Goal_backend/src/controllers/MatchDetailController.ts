@@ -24,6 +24,7 @@ import {
 } from "../application/matchDetail/requests/MatchDetailRequests";
 import { Match } from "../models/Match";
 import { MatchAnalysisJob } from "../models/MatchAnalysisJob";
+import { MatchDetailService } from "../services/MatchDetailService";
 import { uploadVideoToSupabase } from "../utils/supabaseStorage";
 
 const matchDetailMediator = buildMatchDetailMediator(new MatchFlowServiceAdapter());
@@ -40,6 +41,12 @@ export class MatchDetailController {
     const result = await matchDetailMediator.send(
       new MatchDetailUpsertRequest(matchId, req.user!.id, req.body)
     );
+    res.json(result);
+  };
+
+  static upsertCoachLineup = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const result = await MatchDetailService.upsertCoachLineup(matchId, req.user!.id, req.body);
     res.json(result);
   };
 

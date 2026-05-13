@@ -12,6 +12,21 @@ const rawApi = axios.create({
     baseURL: API_URL
 });
 
+const AUTH_ENDPOINTS = new Set([
+    '/auth/login',
+    '/auth/create-account',
+    '/auth/confirm-account',
+    '/auth/request-code',
+    '/auth/forgot-password',
+    '/auth/validate-token',
+]);
+
+const shouldSkipRefresh = (url?: string, config?: any) => {
+    if (config?.skipAuthRefresh) return true;
+    if (!url) return false;
+    return AUTH_ENDPOINTS.has(url);
+};
+
 // 2. Interceptor
 api.interceptors.request.use(async (config) => {
     try {
@@ -57,6 +72,14 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config as any;
         if (error?.response?.status === 401 && !originalRequest?._retry) {
+            if (shouldSkipRefresh(originalRequest?.url, originalRequest)) {
+                return Promise.reject(error);
+            }
+
+            const hasRefreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+            if (!hasRefreshToken) {
+                return Promise.reject(error);
+            }
             originalRequest._retry = true;
             try {
                 const newAccessToken = await refreshAccessToken();
@@ -75,4 +98,5 @@ api.interceptors.response.use(
     }
 );
 
+export { rawApi };
 export default api;

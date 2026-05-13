@@ -3,6 +3,7 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, FlatList, 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { getLeagueById, getLeagueMatches, getStandings, updateMatchSchedule, leagueLogoUrl, updateLeague } from '@/Api/leagueAPI';
+import { getPublicLeagueDetail, getPublicFixture, getPublicStandings } from '@/Api/publicAPI';
 import { Ionicons } from '@expo/vector-icons';
 import type { FixtureByRound } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,22 +25,42 @@ export default function LeagueDetailScreen() {
   const leagueId = typeof id === 'string' ? parseInt(id, 10) : typeof id === 'number' ? id : 0;
   const leagueName = typeof name === 'string' ? decodeURIComponent(name) : 'Liga';
 
+  const isAdmin = user?.role === 'admin';
+
   const { data: league, isLoading: leagueLoading } = useQuery({
     queryKey: ['league', leagueId],
     queryFn: () => getLeagueById(leagueId),
-    enabled: !!leagueId && !isNaN(leagueId) && user?.role === 'admin',
+    enabled: !!leagueId && !isNaN(leagueId) && isAdmin,
+  });
+
+  const { data: publicLeague, isLoading: publicLeagueLoading } = useQuery({
+    queryKey: ['public-league', leagueId],
+    queryFn: () => getPublicLeagueDetail(leagueId),
+    enabled: !!leagueId && !isNaN(leagueId) && !isAdmin,
   });
 
   const { data: matchesData, isLoading: fixtureLoading, refetch: refetchMatches } = useQuery({
     queryKey: ['matches', leagueId],
     queryFn: () => getLeagueMatches(leagueId),
-    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'fixture',
+    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'fixture' && isAdmin,
+  });
+
+  const { data: publicFixture, isLoading: publicFixtureLoading } = useQuery({
+    queryKey: ['public-fixture', leagueId],
+    queryFn: () => getPublicFixture(leagueId),
+    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'fixture' && !isAdmin,
   });
 
   const { data: standings, isLoading: standingsLoading } = useQuery({
     queryKey: ['standings', leagueId],
     queryFn: () => getStandings(leagueId),
-    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'standings',
+    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'standings' && isAdmin,
+  });
+
+  const { data: publicStandings, isLoading: publicStandingsLoading } = useQuery({
+    queryKey: ['public-standings', leagueId],
+    queryFn: () => getPublicStandings(leagueId),
+    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'standings' && !isAdmin,
   });
 
   const scheduleMutation = useMutation({
@@ -102,11 +123,11 @@ export default function LeagueDetailScreen() {
     },
   });
 
-  if (leagueLoading && user?.role === 'admin') {
+  if ((leagueLoading && isAdmin) || (publicLeagueLoading && !isAdmin)) {
     return <Loader fullScreen label="Cargando liga..." />;
   }
 
-  if (user?.role === 'admin' && !league) {
+  if (isAdmin && !league) {
     return (
       <View className="flex-1 bg-geo-black justify-center items-center">
         <Text className="text-geo-green">Liga no encontrada</Text>
@@ -114,23 +135,28 @@ export default function LeagueDetailScreen() {
     );
   }
 
-  const effectiveLeague = league ?? {
-    id: leagueId,
-    name: leagueName,
-    description: undefined,
-    teams: [],
-  };
+  const effectiveLeague = isAdmin
+    ? league
+    : publicLeague?.league ?? {
+        id: leagueId,
+        name: leagueName,
+        description: undefined,
+        teams: [],
+      };
 
-  const isGrouped = matchesData && !Array.isArray(matchesData) && typeof matchesData === 'object';
-  const fixtureRounds = matchesData
+  const fixtureSource = isAdmin ? matchesData : publicFixture ?? publicLeague?.fixture;
+  const isGrouped = fixtureSource && !Array.isArray(fixtureSource) && typeof fixtureSource === 'object';
+  const fixtureRounds = fixtureSource
     ? isGrouped
-      ? Object.entries(matchesData as Record<string, any[]>).flatMap(([round, matches]) =>
+      ? Object.entries(fixtureSource as Record<string, any[]>).flatMap(([round, matches]) =>
           matches.map((match) => ({ round, ...match }))
         )
-      : (matchesData as any[])
+      : (fixtureSource as any[])
     : [];
 
-  const standingsList = Array.isArray(standings) ? standings : [];
+  const standingsList = Array.isArray(isAdmin ? standings : publicStandings ?? publicLeague?.standings)
+    ? (isAdmin ? standings : publicStandings ?? publicLeague?.standings)
+    : [];
 
   const selectedMatch = fixtureRounds.find((m: any) => m.id === selectedMatchId);
   const selectedMatchIsPast = Boolean(
@@ -189,7 +215,7 @@ export default function LeagueDetailScreen() {
         <ScrollView className="flex-1 px-4 py-4">
           <View className="bg-gray-900/80 border border-geo-green/20 rounded-2xl p-4 mb-4">
             <Text className="text-geo-green font-bold mb-2">Descripción</Text>
-            {user?.role === 'admin' ? (
+            {isAdmin ? (
               <View>
                 <TextInput
                   value={leagueDescriptionInput ?? ''}
@@ -252,7 +278,7 @@ export default function LeagueDetailScreen() {
       )}
 
       {activeTab === 'fixture' && (
-        fixtureLoading ? (
+        fixtureLoading || publicFixtureLoading ? (
           <Loader fullScreen label="Cargando calendario..." />
         ) : (
           <ScrollView className="flex-1 px-4 py-4">
@@ -376,7 +402,7 @@ export default function LeagueDetailScreen() {
       )}
 
       {activeTab === 'standings' && (
-        standingsLoading ? (
+        standingsLoading || publicStandingsLoading ? (
           <Loader fullScreen label="Cargando clasificación..." />
         ) : (
           <ScrollView className="flex-1 px-4 py-4">

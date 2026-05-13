@@ -39,6 +39,7 @@ export interface League {
   description?: string
   managerId?: number
   logoUrl?: string | null
+  lineupMode?: 7 | 11
   teams?: Team[]
 }
 
@@ -96,6 +97,7 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  league?: Pick<League, 'id' | 'name' | 'lineupMode'>
   lat?: number;
   lng?: number;
   fieldAddress?: string;

@@ -53,6 +53,10 @@ router.post('/',
         .notEmpty().withMessage('El nombre de la liga es obligatorio'),
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
+    body('lineupMode')
+        .isInt()
+        .isIn([7, 11])
+        .withMessage('El formato debe ser 7 u 11'),
     handleInputError,
     asyncHandler(LeagueController.createLeague)
 )
@@ -180,6 +184,11 @@ router.put('/:leagueId',
         .notEmpty().withMessage('El nombre de la liga es obligatorio'),
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
+    body('lineupMode')
+        .optional()
+        .isInt()
+        .isIn([7, 11])
+        .withMessage('El formato debe ser 7 u 11'),
     handleInputError,
     asyncHandler(LeagueController.updateLeague)
 )
