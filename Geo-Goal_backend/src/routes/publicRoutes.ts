@@ -124,4 +124,19 @@ router.get(
   asyncHandler(MatchDetailController.getAnalysisFrame)
 );
 
+router.get(
+  "/matches/pending-analysis",
+  authenticate,
+  handleInputError,
+  asyncHandler(MatchDetailController.getPendingAnalysis)
+);
+
+router.put(
+  "/matches/:matchId/analysis/claim",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(MatchDetailController.claimAnalysisJob)
+);
+
 export default router;

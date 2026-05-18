@@ -804,22 +804,44 @@ export class RefereeService {
       }
     }
 
-    const created = await MatchTrackingFrame.bulkCreate(
-      frames.map((f) => ({
-        matchId: Number(matchId),
-        leagueId: match.leagueId,
-        timestampMs: Number(f.timestampMs),
-        period: f.period ?? null,
-        ballX: f.ball?.x ?? null,
-        ballY: f.ball?.y ?? null,
-        ballZ: f.ball?.z ?? null,
-        players: f.players,
-        source: f.source ?? "video",
-        confidence: f.confidence != null ? Math.max(0, Math.min(1, Number(f.confidence))) : 1,
-        coordSystem: f.coordSystem ?? "meters",
-        recordedBy: userId,
-      }))
-    );
+    // Map AI team IDs (1=home, 2=away) to real DB team IDs and normalize coordinates
+    const normalizeCoord = (raw: unknown, maxDim: number): number | null => {
+      const v = Number(raw);
+      if (!Number.isFinite(v)) return null;
+      return Math.round((v / maxDim) * 10000) / 100;
+    };
+
+    const isMeters = frames.some((f) => (f as any).coordSystem === "meters");
+
+    const transformedFrames = frames.map((f: any) => ({
+      matchId: Number(matchId),
+      leagueId: match.leagueId,
+      timestampMs: Number(f.timestampMs),
+      period: f.period ?? null,
+      ballX: isMeters ? normalizeCoord(f.ball?.x, 105) : (f.ball?.x ?? null),
+      ballY: isMeters ? normalizeCoord(f.ball?.y, 68) : (f.ball?.y ?? null),
+      ballZ: f.ball?.z ?? null,
+      players: Array.isArray(f.players)
+        ? f.players.map((p: any) => {
+            let teamId = Number(p.teamId ?? -1);
+            if (teamId === 1) teamId = match.homeTeamId;
+            else if (teamId === 2) teamId = match.awayTeamId;
+
+            return {
+              playerId: p.playerId ?? p.id ?? null,
+              teamId,
+              x: isMeters ? normalizeCoord(p.x, 105) : Number(p.x ?? 0),
+              y: isMeters ? normalizeCoord(p.y, 68) : Number(p.y ?? 0),
+            };
+          })
+        : [],
+      source: f.source ?? "video",
+      confidence: f.confidence != null ? Math.max(0, Math.min(1, Number(f.confidence))) : 1,
+      coordSystem: "normalized",
+      recordedBy: userId,
+    }));
+
+    const created = await MatchTrackingFrame.bulkCreate(transformedFrames);
 
     const analytics = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
 

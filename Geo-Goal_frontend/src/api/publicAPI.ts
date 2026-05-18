@@ -81,8 +81,26 @@ export interface AnalysisStatusResponse {
   framesProcessed?: number;
   totalFrames?: number;
   error?: string;
+  videoSupabaseUrl?: string | null;
+  pid?: number | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// AI Service health check
+const AI_SERVICE_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined)?.trim() || "http://localhost:8000";
+
+export interface AIServiceHealth {
+  status: "ok" | "error";
+  worker_running: boolean;
+  current_job: number | null;
+  poll_interval: number;
+  device: string;
+}
+
+export async function getAIServiceHealth(): Promise<AIServiceHealth> {
+  const { data } = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
+  return data;
 }
 
 export async function uploadMatchVideo(

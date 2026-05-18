@@ -53,6 +53,11 @@ def main() -> None:
     ext_p.add_argument("video", help="Path to video file")
     ext_p.add_argument("--frame", type=int, default=0, help="Frame number to extract (default: 0)")
 
+    # ---- serve ----
+    serve_p = sub.add_parser("serve", help="Start the AI service API (FastAPI + worker)")
+    serve_p.add_argument("--host", default="0.0.0.0", help="Host to bind (default: 0.0.0.0)")
+    serve_p.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
+
     args = parser.parse_args()
 
     # Fallback: if no subcommand, emulate old behaviour
@@ -60,7 +65,7 @@ def main() -> None:
         _legacy_flat_args()
         return
 
-    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:3000/api"
+    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:4000/api"
 
     if args.command == "api":
         _cmd_api(args, API_BASE)
@@ -93,6 +98,11 @@ def main() -> None:
         w = int(frame.shape[1])
         h = int(frame.shape[0])
         print(_json.dumps({"frame": b64, "width": w, "height": h}))
+
+    elif args.command == "serve":
+        import uvicorn
+        from api import app
+        uvicorn.run(app, host=args.host, port=args.port)
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +179,7 @@ def _legacy_flat_args() -> None:
     parser.add_argument("--check-connection", action="store_true")
     args = parser.parse_args()
 
-    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:3000/api"
+    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:4000/api"
     CLIENT_ID = os.environ.get("M2M_CLIENT_ID")
     CLIENT_SECRET = os.environ.get("M2M_CLIENT_SECRET")
 

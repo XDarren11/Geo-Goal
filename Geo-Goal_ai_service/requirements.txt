@@ -7,3 +7,8 @@ scikit-learn
 supervision
 torch
 yt-dlp
+fastapi
+uvicorn
+httpx
+jinja2
+python-multipart

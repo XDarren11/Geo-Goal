@@ -52,3 +52,95 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
   return data;
 }
+
+// ── Video Analysis ──
+
+export interface AnalysisStatusResponse {
+  status: "none" | "uploaded" | "annotating" | "queued" | "processing" | "completed" | "failed";
+  jobId?: number;
+  progress?: number;
+  currentStep?: string;
+  framesProcessed?: number;
+  totalFrames?: number;
+  error?: string;
+  videoSupabaseUrl?: string | null;
+  pid?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnalysisFrameResponse {
+  frame: string;
+  width: number;
+  height: number;
+}
+
+export async function uploadMatchVideo(
+  matchId: number,
+  videoUri: string,
+  onProgress?: (pct: number) => void
+): Promise<{ message: string; jobId: number; filename: string; matchId: number }> {
+  const formData = new FormData();
+  const filename = videoUri.split("/").pop() || "video.mp4";
+  const mimeType = "video/mp4";
+  formData.append("video", {
+    uri: videoUri,
+    name: filename,
+    type: mimeType,
+  } as any);
+  const { data } = await api.post<{ message: string; jobId: number; filename: string; matchId: number }>(
+    `${BASE}/matches/${matchId}/upload-video`,
+    formData,
+    {
+      timeout: 600_000,
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (event) => {
+        if (event.total && onProgress) {
+          onProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    }
+  );
+  return data;
+}
+
+export async function getAnalysisStatus(matchId: number): Promise<AnalysisStatusResponse> {
+  const { data } = await api.get<AnalysisStatusResponse>(
+    `${BASE}/matches/${matchId}/analysis/status`
+  );
+  return data;
+}
+
+export async function submitAnalysisKeypoints(
+  matchId: number,
+  srcPts: Array<{ x: number; y: number }>
+): Promise<{ message: string; jobId: number; status: string }> {
+  const { data } = await api.put<{ message: string; jobId: number; status: string }>(
+    `${BASE}/matches/${matchId}/analysis/keypoints`,
+    { srcPts }
+  );
+  return data;
+}
+
+export async function getAnalysisFrame(matchId: number): Promise<AnalysisFrameResponse> {
+  const { data } = await api.get<AnalysisFrameResponse>(
+    `${BASE}/matches/${matchId}/analysis/frame`
+  );
+  return data;
+}
+
+// AI Service health
+const AI_SERVICE_URL = process.env.EXPO_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+
+export interface AIServiceHealth {
+  status: "ok" | "error";
+  worker_running: boolean;
+  current_job: number | null;
+  poll_interval: number;
+  device: string;
+}
+
+export async function getAIServiceHealth(): Promise<AIServiceHealth> {
+  const res = await fetch(`${AI_SERVICE_URL}/health`);
+  return res.json();
+}

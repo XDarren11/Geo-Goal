@@ -71,6 +71,12 @@ export class NewsService {
   private static async ensureGeneratedNews(leagueIds: number[]): Promise<void> {
     if (!leagueIds.length) return;
 
+    const existingCount = await News.count({
+      where: { leagueId: { [Op.in]: leagueIds } },
+    });
+
+    if (existingCount > 0) return;
+
     const [leagues, seasons, matches] = await Promise.all([
       League.findAll({
         where: { id: { [Op.in]: leagueIds } },

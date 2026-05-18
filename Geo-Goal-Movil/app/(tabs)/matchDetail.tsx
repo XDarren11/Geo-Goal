@@ -1,12 +1,13 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicMatchAnalytics, getPublicMatchDetail } from '@/Api/publicAPI';
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, getAIServiceHealth, type AnalysisStatusResponse, type AIServiceHealth } from '@/Api/publicAPI';
 import { getPlayersTeam, updateCoachLineup } from '@/Api/teamAPI';
-import type { MatchAnalyticsResponse, MatchDetailLineupEntry } from '@/types';
+import type { MatchAnalyticsResponse, MatchDetailLineupEntry, TrackingFramePlayer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
+import * as ImagePicker from 'expo-image-picker';
 
 type Incident = { yellow: number; red: number; subOut: number; subIn: number };
 
@@ -58,10 +59,6 @@ function buildIncidentMap(analytics?: MatchAnalyticsResponse) {
   return map;
 }
 
-function toNum(v: unknown) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
 
 export default function MatchDetailMobileScreen() {
   const router = useRouter();
@@ -79,6 +76,19 @@ export default function MatchDetailMobileScreen() {
   const lineupInitializedRef = React.useRef(false);
   const MAX_BENCH = 20;
   const MAX_UNAVAILABLE = 30;
+  const isAdmin = user?.role === 'admin';
+
+  // ── Video analysis state (admin) ──
+  const [analysisOpen, setAnalysisOpen] = React.useState(false);
+  const [videoUri, setVideoUri] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const [uploadStep, setUploadStep] = React.useState<'select' | 'annotate' | 'progress'>('select');
+  const [srcPts, setSrcPts] = React.useState<Array<{ x: number; y: number }>>([]);
+  const [analysisStatus, setAnalysisStatus] = React.useState<AnalysisStatusResponse | null>(null);
+  const [aiHealth, setAiHealth] = React.useState<AIServiceHealth | null>(null);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [uploadResult, setUploadResult] = React.useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['mobile-public-match-detail', matchId],
@@ -173,6 +183,99 @@ export default function MatchDetailMobileScreen() {
 
     lineupInitializedRef.current = true;
   }, [coachSide, data?.detail?.homeStartingXI, data?.detail?.awayStartingXI, data?.detail?.homeBench, data?.detail?.awayBench]);
+
+  // ── Video upload mutation ──
+  const uploadMutation = useMutation({
+    mutationFn: ({ uri }: { uri: string }) => uploadMatchVideo(matchId, uri, (pct) => setUploadProgress(pct)),
+    onSuccess: () => {
+      setUploadStep('annotate');
+    },
+    onError: (error: any) => {
+      const msg = error?.response?.data?.error ?? error?.message ?? 'Error al subir el video';
+      setUploadError(msg);
+      setUploadStep('select');
+    },
+    onSettled: () => {
+      setUploading(false);
+    },
+  });
+
+  const keypointsMutation = useMutation({
+    mutationFn: (pts: Array<{ x: number; y: number }>) => submitAnalysisKeypoints(matchId, pts),
+    onSuccess: () => {
+      setUploadStep('progress');
+      setAnalysisStatus({ status: 'processing', progress: 0, currentStep: 'starting' });
+    },
+    onError: (error: any) => {
+      const msg = error?.response?.data?.error ?? error?.message ?? 'Error al iniciar el análisis';
+      setUploadError(msg);
+    },
+  });
+
+  // ── Poll analysis status ──
+  React.useEffect(() => {
+    if (uploadStep !== 'progress') return;
+    const interval = setInterval(async () => {
+      try {
+        const status = await getAnalysisStatus(matchId);
+        setAnalysisStatus(status);
+        if (status.status === 'completed' || status.status === 'failed') {
+          setUploadResult(
+            status.status === 'completed'
+              ? 'Análisis completado. Refresca la página para ver los resultados.'
+              : `Error: ${status.error ?? 'Falló el análisis'}`
+          );
+        }
+      } catch {
+        // ignore polling errors
+      }
+      try {
+        const health = await getAIServiceHealth();
+        setAiHealth(health);
+      } catch {
+        setAiHealth(null);
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [uploadStep, matchId]);
+
+  const resetUpload = () => {
+    setAnalysisOpen(false);
+    setVideoUri(null);
+    setUploadResult(null);
+    setUploadError(null);
+    setSrcPts([]);
+    setUploadStep('select');
+    setAnalysisStatus(null);
+    setUploadProgress(0);
+  };
+
+  const handlePickVideo = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permiso denegado', 'Se necesita acceso a la galería para seleccionar un video.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: false,
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    setVideoUri(asset.uri);
+    setUploadError(null);
+    setSrcPts([]);
+    setUploadProgress(0);
+    setUploading(true);
+    uploadMutation.mutate({ uri: asset.uri });
+  };
+
+  const handleSubmitKeypoints = () => {
+    if (srcPts.length !== 4) return;
+    setUploadError(null);
+    keypointsMutation.mutate(srcPts);
+  };
 
   const toggleStarter = (playerId: number) => {
     setSelectedStarters((prev) => {
@@ -314,21 +417,16 @@ export default function MatchDetailMobileScreen() {
   const incidents = buildIncidentMap(analytics);
   const currentFrame = frames.length ? frames[Math.min(frameIndex, frames.length - 1)] : null;
 
-  const trackedByPlayer = new Map<number, { x: number; y: number }>();
-  if (currentFrame?.players?.length) {
-    for (const raw of currentFrame.players) {
-      const row = raw as Record<string, unknown>;
-      const userId = toNum(row.userId ?? row.playerId);
-      const x = toNum(row.x);
-      const y = toNum(row.y);
-      if (userId != null && x != null && y != null && !trackedByPlayer.has(userId)) {
-        trackedByPlayer.set(userId, {
-          x: Math.max(0, Math.min(100, x)),
-          y: Math.max(0, Math.min(100, y)),
-        });
-      }
-    }
-  }
+  const homeTeamId = analytics?.match?.homeTeamId ?? data?.match?.homeTeamId;
+  const awayTeamId = analytics?.match?.awayTeamId ?? data?.match?.awayTeamId;
+
+  const trackedPlayers: TrackingFramePlayer[] = currentFrame?.players?.length
+    ? (currentFrame.players as unknown as TrackingFramePlayer[])
+    : [];
+
+  const homeTracked = trackedPlayers.filter((p) => typeof p.teamId === 'number' && p.teamId === homeTeamId);
+  const awayTracked = trackedPlayers.filter((p) => typeof p.teamId === 'number' && p.teamId === awayTeamId);
+  const hasTracking = homeTracked.length > 0 || awayTracked.length > 0;
 
   const toSpot = (idx: number, side: 'home' | 'away') => {
     const base = BASE_SPOTS[Math.min(idx, BASE_SPOTS.length - 1)] ?? BASE_SPOTS[0];
@@ -337,6 +435,7 @@ export default function MatchDetailMobileScreen() {
   };
 
   return (
+    <>
     <ScrollView className="flex-1 bg-geo-black px-4 py-5">
       <View className="flex-row items-center mb-4">
         <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80 border border-geo-green/20">
@@ -346,6 +445,15 @@ export default function MatchDetailMobileScreen() {
           <Text className="text-white font-extrabold text-lg" numberOfLines={1}>{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
           <Text className="text-gray-400 text-xs">{match.roundName}</Text>
         </View>
+        {isAdmin && (
+          <TouchableOpacity
+            onPress={() => setAnalysisOpen(true)}
+            className="rounded-lg bg-geo-green px-4 py-2 flex-row items-center"
+          >
+            <Ionicons name="videocam" size={16} color="#000" />
+            <Text className="text-black text-xs font-bold ml-1">Analizar</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
@@ -601,35 +709,53 @@ export default function MatchDetailMobileScreen() {
           <View className="absolute left-0 top-1/2 h-32 w-12 -translate-y-16 border border-white/40 border-l-0" />
           <View className="absolute right-0 top-1/2 h-32 w-12 -translate-y-16 border border-white/40 border-r-0" />
 
-          {home.map((p) => {
-            const tracked = typeof p.userId === 'number' ? trackedByPlayer.get(p.userId) : undefined;
-            const pos = tracked ?? toSpot(p.idx, 'home');
-            const incident = p.userId ? incidents.get(p.userId) : undefined;
-            return (
-              <View key={`h-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>
-                <View className="h-9 w-9 items-center justify-center rounded-full border border-white bg-emerald-300">
-                  <Text className="text-[10px] font-black text-emerald-950">{p.number ?? p.idx + 1}</Text>
+          {hasTracking ? (
+            <>
+              {homeTracked.map((p, i) => (
+                <View key={`ht-${i}`} className="absolute" style={{ left: `${p.x ?? 50}%`, top: `${p.y ?? 50}%`, transform: [{ translateX: -10 }, { translateY: -10 }] }}>
+                  <View className="h-5 w-5 items-center justify-center rounded-full border border-white bg-emerald-400 shadow-lg">
+                    <Text className="text-[8px] font-black text-emerald-950">{p.playerId ?? i + 1}</Text>
+                  </View>
                 </View>
-                {incident?.yellow ? <View className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1"><Text className="text-[9px] font-black text-black">Y</Text></View> : null}
-                {incident?.red ? <View className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1"><Text className="text-[9px] font-black text-white">R</Text></View> : null}
-              </View>
-            );
-          })}
-
-          {away.map((p) => {
-            const tracked = typeof p.userId === 'number' ? trackedByPlayer.get(p.userId) : undefined;
-            const pos = tracked ?? toSpot(p.idx, 'away');
-            const incident = p.userId ? incidents.get(p.userId) : undefined;
-            return (
-              <View key={`a-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>
-                <View className="h-9 w-9 items-center justify-center rounded-full border border-white bg-sky-300">
-                  <Text className="text-[10px] font-black text-sky-950">{p.number ?? p.idx + 1}</Text>
+              ))}
+              {awayTracked.map((p, i) => (
+                <View key={`at-${i}`} className="absolute" style={{ left: `${p.x ?? 50}%`, top: `${p.y ?? 50}%`, transform: [{ translateX: -10 }, { translateY: -10 }] }}>
+                  <View className="h-5 w-5 items-center justify-center rounded-full border border-white bg-sky-400 shadow-lg">
+                    <Text className="text-[8px] font-black text-sky-950">{p.playerId ?? i + 1}</Text>
+                  </View>
                 </View>
-                {incident?.yellow ? <View className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1"><Text className="text-[9px] font-black text-black">Y</Text></View> : null}
-                {incident?.red ? <View className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1"><Text className="text-[9px] font-black text-white">R</Text></View> : null}
-              </View>
-            );
-          })}
+              ))}
+            </>
+          ) : (
+            <>
+              {home.map((p) => {
+                const pos = toSpot(p.idx, 'home');
+                const incident = p.userId ? incidents.get(p.userId) : undefined;
+                return (
+                  <View key={`h-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>
+                    <View className="h-9 w-9 items-center justify-center rounded-full border border-white bg-emerald-300">
+                      <Text className="text-[10px] font-black text-emerald-950">{p.number ?? p.idx + 1}</Text>
+                    </View>
+                    {incident?.yellow ? <View className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1"><Text className="text-[9px] font-black text-black">Y</Text></View> : null}
+                    {incident?.red ? <View className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1"><Text className="text-[9px] font-black text-white">R</Text></View> : null}
+                  </View>
+                );
+              })}
+              {away.map((p) => {
+                const pos = toSpot(p.idx, 'away');
+                const incident = p.userId ? incidents.get(p.userId) : undefined;
+                return (
+                  <View key={`a-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>
+                    <View className="h-9 w-9 items-center justify-center rounded-full border border-white bg-sky-300">
+                      <Text className="text-[10px] font-black text-sky-950">{p.number ?? p.idx + 1}</Text>
+                    </View>
+                    {incident?.yellow ? <View className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1"><Text className="text-[9px] font-black text-black">Y</Text></View> : null}
+                    {incident?.red ? <View className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1"><Text className="text-[9px] font-black text-white">R</Text></View> : null}
+                  </View>
+                );
+              })}
+            </>
+          )}
 
           {currentFrame?.ballX != null && currentFrame?.ballY != null ? (
             <View className="absolute" style={{ left: `${currentFrame.ballX}%`, top: `${currentFrame.ballY}%`, transform: [{ translateX: -8 }, { translateY: -8 }] }}>
@@ -654,6 +780,216 @@ export default function MatchDetailMobileScreen() {
         ))}
       </View>
     </ScrollView>
+
+    {/* ── Video Analysis Modal (admin) ── */}
+    <Modal visible={analysisOpen} animationType="fade" transparent>
+      <View className="flex-1 bg-black/70 justify-center items-center px-4">
+        <View className="w-full max-w-md rounded-2xl border border-geo-green/20 bg-gray-900 p-5">
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-white font-bold text-lg">Subir video para análisis</Text>
+            <TouchableOpacity onPress={resetUpload}>
+              <Ionicons name="close" size={24} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          {uploadResult && analysisStatus?.status !== 'processing' ? (
+            <View className="space-y-4">
+              <View className={`rounded-lg border p-4 ${analysisStatus?.status === 'failed' ? 'border-red-500/40 bg-red-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
+                <Text className={`text-sm ${analysisStatus?.status === 'failed' ? 'text-red-400' : 'text-emerald-300'}`}>
+                  {uploadResult}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={resetUpload} className="rounded-lg bg-geo-green px-4 py-3 items-center">
+                <Text className="text-black text-sm font-bold">Entendido</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View className="space-y-4">
+              {/* Step 1: Select video */}
+              {uploadStep === 'select' && (
+                <>
+                  <Text className="text-gray-400 text-sm">
+                    Selecciona un video de cámara táctica (MP4, MOV). Se subirá automáticamente y luego podrás ingresar las esquinas del campo.
+                  </Text>
+
+                  {uploading ? (
+                    <View className="space-y-3">
+                      <View className="flex-row items-center gap-2">
+                        <ActivityIndicator color="#39FF14" />
+                        <Text className="text-gray-400 text-sm">Subiendo video…</Text>
+                      </View>
+                      <View className="space-y-2">
+                        <View className="flex-row justify-between">
+                          <Text className="text-gray-400 text-xs">Progreso de subida</Text>
+                          <Text className="text-gray-400 text-xs">{uploadProgress}%</Text>
+                        </View>
+                        <View className="w-full h-3 rounded-full bg-gray-800 overflow-hidden">
+                          <View className="h-full rounded-full bg-geo-green" style={{ width: `${uploadProgress}%` }} />
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={handlePickVideo}
+                      className="rounded-xl border-2 border-dashed border-gray-700 p-6 items-center"
+                    >
+                      <Ionicons name="videocam" size={40} color="#9ca3af" />
+                      <Text className="text-gray-300 text-sm mt-2 font-medium">
+                        {videoUri ? 'Video seleccionado' : 'Toca para seleccionar un video'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {uploadError && (
+                    <View className="rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                      <Text className="text-red-400 text-sm">{uploadError}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Step 2: Annotate keypoints */}
+              {uploadStep === 'annotate' && (
+                <>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-geo-green text-xs font-semibold">Paso 1 de 2</Text>
+                    <TouchableOpacity onPress={() => { setUploadStep('select'); setSrcPts([]); }}>
+                      <Text className="text-gray-400 text-sm">← Cambiar video</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View className="rounded-lg border border-geo-green/30 bg-geo-green/10 p-3">
+                    <Text className="text-white text-xs">
+                      Ingresa las coordenadas (x, y) de 4 esquinas del campo en píxeles:
+                    </Text>
+                    <Text className="text-gray-400 text-xs mt-1">
+                      1. Superior izquierda  2. Superior derecha  3. Inferior derecha  4. Inferior izquierda
+                    </Text>
+                  </View>
+
+                  {[0, 1, 2, 3].map((i) => (
+                    <View key={`pt-${i}`} className="flex-row items-center gap-2">
+                      <View className={`w-4 h-4 rounded-full ${i < 2 ? 'bg-geo-green' : 'bg-yellow-400'}`} />
+                      <Text className="text-white text-xs w-24">Punto {i + 1}:</Text>
+                      <TextInput
+                        className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white text-xs"
+                        placeholder={`x${i + 1}`}
+                        placeholderTextColor="#6b7280"
+                        keyboardType="numeric"
+                        value={srcPts[i]?.x?.toString() ?? ''}
+                        onChangeText={(text) => {
+                          const v = parseInt(text, 10);
+                          setSrcPts((prev) => {
+                            const next = [...prev];
+                            if (!Number.isNaN(v)) {
+                              next[i] = { x: v, y: next[i]?.y ?? 0 };
+                            } else {
+                              delete next[i];
+                            }
+                            return next.filter(Boolean);
+                          });
+                        }}
+                      />
+                      <TextInput
+                        className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white text-xs"
+                        placeholder={`y${i + 1}`}
+                        placeholderTextColor="#6b7280"
+                        keyboardType="numeric"
+                        value={srcPts[i]?.y?.toString() ?? ''}
+                        onChangeText={(text) => {
+                          const v = parseInt(text, 10);
+                          setSrcPts((prev) => {
+                            const next = [...prev];
+                            if (!Number.isNaN(v)) {
+                              next[i] = { x: next[i]?.x ?? 0, y: v };
+                            } else {
+                              delete next[i];
+                            }
+                            return next.filter(Boolean);
+                          });
+                        }}
+                      />
+                    </View>
+                  ))}
+
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-gray-400 text-sm">Puntos: {srcPts.length} / 4</Text>
+                    <TouchableOpacity onPress={() => setSrcPts([])} disabled={srcPts.length === 0}>
+                      <Text className={`text-xs ${srcPts.length === 0 ? 'text-gray-600' : 'text-gray-400'}`}>Reiniciar</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {uploadError && (
+                    <View className="rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                      <Text className="text-red-400 text-sm">{uploadError}</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    disabled={keypointsMutation.isPending || srcPts.length !== 4}
+                    onPress={handleSubmitKeypoints}
+                    className="w-full rounded-lg bg-geo-green px-4 py-3 items-center disabled:opacity-40"
+                  >
+                    <Text className="text-black text-sm font-bold">
+                      {keypointsMutation.isPending ? 'Enviando…' : 'Iniciar análisis'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <Text className="text-gray-500 text-xs text-center">
+                    Ingresa los 4 puntos para habilitar el botón de análisis.
+                  </Text>
+                </>
+              )}
+
+              {/* Step 3: Processing progress */}
+              {uploadStep === 'progress' && (
+                <>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-geo-green text-xs font-semibold">Paso 2 de 2</Text>
+                    <View className="flex-row items-center gap-2">
+                      {aiHealth && (
+                        <View className="flex-row items-center gap-1">
+                          <View className={`w-2 h-2 rounded-full ${aiHealth.worker_running ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                          <Text className={`text-[10px] ${aiHealth.worker_running ? 'text-emerald-400' : 'text-red-400'}`}>
+                            AI {aiHealth.worker_running ? 'online' : 'offline'}
+                          </Text>
+                        </View>
+                      )}
+                      <Text className="text-gray-400 text-xs capitalize">
+                        {analysisStatus?.status === 'completed' ? 'Completado' :
+                         analysisStatus?.status === 'failed' ? 'Falló' : 'Procesando…'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="space-y-2">
+                    <View className="flex-row justify-between">
+                      <Text className="text-gray-400 text-xs">
+                        {analysisStatus?.currentStep ?? 'Procesando…'}
+                      </Text>
+                      <Text className="text-gray-400 text-xs">{analysisStatus?.progress ?? 0}%</Text>
+                    </View>
+                    <View className="w-full h-3 rounded-full bg-gray-800 overflow-hidden">
+                      <View
+                        className={`h-full rounded-full ${analysisStatus?.status === 'failed' ? 'bg-red-500' : 'bg-geo-green'}`}
+                        style={{ width: `${analysisStatus?.progress ?? 0}%` }}
+                      />
+                    </View>
+                  </View>
+
+                  {analysisStatus?.framesProcessed != null && analysisStatus?.totalFrames != null && (
+                    <Text className="text-gray-500 text-xs text-center">
+                      Frames: {analysisStatus.framesProcessed} / {analysisStatus.totalFrames}
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 

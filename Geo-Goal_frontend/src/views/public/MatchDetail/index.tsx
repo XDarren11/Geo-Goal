@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse, getAIServiceHealth, type AIServiceHealth } from "@/api/publicAPI";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -486,6 +486,7 @@ export default function PublicMatchDetailView() {
   const [frameDataUrl, setFrameDataUrl] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
+  const [aiHealth, setAiHealth] = useState<AIServiceHealth | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   // Extract frame from local file (browser-side, instant)
@@ -614,12 +615,18 @@ export default function PublicMatchDetailView() {
         if (status.status === "completed" || status.status === "failed") {
           setUploadResult(
             status.status === "completed"
-              ? "Análisis completado. Refresca la página para ver los resultados."
+              ? `Análisis completado. ${status.videoSupabaseUrl ? "Video disponible en Supabase. " : ""}Refresca la página para ver los resultados.`
               : `Error: ${status.error ?? "Falló el análisis"}`
           );
         }
       } catch {
         // ignore polling errors
+      }
+      try {
+        const health = await getAIServiceHealth();
+        setAiHealth(health);
+      } catch {
+        setAiHealth(null);
       }
     }, 3000);
     return () => clearInterval(interval);
@@ -1698,10 +1705,18 @@ export default function PublicMatchDetailView() {
                     <>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-geo-green font-semibold">Paso 2 de 2</span>
-                        <span className="text-xs text-[var(--geo-text-muted)] capitalize">
-                          {analysisStatus?.status === "completed" ? "Completado" :
-                           analysisStatus?.status === "failed" ? "Falló" : "Procesando..."}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {aiHealth && (
+                            <span className={`inline-flex items-center gap-1 text-[10px] ${aiHealth.worker_running ? "text-emerald-400" : "text-red-400"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${aiHealth.worker_running ? "bg-emerald-400" : "bg-red-400"}`} />
+                              AI {aiHealth.worker_running ? "online" : "offline"}
+                            </span>
+                          )}
+                          <span className="text-xs text-[var(--geo-text-muted)] capitalize">
+                            {analysisStatus?.status === "completed" ? "Completado" :
+                             analysisStatus?.status === "failed" ? "Falló" : "Procesando..."}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Progress bar */}

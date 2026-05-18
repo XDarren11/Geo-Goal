@@ -136,7 +136,7 @@ export default function LeagueDetailScreen() {
   }
 
   const effectiveLeague = isAdmin
-    ? league
+    ? league!
     : publicLeague?.league ?? {
         id: leagueId,
         name: leagueName,

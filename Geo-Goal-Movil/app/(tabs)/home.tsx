@@ -196,7 +196,7 @@ export default function HomeScreen() {
                     <TouchableOpacity 
                       onPress={() => {
                         router.push({
-                          pathname: "/navigation",
+                          pathname: "/(tabs)/navigation",
                           params: { 
                             destLat: m.location.lat, 
                             destLng: m.location.lng,

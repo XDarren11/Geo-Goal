@@ -155,40 +155,43 @@ export class MatchDetailController {
       return;
     }
 
-    // Look up match to get leagueId
     const match = await Match.findByPk(Number(matchId), { attributes: ["id", "leagueId"] });
     if (!match) {
       res.status(404).json({ error: "Partido no encontrado" });
       return;
     }
 
-    // Create analysis job (status: uploaded — waiting for keypoints)
+    // Upload to Supabase synchronously
+    let videoSupabaseUrl: string | null = null;
+    try {
+      const { url } = await uploadVideoToSupabase(file.path, file.mimetype, file.filename, Number(matchId));
+      videoSupabaseUrl = url;
+      console.log(`[upload-video] match ${matchId} — Supabase upload complete: ${url}`);
+    } catch (err: any) {
+      console.error(`[upload-video] match ${matchId} — Supabase upload failed:`, err.message);
+      res.status(500).json({ error: "Error al subir el video al almacenamiento" });
+      return;
+    }
+
+    // Create analysis job with both local path (for frame extraction) and Supabase URL (for AI service)
     const job = await MatchAnalysisJob.create({
       matchId: Number(matchId),
       leagueId: match.leagueId,
       status: "uploaded",
       videoPath: file.path,
+      videoSupabaseUrl,
       videoFilename: file.filename,
       createdBy: req.user!.id,
     });
 
-    console.log(`[upload-video] match ${matchId} — job ${job.id} created, video: ${file.path}`);
-
-    // Upload to Supabase asynchronously (don't block the response)
-    uploadVideoToSupabase(file.path, file.mimetype, file.filename, Number(matchId))
-      .then(({ url }) => {
-        job.update({ videoSupabaseUrl: url });
-        console.log(`[upload-video] match ${matchId} — Supabase upload complete: ${url}`);
-      })
-      .catch((err) => {
-        console.error(`[upload-video] match ${matchId} — Supabase upload failed:`, err.message);
-      });
+    console.log(`[upload-video] match ${matchId} — job ${job.id} created (uploaded), supabase: ${videoSupabaseUrl}`);
 
     res.status(202).json({
-      message: "Video recibido. Anota los keypoints para iniciar el análisis.",
+      message: "Video subido. Anota los keypoints para iniciar el análisis.",
       matchId: Number(matchId),
       jobId: job.id,
       filename: file.filename,
+      videoSupabaseUrl,
     });
   };
 
@@ -198,7 +201,7 @@ export class MatchDetailController {
     const job = await MatchAnalysisJob.findOne({
       where: { matchId: Number(matchId) },
       order: [["createdAt", "DESC"]],
-      attributes: ["id", "status", "progress", "currentStep", "framesProcessed", "totalFrames", "error", "createdAt", "updatedAt"],
+      attributes: ["id", "status", "progress", "currentStep", "framesProcessed", "totalFrames", "error", "videoSupabaseUrl", "pid", "createdAt", "updatedAt"],
     });
 
     if (!job) {
@@ -214,6 +217,8 @@ export class MatchDetailController {
       framesProcessed: job.framesProcessed,
       totalFrames: job.totalFrames,
       error: job.error,
+      videoSupabaseUrl: job.videoSupabaseUrl,
+      pid: job.pid,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     });
@@ -223,11 +228,11 @@ export class MatchDetailController {
     const { matchId } = req.params;
     const srcPts: Array<{ x: number; y: number }> = req.body.srcPts;
 
-    // Find the latest uploaded/annotating job
+    // Find a pending job
     const job = await MatchAnalysisJob.findOne({
       where: {
         matchId: Number(matchId),
-        status: ["uploaded", "annotating"],
+        status: ["uploaded", "annotating", "queued"],
       },
       order: [["createdAt", "DESC"]],
     });
@@ -237,45 +242,24 @@ export class MatchDetailController {
       return;
     }
 
-    // Save keypoints and set status to queued
+    if (!job.videoSupabaseUrl) {
+      res.status(400).json({ error: "El job no tiene un video en Supabase. Vuelve a subir el video." });
+      return;
+    }
+
+    // Save keypoints and set status to queued — AI service will pick it up
     await job.update({
       srcPts,
       status: "queued",
+      error: null,
     });
 
-    // Spawn Python AI service in background
-    const { spawn } = await import("child_process");
-    const aiDir = (await import("path")).resolve(__dirname, "..", "..", "..", "Geo-Goal_ai_service");
-    const pythonCmd = process.platform === "win32" ? "python" : "python3";
-
-    const args: string[] = [
-      "src/main.py",
-      "process",
-      job.videoPath!,
-      "--push-match-id", matchId,
-      "--output-dir", `./output/${matchId}`,
-      "--job-id", String(job.id),
-      "--src-pts", JSON.stringify(srcPts),
-    ];
-
-    const child = spawn(pythonCmd, args, {
-      cwd: aiDir,
-      detached: true,
-      stdio: "ignore",
-    });
-
-    child.unref();
-
-    // Update job with PID
-    await job.update({ pid: child.pid, status: "processing" });
-
-    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — spawned AI process (PID ${child.pid})`);
+    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints saved, status: queued`);
 
     res.status(202).json({
-      message: "Keypoints recibidos. Análisis iniciado.",
+      message: "Keypoints recibidos. El análisis será procesado por el servicio de IA.",
       jobId: job.id,
-      status: "processing",
-      pid: child.pid,
+      status: "queued",
     });
   };
 
@@ -284,7 +268,7 @@ export class MatchDetailController {
     const { status, progress, currentStep, framesProcessed, totalFrames, error: errorMsg } = req.body;
 
     const job = await MatchAnalysisJob.findOne({
-      where: { matchId: Number(matchId), status: ["processing", "queued"] },
+      where: { matchId: Number(matchId) },
       order: [["createdAt", "DESC"]],
     });
 
@@ -358,6 +342,53 @@ export class MatchDetailController {
       } catch {
         res.status(500).json({ error: "Respuesta inesperada del extractor de frames" });
       }
+    });
+  };
+
+  static getPendingAnalysis = async (_req: Request, res: Response): Promise<void> => {
+    const jobs = await MatchAnalysisJob.findAll({
+      where: { status: "queued" },
+      order: [["createdAt", "ASC"]],
+      attributes: ["id", "matchId", "leagueId", "videoSupabaseUrl", "srcPts", "createdAt"],
+    });
+
+    res.json(jobs.map((j) => ({
+      jobId: j.id,
+      matchId: j.matchId,
+      leagueId: j.leagueId,
+      videoSupabaseUrl: j.videoSupabaseUrl,
+      srcPts: j.srcPts,
+      createdAt: j.createdAt,
+    })));
+  };
+
+  static claimAnalysisJob = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+
+    const job = await MatchAnalysisJob.findOne({
+      where: {
+        matchId: Number(matchId),
+        status: "queued",
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!job) {
+      res.status(409).json({ error: "No hay un job queued para este partido, o ya fue reclamado" });
+      return;
+    }
+
+    await job.update({ status: "processing", error: null });
+
+    console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
+
+    res.json({
+      jobId: job.id,
+      matchId: job.matchId,
+      leagueId: job.leagueId,
+      videoSupabaseUrl: job.videoSupabaseUrl,
+      srcPts: job.srcPts,
+      status: "processing",
     });
   };
 }

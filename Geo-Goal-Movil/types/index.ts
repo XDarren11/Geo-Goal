@@ -113,6 +113,10 @@ export interface PublicMatchDetailResponse {
 }
 
 export interface MatchAnalyticsResponse {
+  match?: {
+    homeTeamId: number
+    awayTeamId: number
+  }
   summary: {
     totalPlayersWithStats: number
     totalPassEdges: number
@@ -145,10 +149,17 @@ export interface MatchAnalyticsResponse {
     ballX?: number | null
     ballY?: number | null
     ballZ?: number | null
-    players: Array<Record<string, unknown>>
+    players: Array<TrackingFramePlayer>
     source?: string
     confidence?: number
   }>
+}
+
+export interface TrackingFramePlayer {
+  playerId?: number | null
+  teamId?: number | null
+  x?: number | null
+  y?: number | null
 }
 
 export interface PublicLeagueSummary {
