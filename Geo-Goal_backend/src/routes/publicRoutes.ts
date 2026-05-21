@@ -98,6 +98,13 @@ router.put(
     .withMessage("srcPts debe ser un arreglo de exactamente 4 puntos"),
   body("srcPts.*.x").isNumeric().withMessage("Cada punto debe tener x numérico"),
   body("srcPts.*.y").isNumeric().withMessage("Cada punto debe tener y numérico"),
+  body("playerTags")
+    .optional()
+    .isArray()
+    .withMessage("playerTags debe ser un arreglo"),
+  body("playerTags.*.x").optional().isNumeric(),
+  body("playerTags.*.y").optional().isNumeric(),
+  body("playerTags.*.label").optional().isIn(["home", "away", "ball"]),
   handleInputError,
   asyncHandler(MatchDetailController.submitKeypoints)
 );

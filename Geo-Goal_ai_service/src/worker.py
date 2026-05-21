@@ -90,11 +90,14 @@ class AnalysisWorker:
 
             # 4. Process video
             print(f"[worker] Job {job_id}: processing video...")
+            player_tags = job.get("playerTags")
+            print(f"[worker] Job {job_id}: {len(player_tags) if player_tags else 0} player tags from job")
             vp = VideoProcessor(
                 model_name=self.model_name,
                 device=self.device,
                 api_base=self.api.api_base,
                 output_dir=output_dir,
+                player_tags=player_tags,
             )
             vp.load_video(video_path)
             vp.set_homography(src_pts=src_pts, method="cv2")

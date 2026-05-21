@@ -8,15 +8,32 @@ export type UploadedImageFile = {
   mimetype: string;
 };
 
-const SUPABASE_STORAGE_ENDPOINT = process.env.SUPABASE_STORAGE_ENDPOINT;
+const RAW_SUPABASE_STORAGE_ENDPOINT = process.env.SUPABASE_STORAGE_ENDPOINT;
 const SUPABASE_ACCESS_KEY = process.env.SUPABASE_ACCESS_KEY;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET;
+const SUPABASE_PROJECT_URL = process.env.SUPABASE_URL;
+
+function normalizeStorageEndpoint(endpoint?: string | null): string | null {
+  if (!endpoint) return null;
+  const clean = endpoint.replace(/\/+$/, "");
+  if (/\/storage\/v1\/s3$/i.test(clean)) return clean;
+  if (/\/storage\/v1$/i.test(clean)) return `${clean}/s3`;
+  if (/\/storage\/v1\/?/i.test(clean)) return `${clean.replace(/\/+$/, "")}/s3`;
+  return `${clean}/storage/v1/s3`;
+}
+
+const SUPABASE_STORAGE_ENDPOINT =
+  normalizeStorageEndpoint(RAW_SUPABASE_STORAGE_ENDPOINT) ||
+  (SUPABASE_PROJECT_URL ? `${SUPABASE_PROJECT_URL.replace(/\/+$/, "")}/storage/v1/s3` : null);
+
 const SUPABASE_PUBLIC_BASE_URL =
   process.env.SUPABASE_PUBLIC_BASE_URL ??
-  (SUPABASE_STORAGE_ENDPOINT
-    ? SUPABASE_STORAGE_ENDPOINT.replace(/\/storage\/v1\/s3\/?$/, "/storage/v1/object/public")
-    : null);
+  (SUPABASE_PROJECT_URL
+    ? `${SUPABASE_PROJECT_URL.replace(/\/+$/, "")}/storage/v1/object/public`
+    : SUPABASE_STORAGE_ENDPOINT
+      ? SUPABASE_STORAGE_ENDPOINT.replace(/\/storage\/v1\/s3\/?$/, "/storage/v1/object/public")
+      : null);
 
 function requireSupabaseConfig() {
   if (

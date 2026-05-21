@@ -10,9 +10,17 @@ function resolveMediaUrl(value: string | null | undefined): string {
   return `${base.replace(/\/$/, "")}/uploads/${value}`;
 }
 
+interface PaginatedLeaguesResponse {
+  data: League[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export async function getLeagues(): Promise<League[]> {
-  const { data } = await api.get<League[]>(BASE);
-  return data;
+  const { data } = await api.get<League[] | PaginatedLeaguesResponse>(BASE);
+  if (Array.isArray(data)) return data;
+  return Array.isArray((data as PaginatedLeaguesResponse)?.data) ? (data as PaginatedLeaguesResponse).data : [];
 }
 
 export async function getLeagueById(leagueId: number): Promise<League & { teams: Team[] }> {

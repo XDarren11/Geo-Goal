@@ -45,6 +45,9 @@ export class MatchAnalysisJob extends Model {
   @Column({ type: DataType.JSONB, allowNull: true })
   declare srcPts: Array<{ x: number; y: number }> | null;
 
+  @Column({ type: DataType.JSONB, allowNull: true })
+  declare playerTags: Array<{ x: number; y: number; label: "home" | "away" | "ball" }> | null;
+
   @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 0 })
   declare progress: number;
 

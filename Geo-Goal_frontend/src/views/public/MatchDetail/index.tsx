@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse, getAIServiceHealth, type AIServiceHealth } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -473,7 +473,8 @@ export default function PublicMatchDetailView() {
   const MAX_UNAVAILABLE = 30;
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [submittingKeypoints, setSubmittingKeypoints] = useState(false);
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -488,6 +489,10 @@ export default function PublicMatchDetailView() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
   const [aiHealth, setAiHealth] = useState<AIServiceHealth | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // Player tagging
+  const [annotationMode, setAnnotationMode] = useState<"keypoints" | "players">("keypoints");
+  const [playerTags, setPlayerTags] = useState<Array<PlayerTag>>([]);
+  const [pendingPlayerLabel, setPendingPlayerLabel] = useState<{ x: number; y: number } | null>(null);
 
   // Extract frame from local file (browser-side, instant)
   const extractFrameLocal = (file: File): Promise<string> => {
@@ -559,7 +564,7 @@ export default function PublicMatchDetailView() {
     });
 
     // 2. Upload in background
-    setUploading(true);
+    setUploadingVideo(true);
     try {
       await uploadMatchVideo(id, file, (pct) => setUploadProgress(pct));
     } catch (e: any) {
@@ -567,7 +572,7 @@ export default function PublicMatchDetailView() {
       setUploadError(msg);
       setUploadStep("select");
     } finally {
-      setUploading(false);
+      setUploadingVideo(false);
     }
   };
 
@@ -591,17 +596,17 @@ export default function PublicMatchDetailView() {
   // Submit keypoints (video already uploaded)
   const handleSubmitKeypoints = async () => {
     if (srcPts.length !== 4) return;
-    setUploading(true);
+    setSubmittingKeypoints(true);
     setUploadError(null);
     try {
-      await submitAnalysisKeypoints(id, srcPts);
+      await submitAnalysisKeypoints(id, srcPts, playerTags.length > 0 ? playerTags : undefined);
       setUploadStep("progress");
       setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al iniciar el análisis";
       setUploadError(msg);
     } finally {
-      setUploading(false);
+      setSubmittingKeypoints(false);
     }
   };
 
@@ -628,7 +633,7 @@ export default function PublicMatchDetailView() {
       } catch {
         setAiHealth(null);
       }
-    }, 3000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [uploadStep, id]);
 
@@ -638,6 +643,9 @@ export default function PublicMatchDetailView() {
     setUploadResult(null);
     setUploadError(null);
     setSrcPts([]);
+    setPlayerTags([]);
+    setPendingPlayerLabel(null);
+    setAnnotationMode("keypoints");
     setUploadStep("select");
     setFrameError(null);
     setFrameDataUrl(null);
@@ -649,7 +657,6 @@ export default function PublicMatchDetailView() {
   // ---- canvas annotation ----
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (srcPts.length >= 4) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -659,7 +666,13 @@ export default function PublicMatchDetailView() {
     const x = Math.round((e.clientX - rect.left) * scaleX);
     const y = Math.round((e.clientY - rect.top) * scaleY);
 
-    setSrcPts((prev) => [...prev, { x, y }]);
+    if (annotationMode === "keypoints") {
+      if (srcPts.length >= 4) return;
+      setSrcPts((prev) => [...prev, { x, y }]);
+    } else {
+      // Player tagging mode: click first, then pick label
+      setPendingPlayerLabel({ x, y });
+    }
   };
 
   const handleUndoPoint = () => {
@@ -670,14 +683,13 @@ export default function PublicMatchDetailView() {
     setSrcPts([]);
   };
 
-  // Redraw canvas markers when srcPts changes
+  // Redraw canvas markers when srcPts or playerTags changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || uploadStep !== "annotate" || !frameDataUrl) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Re-draw base frame from cached image
     const img = new Image();
     img.onload = () => {
       canvas.width = img.naturalWidth;
@@ -686,10 +698,10 @@ export default function PublicMatchDetailView() {
       drawMarkers(ctx);
     };
     img.src = frameDataUrl;
-  }, [srcPts, uploadStep, frameDataUrl]);
+  }, [srcPts, playerTags, uploadStep, frameDataUrl]);
 
   const drawMarkers = (ctx: CanvasRenderingContext2D) => {
-    // Draw connecting polygon
+    // Draw connecting polygon for keypoints
     if (srcPts.length >= 2) {
       ctx.beginPath();
       ctx.strokeStyle = "rgba(57, 255, 20, 0.8)";
@@ -704,10 +716,10 @@ export default function PublicMatchDetailView() {
       ctx.stroke();
     }
 
-    // Draw markers
+    // Draw keypoint markers
     srcPts.forEach((pt, i) => {
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+      ctx.arc(pt.x, pt.y, 10, 0, 2 * Math.PI);
       ctx.fillStyle = i < 2 ? "#39FF14" : "#facc15";
       ctx.fill();
       ctx.strokeStyle = "#000";
@@ -715,10 +727,30 @@ export default function PublicMatchDetailView() {
       ctx.stroke();
 
       ctx.fillStyle = "#000";
-      ctx.font = "bold 11px sans-serif";
+      ctx.font = "bold 12px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String(i + 1), pt.x, pt.y);
+    });
+
+    // Draw player tags
+    const tagColors: Record<string, string> = { home: "#ef4444", away: "#3b82f6", ball: "#ffffff" };
+    const tagLabels: Record<string, string> = { home: "L", away: "V", ball: "⚽" };
+    playerTags.forEach((pt) => {
+      const color = tagColors[pt.label] ?? "#888";
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 12, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = pt.label === "ball" ? "#000" : "#fff";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(tagLabels[pt.label] ?? "?", pt.x, pt.y);
     });
   };
 
@@ -1562,7 +1594,7 @@ export default function PublicMatchDetailView() {
                         Selecciona un video de cámara táctica (MP4, MOV). Se subirá automáticamente y luego podrás marcar las esquinas del campo.
                       </p>
 
-                      {uploading ? (
+                      {uploadingVideo ? (
                         <div className="space-y-3">
                           <div className="flex items-center gap-2 text-sm text-[var(--geo-text-muted)]">
                             <div className="h-4 w-4 border-2 border-geo-green border-t-transparent rounded-full animate-spin" />
@@ -1644,28 +1676,131 @@ export default function PublicMatchDetailView() {
                         <canvas
                           ref={canvasRef}
                           onClick={handleCanvasClick}
-                          className="w-full rounded-lg border border-[var(--geo-border)] cursor-crosshair"
+                          className={`w-full rounded-lg border ${pendingPlayerLabel ? "border-geo-green" : "border-[var(--geo-border)]"} cursor-crosshair`}
                           style={{ maxHeight: "360px", objectFit: "contain" }}
                         />
                       )}
 
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-[var(--geo-text-muted)]">
-                          Puntos: {srcPts.length} / 4
+                          {annotationMode === "keypoints" ? `Puntos: ${srcPts.length} / 4` : `Jugadores: ${playerTags.length}`}
                         </span>
                         <div className="flex gap-2">
-                          <button onClick={handleUndoPoint} disabled={srcPts.length === 0}
-                            className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
-                            Deshacer
-                          </button>
-                          <button onClick={handleResetPoints} disabled={srcPts.length === 0}
-                            className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
-                            Reiniciar
-                          </button>
+                          {annotationMode === "keypoints" ? (
+                            <>
+                              <button onClick={handleUndoPoint} disabled={srcPts.length === 0}
+                                className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
+                                Deshacer
+                              </button>
+                              <button onClick={handleResetPoints} disabled={srcPts.length === 0}
+                                className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
+                                Reiniciar
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => setPlayerTags((prev) => prev.slice(0, -1))} disabled={playerTags.length === 0}
+                              className="text-xs text-[var(--geo-text-muted)] hover:text-white disabled:opacity-30 transition-colors">
+                              Deshacer jugador
+                            </button>
+                          )}
                         </div>
                       </div>
 
-                      {uploading && (
+                      {/* Mode toggle + player tagging */}
+                      {srcPts.length === 4 && (
+                        <div className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[var(--geo-text-muted)]">Modo:</span>
+                            <button
+                              onClick={() => setAnnotationMode("keypoints")}
+                              className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                annotationMode === "keypoints"
+                                  ? "bg-geo-green text-black"
+                                  : "text-[var(--geo-text-muted)] hover:text-white"
+                              }`}
+                            >
+                              Esquinas
+                            </button>
+                            <button
+                              onClick={() => setAnnotationMode("players")}
+                              className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                annotationMode === "players"
+                                  ? "bg-geo-green text-black"
+                                  : "text-[var(--geo-text-muted)] hover:text-white"
+                              }`}
+                            >
+                              Jugadores
+                            </button>
+                          </div>
+
+                          {annotationMode === "players" && (
+                            <>
+                              <p className="text-xs text-[var(--geo-text-muted)]">
+                                Haz clic en <strong className="text-white">jugadores</strong> o el <strong className="text-white">balón</strong> y selecciona su equipo:
+                              </p>
+                              <div className="flex gap-2 text-xs">
+                                <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#ef4444] inline-block" /> Local</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-[#3b82f6] inline-block" /> Visitante</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-white border border-gray-500 inline-block" /> Balón</span>
+                              </div>
+
+                              {/* Pending player label picker */}
+                              {pendingPlayerLabel && (
+                                <div className="flex items-center gap-2 rounded-lg border border-geo-green/50 bg-black/40 p-2">
+                                  <span className="text-xs text-white">Etiquetar jugador en ({pendingPlayerLabel.x}, {pendingPlayerLabel.y}):</span>
+                                  <button
+                                    onClick={() => {
+                                      setPlayerTags((prev) => [...prev, { ...pendingPlayerLabel, label: "home" }]);
+                                      setPendingPlayerLabel(null);
+                                    }}
+                                    className="rounded bg-[#ef4444] px-2 py-1 text-xs font-bold text-white hover:opacity-80"
+                                  >
+                                    Local
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPlayerTags((prev) => [...prev, { ...pendingPlayerLabel, label: "away" }]);
+                                      setPendingPlayerLabel(null);
+                                    }}
+                                    className="rounded bg-[#3b82f6] px-2 py-1 text-xs font-bold text-white hover:opacity-80"
+                                  >
+                                    Visitante
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setPlayerTags((prev) => [...prev, { ...pendingPlayerLabel, label: "ball" }]);
+                                      setPendingPlayerLabel(null);
+                                    }}
+                                    className="rounded bg-white px-2 py-1 text-xs font-bold text-black border hover:opacity-80"
+                                  >
+                                    Balón
+                                  </button>
+                                  <button
+                                    onClick={() => setPendingPlayerLabel(null)}
+                                    className="rounded px-2 py-1 text-xs text-[var(--geo-text-muted)] hover:text-white"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              )}
+
+                              {playerTags.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {playerTags.map((pt, idx) => (
+                                    <span key={idx} className="inline-flex items-center gap-1 rounded bg-[var(--geo-bg)] px-2 py-0.5 text-[10px] text-[var(--geo-text)]">
+                                      <span className={`w-2 h-2 rounded-full ${pt.label === "home" ? "bg-[#ef4444]" : pt.label === "away" ? "bg-[#3b82f6]" : "bg-white border border-gray-500"}`} />
+                                      #{idx + 1} {pt.label === "home" ? "Local" : pt.label === "away" ? "Visit." : "Balón"}
+                                      <button onClick={() => setPlayerTags((prev) => prev.filter((_, i) => i !== idx))} className="ml-1 text-[var(--geo-text-muted)] hover:text-red-400">&times;</button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {uploadingVideo && (
                         <div className="space-y-2">
                           <div className="flex justify-between text-xs text-[var(--geo-text-muted)]">
                             <span>Subiendo video…</span>
@@ -1687,15 +1822,25 @@ export default function PublicMatchDetailView() {
                       )}
 
                       <button
-                        disabled={uploading || srcPts.length !== 4}
+                        disabled={uploadingVideo || submittingKeypoints || srcPts.length !== 4}
                         onClick={handleSubmitKeypoints}
                         className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                       >
-                        {uploading ? "Esperando subida…" : "Iniciar análisis"}
+                        {submittingKeypoints
+                          ? "Iniciando análisis…"
+                          : uploadingVideo
+                            ? "Esperando subida…"
+                            : "Iniciar análisis"}
                       </button>
 
                       <p className="text-xs text-[var(--geo-text-muted)] text-center">
-                        {uploading ? "Subiendo video en segundo plano…" : "Marca los 4 puntos para habilitar el botón de análisis."}
+                        {uploadingVideo
+                          ? "Subiendo video en segundo plano…"
+                          : srcPts.length < 4
+                            ? "Marca los 4 puntos de esquina para habilitar el análisis."
+                            : playerTags.length === 0
+                              ? "Opcional: cambia a modo Jugadores para identificar equipos y balón."
+                              : `${playerTags.length} jugador(es) etiquetado(s). Inicia el análisis cuando estés listo.`}
                       </p>
                     </>
                   )}

@@ -11,8 +11,9 @@ function resolveMediaUrl(value: string | null | undefined): string {
 }
 
 export async function getLeagues(): Promise<League[]> {
-  const { data } = await api.get<League[]>(BASE);
-  return data;
+  const { data } = await api.get<League[] | { data: League[] }>(BASE);
+  if (Array.isArray(data)) return data;
+  return Array.isArray((data as any)?.data) ? (data as any).data : [];
 }
 
 export async function getLeagueById(leagueId: number): Promise<League & { teams: Team[] }> {

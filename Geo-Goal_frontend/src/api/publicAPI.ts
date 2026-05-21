@@ -12,9 +12,17 @@ import type {
 
 const BASE = "/public";
 
+interface PaginatedLeaguesResponse {
+  data: PublicLeagueSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export async function getPublicLeagues(): Promise<PublicLeagueSummary[]> {
-  const { data } = await api.get<PublicLeagueSummary[]>(`${BASE}/leagues`);
-  return Array.isArray(data) ? data : [];
+  const { data } = await api.get<PublicLeagueSummary[] | PaginatedLeaguesResponse>(`${BASE}/leagues`);
+  if (Array.isArray(data)) return data;
+  return Array.isArray((data as PaginatedLeaguesResponse)?.data) ? (data as PaginatedLeaguesResponse).data : [];
 }
 
 export async function getPublicNews(limit = 12): Promise<PublicNewsItem[]> {
@@ -116,8 +124,9 @@ export async function uploadMatchVideo(
     {
       timeout: 300_000,
       onUploadProgress: (event) => {
-        if (event.total && onProgress) {
-          onProgress(Math.round((event.loaded * 100) / event.total));
+        const total = event.total ?? videoFile.size;
+        if (total && onProgress) {
+          onProgress(Math.round((event.loaded * 100) / total));
         }
       },
     }
@@ -132,13 +141,20 @@ export async function getAnalysisStatus(matchId: number): Promise<AnalysisStatus
   return data;
 }
 
+export interface PlayerTag {
+  x: number;
+  y: number;
+  label: "home" | "away" | "ball";
+}
+
 export async function submitAnalysisKeypoints(
   matchId: number,
-  srcPts: Array<{ x: number; y: number }>
+  srcPts: Array<{ x: number; y: number }>,
+  playerTags?: PlayerTag[]
 ): Promise<{ message: string; jobId: number; status: string }> {
   const { data } = await api.put<{ message: string; jobId: number; status: string }>(
     `${BASE}/matches/${matchId}/analysis/keypoints`,
-    { srcPts }
+    { srcPts, playerTags }
   );
   return data;
 }

@@ -607,7 +607,7 @@ export class TeamService {
     const playerCountRows = teamIds.length
       ? await TeamMember.findAll({
           where: { teamId: { [Op.in]: teamIds } },
-          attributes: ["teamId", [fn("COUNT", col("TeamMember.id")), "count"]],
+          attributes: ["teamId", [fn("COUNT", col("TeamMember.userId")), "count"]],
           group: ["teamId"],
           raw: true,
         })

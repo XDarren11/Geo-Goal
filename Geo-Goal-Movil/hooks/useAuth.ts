@@ -1,21 +1,34 @@
-import { useQuery } from "@tanstack/react-query";
-import { getUser, logout } from "@/Api/AuthApi";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { getUser, logout as logoutApi } from "@/Api/AuthApi";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const useAuth = () => {
-    const { data, isError, isLoading } = useQuery({
+    const queryClient = useQueryClient();
+
+    const { data, isLoading } = useQuery({
         queryKey: ['user'],
-        queryFn: getUser,
-        retry: 1,
-        refetchOnWindowFocus: false
+        queryFn: async () => {
+            const token = await AsyncStorage.getItem('AUTH_TOKEN');
+            if (!token) return null;
+            try {
+                return await getUser();
+            } catch {
+                return null;
+            }
+        },
+        staleTime: 0,
+        gcTime: 0,
+        refetchOnWindowFocus: false,
     });
 
     const handleLogout = async () => {
-        await logout();
-        // Invalidar la query del usuario
+        await logoutApi();
+        queryClient.setQueryData(['user'], null);
+        queryClient.removeQueries({ queryKey: ['user'] });
+        queryClient.clear();
     };
 
-    return { data, isError, isLoading, logout: handleLogout };
+    return { data, isLoading, logout: handleLogout };
 };
 
 export const checkAuthToken = async (): Promise<boolean> => {

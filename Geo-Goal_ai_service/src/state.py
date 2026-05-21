@@ -14,10 +14,10 @@ from worker import AnalysisWorker
 
 # ── Config ────────────────────────────────────────────────────────────────
 
-API_BASE = os.environ.get("GEO_API_URL", "http://localhost:4000/api")
+API_BASE = os.environ.get("GEO_API_URL", "")
 CLIENT_ID = os.environ.get("M2M_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("M2M_CLIENT_SECRET", "")
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "30"))
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "60"))
 MODEL_NAME = os.environ.get("YOLO_MODEL", "yolov8n.pt")
 DEVICE = os.environ.get("YOLO_DEVICE", "cpu")
 

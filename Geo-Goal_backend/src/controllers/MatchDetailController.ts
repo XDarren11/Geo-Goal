@@ -161,6 +161,18 @@ export class MatchDetailController {
       return;
     }
 
+    // Block re-upload if analysis already completed
+    const completedJob = await MatchAnalysisJob.findOne({
+      where: { matchId: Number(matchId), status: "completed" },
+    });
+    if (completedJob) {
+      res.status(409).json({
+        error: "Este partido ya fue analizado. No se permite subir otro video.",
+        videoSupabaseUrl: completedJob.videoSupabaseUrl,
+      });
+      return;
+    }
+
     // Upload to Supabase synchronously
     let videoSupabaseUrl: string | null = null;
     try {
@@ -227,6 +239,7 @@ export class MatchDetailController {
   static submitKeypoints = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const srcPts: Array<{ x: number; y: number }> = req.body.srcPts;
+    const playerTags: Array<{ x: number; y: number; label: "home" | "away" | "ball" }> | undefined = req.body.playerTags;
 
     // Find a pending job
     const job = await MatchAnalysisJob.findOne({
@@ -247,17 +260,18 @@ export class MatchDetailController {
       return;
     }
 
-    // Save keypoints and set status to queued — AI service will pick it up
+    // Save keypoints, player tags and set status to queued
     await job.update({
       srcPts,
+      playerTags: playerTags ?? null,
       status: "queued",
       error: null,
     });
 
-    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints saved, status: queued`);
+    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints + ${playerTags?.length ?? 0} player tags saved, status: queued`);
 
     res.status(202).json({
-      message: "Keypoints recibidos. El análisis será procesado por el servicio de IA.",
+      message: "Keypoints y etiquetas recibidos. El análisis será procesado por el servicio de IA.",
       jobId: job.id,
       status: "queued",
     });
@@ -349,7 +363,7 @@ export class MatchDetailController {
     const jobs = await MatchAnalysisJob.findAll({
       where: { status: "queued" },
       order: [["createdAt", "ASC"]],
-      attributes: ["id", "matchId", "leagueId", "videoSupabaseUrl", "srcPts", "createdAt"],
+      attributes: ["id", "matchId", "leagueId", "videoSupabaseUrl", "srcPts", "playerTags", "createdAt"],
     });
 
     res.json(jobs.map((j) => ({
@@ -358,6 +372,7 @@ export class MatchDetailController {
       leagueId: j.leagueId,
       videoSupabaseUrl: j.videoSupabaseUrl,
       srcPts: j.srcPts,
+      playerTags: j.playerTags,
       createdAt: j.createdAt,
     })));
   };
@@ -388,6 +403,7 @@ export class MatchDetailController {
       leagueId: job.leagueId,
       videoSupabaseUrl: job.videoSupabaseUrl,
       srcPts: job.srcPts,
+      playerTags: job.playerTags,
       status: "processing",
     });
   };

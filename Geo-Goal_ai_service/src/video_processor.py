@@ -137,13 +137,15 @@ class TeamClassifier:
       1. Extract a tight crop of each player's upper body from their bbox.
       2. Build a colour histogram in HSV space.
       3. Run K-Means (k=3) to partition into home / away / referee clusters.
+      4. If player_tags are provided, override labels for matched detections.
     """
 
-    def __init__(self) -> None:
-        self._centroids: Optional[np.ndarray] = None  # K-Means cluster centres
+    def __init__(self, player_tags: Optional[List[Dict[str, Any]]] = None) -> None:
+        self._centroids: Optional[np.ndarray] = None
         self._home_label: Optional[int] = None
         self._away_label: Optional[int] = None
         self._ref_label: Optional[int] = None
+        self._player_tags = player_tags  # [{ x, y, label }, ...] in pixel coords
 
     def fit_predict(
         self,
@@ -162,29 +164,70 @@ class TeamClassifier:
         labels = kmeans.fit_predict(features)
         self._centroids = kmeans.cluster_centers_
 
-        # Heuristic: referee wears black/dark → lowest V channel mean
+        # Heuristic: referee wears black/dark -> lowest V channel mean
         v_means = [self._centroids[i][2] for i in range(3)]
         self._ref_label = int(np.argmin(v_means))
 
-        # Remaining two clusters are the teams — order doesn't matter
+        # Remaining two clusters are the teams
         team_ids = [i for i in range(3) if i != self._ref_label]
         self._home_label = team_ids[0]
         self._away_label = team_ids[1]
 
-        return self._label(labels)
+        result = self._label(labels)
+
+        # Override with player_tags (ground truth)
+        if self._player_tags:
+            result = self._apply_player_tags(detections, result)
+
+        return result
 
     def predict(self, frame: np.ndarray, detections: sv.Detections) -> List[str]:
         """Re-use fitted clusters on subsequent frames."""
-        from sklearn.cluster import KMeans
-
         if self._centroids is None or len(detections) == 0:
             return self.fit_predict(frame, detections)
 
         features = self._extract_colour_features(frame, detections)
-        # Assign each feature to nearest centroid
         dists = np.linalg.norm(features[:, None, :] - self._centroids[None, :, :], axis=2)
         labels = np.argmin(dists, axis=1)
         return self._label(labels)
+
+    def _apply_player_tags(
+        self,
+        detections: sv.Detections,
+        current_labels: List[str],
+    ) -> List[str]:
+        """Override labels for detections closest to each player tag."""
+        if not self._player_tags or len(detections) == 0:
+            return current_labels
+
+        labels = list(current_labels)
+        used_detections: set = set()
+
+        for tag in self._player_tags:
+            tx, ty = tag.get("x", 0), tag.get("y", 0)
+            tag_label = tag.get("label", "unknown")
+            if tag_label == "referee":
+                continue  # skip unlabeled
+
+            # Find nearest detection bbox center
+            best_idx = -1
+            best_dist = float("inf")
+            for i, xyxy in enumerate(detections.xyxy.astype(int)):
+                if i in used_detections:
+                    continue
+                cx = (xyxy[0] + xyxy[2]) / 2.0
+                cy = (xyxy[1] + xyxy[3]) / 2.0
+                dist = (cx - tx) ** 2 + (cy - ty) ** 2
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = i
+
+            # Only override if within reasonable distance (150px radius)
+            if best_idx >= 0 and best_dist < 150 * 150:
+                labels[best_idx] = tag_label
+                used_detections.add(best_idx)
+
+        return labels
 
     # ------------------------------------------------------------------
     def _extract_colour_features(
@@ -550,10 +593,11 @@ class VideoProcessor:
         device: str = "cpu",
         api_base: Optional[str] = None,
         output_dir: str = "./output",
+        player_tags: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.detector = ObjectDetector(model_name, device)
         self.tracker = ObjectTracker()
-        self.classifier = TeamClassifier()
+        self.classifier = TeamClassifier(player_tags=player_tags)
         self.transformer: Optional[PerspectiveTransformer] = None
         self.exporter = DataExporter(output_dir, api_base=api_base)
         self.H: Optional[np.ndarray] = None
