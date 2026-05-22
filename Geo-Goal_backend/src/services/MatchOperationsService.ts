@@ -7,6 +7,8 @@ import { AppError } from "../types/errors";
 import { AuditService } from "./AuditService";
 import { NotificationService } from "./NotificationService";
 import { MatchAnalyticsService } from "./MatchAnalyticsService";
+import { User } from "../models/User";
+import { TeamMember } from "../models/TeamMember";
 
 type AuditMeta = {
   actorUserId: number | null;
@@ -243,5 +245,23 @@ export class MatchOperationsService {
     await MatchAnalyticsService.recalculateForMatch(match.id);
 
     return { message: "Marcador actualizado y tabla recalculada con regla de penales" };
+  }
+
+  static async getMatchPlayers(matchId: string): Promise<any[]> {
+    const match = await Match.findByPk(matchId);
+    if (!match) return [];
+
+    const members = await TeamMember.findAll({
+      where: {
+        teamId: { [Op.in]: [match.homeTeamId, match.awayTeamId] }
+      },
+      include: [{ model: User, attributes: ['id', 'name'] }] 
+    });
+
+    return members.map((m: any) => ({
+      id: m.User?.id || m.userId, 
+      name: m.User?.name || "Sin nombre",
+      teamId: m.teamId
+    }));
   }
 }

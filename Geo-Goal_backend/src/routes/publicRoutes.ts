@@ -4,6 +4,7 @@ import { asyncHandler } from "../middleware/asyncHandler";
 import { handleInputError } from "../middleware/validation";
 import { PublicController } from "../controllers/PublicController";
 import { MatchDetailController } from "../controllers/MatchDetailController";
+import { LeagueController } from "../controllers/LeagueController";
 
 const router = Router();
 
@@ -60,5 +61,8 @@ router.get(
   handleInputError,
   asyncHandler(PublicController.getMatchAnalytics)
 );
+
+
+router.get("/:leagueId/top-scorers", LeagueController.getTopScorers);
 
 export default router;

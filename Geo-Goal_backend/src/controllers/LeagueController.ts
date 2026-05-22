@@ -19,6 +19,8 @@ import {
   UpdateLeagueLogoRequest,
   UpdateLeagueRequest,
 } from "../application/league/requests/LeagueRequests";
+import { matchStatMediator } from "../application/matchStats/MatchStatMediator";
+import { GetMatchPlayersRequest, GetTopScorersRequest, UpdatePlayerMatchGoalsRequest } from "../application/matchStats/MatchStatRequests";
 
 const leagueMediator = buildLeagueMediator(new LeagueServiceAdapter());
 
@@ -167,4 +169,33 @@ export class LeagueController {
     );
     res.json(data);
   };
+
+  static getTopScorers = async (req: Request, res: Response): Promise<void> => {
+    const { leagueId } = req.params;
+    const data = await matchStatMediator.send(new GetTopScorersRequest(Number(leagueId)));
+    res.json(data);
+  };
+
+  static updateMatchGoals = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const { teamId, playerId, goals } = req.body;
+
+    const data = await matchStatMediator.send(
+      new UpdatePlayerMatchGoalsRequest(Number(matchId), Number(teamId), Number(playerId), Number(goals))
+    );
+    res.json(data);
+  };
+
+ static getMatchPlayers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { matchId } = req.params;
+      const data = await matchStatMediator.send(new GetMatchPlayersRequest(Number(matchId)));
+      res.json(data);
+    } catch (error: any) {
+      // 👇 ESTO ES LO QUE NECESITAMOS VER
+      console.error("🚨🚨🚨 ERROR EN EL BACKEND:", error);
+      res.status(500).json({ message: "Error interno", detail: error.message });
+    }
+  };
 }
+

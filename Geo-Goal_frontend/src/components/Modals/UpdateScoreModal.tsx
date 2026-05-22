@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { updateMatchScore } from "@/api/leagueAPI";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { updateMatchScore, getMatchPlayers } from "@/api/leagueAPI"; // 👈 Asegúrate de importar la función para obtener jugadores/equipos
 import { toast } from "react-toastify";
-
+import AdminMatchStats from '@/components/TableGoal/AdminMatchStats'; 
 interface UpdateScoreModalProps {
   match: any;
   leagueId: number;
@@ -23,7 +23,15 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
   const [homePenalties, setHomePenalties] = useState<number | string>(match?.homePenaltiesScore ?? "");
   const [awayPenalties, setAwayPenalties] = useState<number | string>(match?.awayPenaltiesScore ?? "");
 
-  // Eliminamos isDraw e isAlreadyPlayed porque ya no nos limitan
+  // === NUEVO: OBTENER JUGADORES ===
+  // Nota: Deberás asegurarte de tener un endpoint que devuelva los jugadores de un partido o liga.
+  // Si tienes 'getTeamPlayers', puedes llamarlo aquí. Por simplicidad, asumo que tienes una función 
+  // que te devuelve a los convocados o la lista completa de la liga.
+  const { data: players } = useQuery({
+    queryKey: ["matchPlayers", match?.id],
+    queryFn: () => getMatchPlayers(match?.id), // 👈 Usamos la función real
+    enabled: !!match?.id && isOpen,
+  });
 
   useEffect(() => {
     if (match) {
@@ -42,16 +50,14 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
       match.id, 
       Number(homeScore), 
       Number(awayScore),
-      // Si el checkbox está activo, mandamos los penales; si no, mandamos null para limpiarlos
       hasTieBreaker && homePenalties !== "" ? Number(homePenalties) : undefined,
       hasTieBreaker && awayPenalties !== "" ? Number(awayPenalties) : undefined
     ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fixture", leagueId] });
-      // Invalida también la query de la liga para que se actualice el Dashboard y el Ranking
       queryClient.invalidateQueries({ queryKey: ["league", leagueId] }); 
       toast.success("Resultado guardado correctamente");
-      onClose();
+      // Opcional: No cerramos el modal aquí para que el admin pueda registrar los goleadores después de guardar el marcador
     },
     onError: (e: any) => toast.error(e.message || "Error al actualizar"),
   });
@@ -59,8 +65,9 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
   if (!isOpen || !match) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl">
+    // Se aumentó un poco el max-w-md a max-w-2xl para que quepa bien la lista de jugadores
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+      <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-800 p-6 shadow-2xl my-8">
         <h3 className="text-xl font-bold text-geo-green mb-6 text-center">Actualizar Resultado</h3>
 
         {/* === MARCADOR REGULAR === */}
@@ -92,7 +99,7 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
           </div>
         </div>
 
-        {/* === SECCIÓN DE DESEMPATE (PENALES SIEMPRE DISPONIBLES) === */}
+        {/* === SECCIÓN DE DESEMPATE (PENALES) === */}
         <div className="mt-8 border-t border-zinc-800 pt-6 flex flex-col items-center animate-in fade-in duration-300">
           <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm font-bold text-zinc-400 transition-colors cursor-pointer hover:bg-zinc-800 hover:text-zinc-300 select-none">
             <input
@@ -100,7 +107,6 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
               checked={hasTieBreaker}
               onChange={(e) => {
                 setHasTieBreaker(e.target.checked);
-                // Si el usuario desmarca la casilla, limpiamos los inputs
                 if (!e.target.checked) {
                   setHomePenalties("");
                   setAwayPenalties("");
@@ -138,16 +144,10 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
             </div>
           )}
         </div>
-
-        {/* === BOTONES === */}
-        <div className="mt-8 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 text-sm font-bold text-zinc-400 transition-colors hover:text-white"
-          >
-            Cancelar
-          </button>
-          <button
+        
+        {/* === BOTÓN PARA GUARDAR MARCADOR === */}
+        <div className="mt-6 flex justify-end gap-3 mb-6 border-b border-zinc-800 pb-6">
+           <button
             onClick={() => updateScoreMutation.mutate()}
             disabled={
               updateScoreMutation.isPending || 
@@ -155,9 +155,30 @@ export default function UpdateScoreModal({ match, leagueId, isOpen, onClose }: U
               awayScore === "" || 
               (hasTieBreaker && (homePenalties === "" || awayPenalties === ""))
             }
-            className="rounded-lg bg-geo-green px-6 py-2 text-sm font-black text-black transition-colors hover:bg-geo-green-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full rounded-lg bg-geo-green/20 border border-geo-green px-6 py-2 text-sm font-black text-geo-green transition-colors hover:bg-geo-green hover:text-black disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {updateScoreMutation.isPending ? "Guardando..." : "Guardar"}
+            {updateScoreMutation.isPending ? "Guardando..." : "Guardar Marcador Global"}
+          </button>
+        </div>
+
+        {/* === NUEVO: SECCIÓN DE GOLEADORES === */}
+        {players && (
+            <div className="animate-in fade-in duration-500">
+                <AdminMatchStats 
+                    match={match} 
+                    leagueId={leagueId} 
+                    players={players} 
+                />
+            </div>
+        )}
+
+        {/* === BOTONES FINALES === */}
+        <div className="mt-8 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-lg bg-zinc-800 px-6 py-2 text-sm font-bold text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-white"
+          >
+            Cerrar Panel
           </button>
         </div>
       </div>

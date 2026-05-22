@@ -72,3 +72,9 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
   return data;
 }
+
+
+export const getTopScorers = async (leagueId: number) => {
+  const { data } = await api.get(`${BASE}/${leagueId}/top-scorers`);
+  return data;
+};

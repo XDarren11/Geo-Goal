@@ -14,6 +14,9 @@ import {
 } from "@heroicons/react/24/outline";
 import { VictoryAxis, VictoryBar, VictoryChart, VictoryGroup, VictoryTheme, VictoryTooltip, VictoryVoronoiContainer } from "victory";
 
+// 👇 1. IMPORTAMOS TU COMPONENTE DE GOLEADORES (Ajusta la ruta según la estructura de tus carpetas)
+import TopScorersTable from "@/components/TableGoal/TopScorersTable"; 
+
 export default function PublicLeagueView() {
   const { leagueId } = useParams();
   const parsedLeagueId = Number(leagueId);
@@ -280,6 +283,17 @@ export default function PublicLeagueView() {
               ))}
               {!fixtureRounds.length && <p className="text-sm text-[var(--geo-text-muted)]">No hay fixture visible por ahora.</p>}
             </div>
+          </div>
+        </section>
+
+        {/* 👇 2. AQUÍ INTEGRAMOS LA TABLA DE GOLEADORES */}
+        <section className="mt-8">
+          <div className="card-pitch p-5 lg:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-geo text-2xl tracking-wide">Top 10 Goleadores</h2>
+              <ChartBarIcon className="h-6 w-6 text-geo-green" />
+            </div>
+            <TopScorersTable leagueId={parsedLeagueId} />
           </div>
         </section>
 

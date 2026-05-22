@@ -1,4 +1,5 @@
-import { Table, Column, Model, ForeignKey, DataType } from 'sequelize-typescript';
+// 👇 1. Agrega BelongsTo a la importación
+import { Table, Column, Model, ForeignKey, DataType, BelongsTo } from 'sequelize-typescript';
 import { Team } from './Team';
 import { User } from './User';
 
@@ -12,11 +13,19 @@ export class TeamMember extends Model {
     })
     declare userId: number;
 
+    // 👇 2. AGREGA ESTO PARA EL USUARIO
+    @BelongsTo(() => User)
+    declare user: User;
+
     @ForeignKey(() => Team)
     @Column({
         type: DataType.INTEGER
     })
     declare teamId: number;
+
+    // 👇 3. DE UNA VEZ AGREGA ESTO PARA EL EQUIPO (Buenas prácticas)
+    @BelongsTo(() => Team)
+    declare team: Team;
 
     @Column({
         type: DataType.STRING,
