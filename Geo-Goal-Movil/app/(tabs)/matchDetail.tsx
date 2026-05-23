@@ -25,6 +25,113 @@ const BASE_SPOTS = [
   { x: 48, y: 65 },
 ];
 
+// ── Formation definitions ──
+// Each formation has a name and array of {x, y} positions (percentages) for GK + outfield players.
+// x: 0=own goal line → 100=opponent goal line. y: 0=left touchline → 100=right touchline.
+
+type FormationDef = {
+  name: string;
+  spots: Array<{ x: number; y: number }>; // length matches lineupMode (7 or 11)
+};
+
+const FORMATIONS_11: FormationDef[] = [
+  { name: '4-4-2', spots: [
+    { x: 6, y: 50 },                          // GK
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 }, // DEF 4
+    { x: 45, y: 22 }, { x: 45, y: 40 }, { x: 45, y: 60 }, { x: 45, y: 78 }, // MID 4
+    { x: 70, y: 35 }, { x: 70, y: 65 },                                        // FWD 2
+  ]},
+  { name: '4-3-3', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 45, y: 30 }, { x: 45, y: 50 }, { x: 45, y: 70 },
+    { x: 72, y: 22 }, { x: 72, y: 50 }, { x: 72, y: 78 },
+  ]},
+  { name: '4-2-3-1', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 42, y: 35 }, { x: 42, y: 65 },
+    { x: 58, y: 24 }, { x: 58, y: 50 }, { x: 58, y: 76 },
+    { x: 78, y: 50 },
+  ]},
+  { name: '3-5-2', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 30 }, { x: 22, y: 50 }, { x: 22, y: 70 },
+    { x: 42, y: 15 }, { x: 42, y: 32 }, { x: 42, y: 50 }, { x: 42, y: 68 }, { x: 42, y: 85 },
+    { x: 72, y: 35 }, { x: 72, y: 65 },
+  ]},
+  { name: '5-4-1', spots: [
+    { x: 6, y: 50 },
+    { x: 18, y: 15 }, { x: 18, y: 32 }, { x: 18, y: 50 }, { x: 18, y: 68 }, { x: 18, y: 85 },
+    { x: 42, y: 22 }, { x: 42, y: 40 }, { x: 42, y: 60 }, { x: 42, y: 78 },
+    { x: 75, y: 50 },
+  ]},
+  { name: '3-4-3', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 30 }, { x: 22, y: 50 }, { x: 22, y: 70 },
+    { x: 45, y: 20 }, { x: 45, y: 40 }, { x: 45, y: 60 }, { x: 45, y: 80 },
+    { x: 72, y: 24 }, { x: 72, y: 50 }, { x: 72, y: 76 },
+  ]},
+  { name: '4-5-1', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 42, y: 15 }, { x: 42, y: 32 }, { x: 42, y: 50 }, { x: 42, y: 68 }, { x: 42, y: 85 },
+    { x: 75, y: 50 },
+  ]},
+  { name: '4-3-2-1', spots: [
+    { x: 6, y: 50 },
+    { x: 20, y: 20 }, { x: 20, y: 40 }, { x: 20, y: 60 }, { x: 20, y: 80 },
+    { x: 38, y: 30 }, { x: 38, y: 50 }, { x: 38, y: 70 },
+    { x: 56, y: 35 }, { x: 56, y: 65 },
+    { x: 78, y: 50 },
+  ]},
+];
+
+const FORMATIONS_7: FormationDef[] = [
+  { name: '2-3-1', spots: [
+    { x: 8, y: 50 },                                     // GK
+    { x: 26, y: 33 }, { x: 26, y: 67 },                  // DEF 2
+    { x: 52, y: 20 }, { x: 52, y: 50 }, { x: 52, y: 80 }, // MID 3
+    { x: 78, y: 50 },                                     // FWD 1
+  ]},
+  { name: '3-2-1', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 22 }, { x: 26, y: 50 }, { x: 26, y: 78 },
+    { x: 52, y: 35 }, { x: 52, y: 65 },
+    { x: 78, y: 50 },
+  ]},
+  { name: '2-1-3', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 33 }, { x: 26, y: 67 },
+    { x: 50, y: 50 },
+    { x: 74, y: 24 }, { x: 74, y: 50 }, { x: 74, y: 76 },
+  ]},
+  { name: '2-2-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 33 }, { x: 26, y: 67 },
+    { x: 48, y: 33 }, { x: 48, y: 67 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+  { name: '3-1-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 22 }, { x: 26, y: 50 }, { x: 26, y: 78 },
+    { x: 50, y: 50 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+  { name: '1-3-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 50 },
+    { x: 48, y: 20 }, { x: 48, y: 50 }, { x: 48, y: 80 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+];
+
+function getFormationSpots(formation: string | null | undefined, lineupMode: 7 | 11): Array<{ x: number; y: number }> {
+  const list = lineupMode === 7 ? FORMATIONS_7 : FORMATIONS_11;
+  const found = list.find((f) => f.name === formation);
+  return found?.spots ?? BASE_SPOTS;
+}
+
 function normalizeLineup(starters?: MatchDetailLineupEntry[]) {
   const rows = Array.isArray(starters) ? starters : [];
   return rows.slice(0, 11).map((p, idx) => ({
@@ -77,6 +184,7 @@ export default function MatchDetailMobileScreen() {
   const [selectedBench, setSelectedBench] = React.useState<number[]>([]);
   const [selectedUnavailable, setSelectedUnavailable] = React.useState<number[]>([]);
   const [lineupMode, setLineupMode] = React.useState<7 | 11>(11);
+  const [selectedFormation, setSelectedFormation] = React.useState<string | null>(null);
   const [lineupError, setLineupError] = React.useState<string | null>(null);
   const [positionFilter, setPositionFilter] = React.useState<string>('all');
   const lineupInitializedRef = React.useRef(false);
@@ -133,6 +241,7 @@ export default function MatchDetailMobileScreen() {
       startingXI: Array<Record<string, unknown>>;
       bench?: Array<Record<string, unknown>>;
       unavailable?: Array<Record<string, unknown>>;
+      formation?: string;
     }) => updateCoachLineup(matchId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobile-public-match-detail', matchId] });
@@ -171,6 +280,9 @@ export default function MatchDetailMobileScreen() {
     const bench = coachSide === 'home'
       ? data?.detail?.homeBench
       : data?.detail?.awayBench;
+    const existingFormation = coachSide === 'home'
+      ? data?.detail?.homeFormation
+      : data?.detail?.awayFormation;
     const ids = (Array.isArray(starters) ? starters : [])
       .map((p) => (typeof p.userId === 'number' ? p.userId : null))
       .filter((id): id is number => typeof id === 'number');
@@ -187,8 +299,10 @@ export default function MatchDetailMobileScreen() {
       .filter((id): id is number => typeof id === 'number');
     if (benchIds.length) setSelectedBench(benchIds);
 
+    if (existingFormation) setSelectedFormation(existingFormation);
+
     lineupInitializedRef.current = true;
-  }, [coachSide, data?.detail?.homeStartingXI, data?.detail?.awayStartingXI, data?.detail?.homeBench, data?.detail?.awayBench]);
+  }, [coachSide, data?.detail?.homeStartingXI, data?.detail?.awayStartingXI, data?.detail?.homeBench, data?.detail?.awayBench, data?.detail?.homeFormation, data?.detail?.awayFormation]);
 
   // ── Video upload mutation ──
   const uploadMutation = useMutation({
@@ -364,7 +478,7 @@ export default function MatchDetailMobileScreen() {
       };
     });
 
-    lineupMutation.mutate({ startingXI, bench, unavailable });
+    lineupMutation.mutate({ startingXI, bench, unavailable, formation: selectedFormation ?? undefined });
   };
 
   const rosterPositions = React.useMemo(() => {
@@ -434,8 +548,9 @@ export default function MatchDetailMobileScreen() {
   const awayTracked = trackedPlayers.filter((p) => typeof p.teamId === 'number' && p.teamId === awayTeamId);
   const hasTracking = homeTracked.length > 0 || awayTracked.length > 0;
 
-  const toSpot = (idx: number, side: 'home' | 'away') => {
-    const base = BASE_SPOTS[Math.min(idx, BASE_SPOTS.length - 1)] ?? BASE_SPOTS[0];
+  const toSpot = (idx: number, side: 'home' | 'away', formation?: string | null) => {
+    const spots = getFormationSpots(formation, effectiveLineupMode as 7 | 11);
+    const base = spots[Math.min(idx, spots.length - 1)] ?? spots[0];
     if (side === 'home') return base;
     return { x: 100 - base.x, y: base.y };
   };
@@ -568,6 +683,31 @@ export default function MatchDetailMobileScreen() {
             </View>
           ) : null}
 
+          {/* Formation selector */}
+          <View className="mb-3">
+            <Text className="text-white text-xs font-semibold mb-2">Formación</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
+              {(effectiveLineupMode === 7 ? FORMATIONS_7 : FORMATIONS_11).map((f) => {
+                const isSelected = selectedFormation === f.name;
+                return (
+                  <TouchableOpacity
+                    key={`formation-${f.name}`}
+                    onPress={() => setSelectedFormation(isSelected ? null : f.name)}
+                    className={`rounded-lg border px-3 py-2 ${
+                      isSelected
+                        ? 'border-geo-green bg-geo-green/20'
+                        : 'border-gray-700 bg-gray-800'
+                    }`}
+                  >
+                    <Text className={`text-xs font-bold ${isSelected ? 'text-geo-green' : 'text-gray-300'}`}>
+                      {f.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
           {lineupError ? (
             <Text className="text-red-400 text-xs mb-2">{lineupError}</Text>
           ) : null}
@@ -670,7 +810,14 @@ export default function MatchDetailMobileScreen() {
       <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
         <Text className="text-geo-green font-bold mb-3">Alineaciones</Text>
         <View className="mb-3">
-          <Text className="text-white font-semibold mb-2">Local</Text>
+          <View className="flex-row items-center gap-2 mb-2">
+            <Text className="text-white font-semibold">Local</Text>
+            {detail.homeFormation ? (
+              <View className="rounded-md border border-geo-green/40 bg-geo-green/10 px-2 py-0.5">
+                <Text className="text-geo-green text-[10px] font-bold">{detail.homeFormation}</Text>
+              </View>
+            ) : null}
+          </View>
           <View className="flex-row flex-wrap gap-2">
             {home.map((p) => (
               <LineupChip key={`home-${p.userId ?? p.name}-${p.idx}`} number={p.number} name={p.name} incident={p.userId ? incidents.get(p.userId) : undefined} />
@@ -678,7 +825,14 @@ export default function MatchDetailMobileScreen() {
           </View>
         </View>
         <View className="mb-3">
-          <Text className="text-white font-semibold mb-2">Visitante</Text>
+          <View className="flex-row items-center gap-2 mb-2">
+            <Text className="text-white font-semibold">Visitante</Text>
+            {detail.awayFormation ? (
+              <View className="rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-0.5">
+                <Text className="text-sky-400 text-[10px] font-bold">{detail.awayFormation}</Text>
+              </View>
+            ) : null}
+          </View>
           <View className="flex-row flex-wrap gap-2">
             {away.map((p) => (
               <LineupChip key={`away-${p.userId ?? p.name}-${p.idx}`} number={p.number} name={p.name} incident={p.userId ? incidents.get(p.userId) : undefined} away />
@@ -737,6 +891,28 @@ export default function MatchDetailMobileScreen() {
           <View className="absolute left-0 top-1/2 h-32 w-12 -translate-y-16 border border-white/40 border-l-0" />
           <View className="absolute right-0 top-1/2 h-32 w-12 -translate-y-16 border border-white/40 border-r-0" />
 
+          {/* Formation labels */}
+          <View className="absolute left-2 top-2 flex-row items-center gap-1">
+            <View className="rounded bg-black/30 px-1.5 py-0.5">
+              <Text className="text-[10px] font-bold text-emerald-200">{match.homeTeam?.name ?? 'Local'}</Text>
+            </View>
+            <View className={`rounded px-1.5 py-0.5 border ${detail.homeFormation ? 'bg-emerald-400/20 border-emerald-400/30' : 'bg-emerald-400/10 border-emerald-400/20'}`}>
+              <Text className={`text-[10px] font-bold ${detail.homeFormation ? 'text-emerald-300' : 'text-emerald-400/60'}`}>
+                {detail.homeFormation || (effectiveLineupMode === 7 ? '2-3-1' : '4-4-2')}
+              </Text>
+            </View>
+          </View>
+          <View className="absolute right-2 top-2 flex-row items-center gap-1">
+            <View className={`rounded px-1.5 py-0.5 border ${detail.awayFormation ? 'bg-sky-400/20 border-sky-400/30' : 'bg-sky-400/10 border-sky-400/20'}`}>
+              <Text className={`text-[10px] font-bold ${detail.awayFormation ? 'text-sky-300' : 'text-sky-400/60'}`}>
+                {detail.awayFormation || (effectiveLineupMode === 7 ? '2-3-1' : '4-4-2')}
+              </Text>
+            </View>
+            <View className="rounded bg-black/30 px-1.5 py-0.5">
+              <Text className="text-[10px] font-bold text-sky-200">{match.awayTeam?.name ?? 'Visitante'}</Text>
+            </View>
+          </View>
+
           {hasTracking ? (
             <>
               {homeTracked.map((p, i) => (
@@ -757,7 +933,7 @@ export default function MatchDetailMobileScreen() {
           ) : (
             <>
               {home.map((p) => {
-                const pos = toSpot(p.idx, 'home');
+                const pos = toSpot(p.idx, 'home', detail.homeFormation);
                 const incident = p.userId ? incidents.get(p.userId) : undefined;
                 return (
                   <View key={`h-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>
@@ -770,7 +946,7 @@ export default function MatchDetailMobileScreen() {
                 );
               })}
               {away.map((p) => {
-                const pos = toSpot(p.idx, 'away');
+                const pos = toSpot(p.idx, 'away', detail.awayFormation);
                 const incident = p.userId ? incidents.get(p.userId) : undefined;
                 return (
                   <View key={`a-${p.idx}-${p.userId ?? p.name}`} className="absolute" style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: [{ translateX: -18 }, { translateY: -18 }] }}>

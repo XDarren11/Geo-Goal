@@ -132,6 +132,7 @@ router.put(
   body("startingXI").isArray().withMessage("Titulares debe ser un arreglo"),
   body("bench").optional().isArray().withMessage("Banca inválida"),
   body("unavailable").optional().isArray().withMessage("No disponibles inválido"),
+  body("formation").optional().isString().trim().isLength({ min: 3, max: 10 }).withMessage("Formación inválida"),
   handleInputError,
   asyncHandler(MatchDetailController.upsertCoachLineup)
 );

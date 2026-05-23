@@ -954,4 +954,159 @@ export class AdminService {
 
     return log;
   }
+
+  // --- Friendly Matches ---
+
+  static async createFriendlyMatch(
+    adminId: number,
+    input: {
+      homeTeamId: number;
+      awayTeamId: number;
+      roundName?: string;
+      date?: string;
+    }
+  ): Promise<Match> {
+    if (input.homeTeamId === input.awayTeamId) {
+      throw new AppError(400, "Un equipo no puede jugar contra sí mismo");
+    }
+
+    const [homeTeam, awayTeam] = await Promise.all([
+      Team.findByPk(input.homeTeamId),
+      Team.findByPk(input.awayTeamId),
+    ]);
+
+    if (!homeTeam) throw new AppError(404, `Equipo local (id=${input.homeTeamId}) no encontrado`);
+    if (!awayTeam) throw new AppError(404, `Equipo visitante (id=${input.awayTeamId}) no encontrado`);
+
+    if (homeTeam.leagueId == null || awayTeam.leagueId == null) {
+      throw new AppError(400, "Ambos equipos deben pertenecer a una liga que administres");
+    }
+
+    const [managedLeagues, assignedLeagues] = await Promise.all([
+      League.findAll({ where: { managerId: adminId }, attributes: ["id"] }),
+      LeagueAdmin.findAll({ where: { userId: adminId }, attributes: ["leagueId"] }),
+    ]);
+
+    const accessibleIds = new Set<number>([
+      ...managedLeagues.map((l) => l.id),
+      ...assignedLeagues.map((a) => a.leagueId),
+    ]);
+
+    if (!accessibleIds.has(homeTeam.leagueId)) {
+      throw new AppError(403, `No tienes acceso a la liga del equipo ${homeTeam.name}`);
+    }
+    if (!accessibleIds.has(awayTeam.leagueId)) {
+      throw new AppError(403, `No tienes acceso a la liga del equipo ${awayTeam.name}`);
+    }
+
+    let parsedDate: Date | null = null;
+    if (input.date) {
+      parsedDate = new Date(input.date);
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw new AppError(400, "Fecha inválida");
+      }
+    }
+
+    return Match.create({
+      type: "friendly",
+      leagueId: null,
+      seasonId: null,
+      homeTeamId: input.homeTeamId,
+      awayTeamId: input.awayTeamId,
+      roundName: input.roundName || "Amistoso",
+      date: parsedDate,
+      homeScore: 0,
+      awayScore: 0,
+      played: false,
+    });
+  }
+
+  static async listFriendlyMatches(adminId: number, page = 1, pageSize = 50) {
+    const [managedLeagues, assignedLeagues] = await Promise.all([
+      League.findAll({ where: { managerId: adminId }, attributes: ["id"] }),
+      LeagueAdmin.findAll({ where: { userId: adminId }, attributes: ["leagueId"] }),
+    ]);
+
+    const accessibleIds = [
+      ...managedLeagues.map((l) => l.id),
+      ...assignedLeagues.map((a) => a.leagueId),
+    ];
+
+    if (accessibleIds.length === 0) {
+      return { data: [], total: 0, page, pageSize };
+    }
+
+    const teams = await Team.findAll({
+      where: { leagueId: { [Op.in]: accessibleIds } },
+      attributes: ["id"],
+    });
+    const teamIds = teams.map((t) => t.id);
+
+    if (teamIds.length === 0) {
+      return { data: [], total: 0, page, pageSize };
+    }
+
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await Match.findAndCountAll({
+      where: {
+        type: "friendly",
+        [Op.or]: [
+          { homeTeamId: { [Op.in]: teamIds } },
+          { awayTeamId: { [Op.in]: teamIds } },
+        ],
+      },
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl", "leagueId"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl", "leagueId"] },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      distinct: true,
+    });
+
+    return { data: rows, total: count, page, pageSize: limit };
+  }
+
+  static async deleteFriendlyMatch(matchId: string, adminId: number): Promise<string> {
+    const match = await Match.findByPk(matchId, {
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "leagueId"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "leagueId"] },
+      ],
+    });
+
+    if (!match) {
+      throw new AppError(404, "Partido no encontrado");
+    }
+
+    if (match.type !== "friendly") {
+      throw new AppError(400, "Solo se pueden eliminar partidos amistosos desde esta ruta");
+    }
+
+    const teamLeagueIds = [
+      match.homeTeam?.leagueId,
+      match.awayTeam?.leagueId,
+    ].filter((id): id is number => id != null);
+
+    const [managedLeagues, assignedLeagues] = await Promise.all([
+      League.findAll({ where: { managerId: adminId }, attributes: ["id"] }),
+      LeagueAdmin.findAll({ where: { userId: adminId }, attributes: ["leagueId"] }),
+    ]);
+
+    const accessibleIds = new Set([
+      ...managedLeagues.map((l) => l.id),
+      ...assignedLeagues.map((a) => a.leagueId),
+    ]);
+
+    const hasAccess = teamLeagueIds.some((id) => accessibleIds.has(id));
+    if (!hasAccess) {
+      throw new AppError(403, "No tienes permiso para eliminar este partido amistoso");
+    }
+
+    await match.destroy();
+    return "Partido amistoso eliminado correctamente";
+  }
 }

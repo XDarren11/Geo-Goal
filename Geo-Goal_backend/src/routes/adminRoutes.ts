@@ -220,4 +220,38 @@ router.get(
   asyncHandler(AdminController.getAuditLogById)
 );
 
+// --- Partidos amistosos ---
+
+router.get(
+  "/friendly-matches",
+  asyncHandler(AdminController.listFriendlyMatches)
+);
+
+router.post(
+  "/friendly-matches",
+  body("homeTeamId")
+    .isInt({ min: 1 })
+    .withMessage("El ID del equipo local es obligatorio"),
+  body("awayTeamId")
+    .isInt({ min: 1 })
+    .withMessage("El ID del equipo visitante es obligatorio"),
+  body("roundName")
+    .optional()
+    .isString()
+    .isLength({ max: 100 }),
+  body("date")
+    .optional()
+    .isISO8601()
+    .withMessage("La fecha debe estar en formato ISO 8601"),
+  handleInputError,
+  asyncHandler(AdminController.createFriendlyMatch)
+);
+
+router.delete(
+  "/friendly-matches/:matchId",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(AdminController.deleteFriendlyMatch)
+);
+
 export default router;

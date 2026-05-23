@@ -4,8 +4,10 @@ import { buildAdminMediator } from "../application/admin/AdminMediator";
 import type {
   ChangeSeasonStatusBodyDTO,
   CreateFieldBodyDTO,
+  CreateFriendlyMatchBodyDTO,
   CreateSeasonBodyDTO,
   CreateUserBodyDTO,
+  DeleteFriendlyMatchBodyDTO,
   LeagueAdminRoleDTO,
   UpdateFieldBodyDTO,
   UpdateSeasonBodyDTO,
@@ -16,10 +18,12 @@ import {
   AdminAuditLogFilters,
   AdminChangeSeasonStatusRequest,
   AdminCreateFieldRequest,
+  AdminCreateFriendlyMatchRequest,
   AdminCreateSeasonRequest,
   AdminCreateUserRequest,
   AdminDashboardSummaryRequest,
   AdminDeleteFieldRequest,
+  AdminDeleteFriendlyMatchRequest,
   AdminDeleteSeasonRequest,
   AdminDeleteUserRequest,
   AdminGetAuditLogByIdRequest,
@@ -27,6 +31,7 @@ import {
   AdminGetSeasonByIdRequest,
   AdminListAuditLogsRequest,
   AdminListFieldsRequest,
+  AdminListFriendlyMatchesRequest,
   AdminListLeagueAdminsRequest,
   AdminListSeasonsByLeagueRequest,
   AdminListUsersByLeagueRequest,
@@ -268,5 +273,40 @@ export class AdminController {
     const { logId } = req.params;
     const data = await adminMediator.send(new AdminGetAuditLogByIdRequest(logId));
     res.json(data);
+  };
+
+  // --- Friendly Matches ---
+
+  static createFriendlyMatch = async (req: Request, res: Response): Promise<void> => {
+    const result = await adminMediator.send(
+      new AdminCreateFriendlyMatchRequest(
+        req.body as CreateFriendlyMatchBodyDTO,
+        req.user!.id,
+        adminCtx(req)
+      )
+    );
+    res.status(201).json(result);
+  };
+
+  static listFriendlyMatches = async (req: Request, res: Response): Promise<void> => {
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
+    const data = await adminMediator.send(
+      new AdminListFriendlyMatchesRequest(req.user!.id, page, pageSize)
+    );
+    res.json(data);
+  };
+
+  static deleteFriendlyMatch = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const result = await adminMediator.send(
+      new AdminDeleteFriendlyMatchRequest(
+        matchId,
+        req.user!.id,
+        req.body as DeleteFriendlyMatchBodyDTO,
+        adminCtx(req)
+      )
+    );
+    res.send(result);
   };
 }

@@ -403,6 +403,8 @@ export class MatchDetailService {
         matchDay: detail?.matchDay ?? (match.date ? new Date(match.date).toISOString().slice(0, 10) : null),
         homeCoach: detail?.homeCoach ?? (match.homeTeam as Team)?.trainer ?? null,
         awayCoach: detail?.awayCoach ?? (match.awayTeam as Team)?.trainer ?? null,
+        homeFormation: detail?.homeFormation ?? null,
+        awayFormation: detail?.awayFormation ?? null,
         squads,
       },
     };
@@ -556,6 +558,7 @@ export class MatchDetailService {
       startingXI: LineupEntry[];
       bench?: LineupEntry[];
       unavailable?: LineupEntry[];
+      formation?: string;
     }
   ) {
     const match = await Match.findByPk(matchId);
@@ -611,9 +614,11 @@ export class MatchDetailService {
     if (side === "home") {
       detail.homeStartingXI = input.startingXI;
       if (input.bench !== undefined) detail.homeBench = input.bench;
+      if (input.formation !== undefined) detail.homeFormation = input.formation;
     } else {
       detail.awayStartingXI = input.startingXI;
       if (input.bench !== undefined) detail.awayBench = input.bench;
+      if (input.formation !== undefined) detail.awayFormation = input.formation;
     }
 
     if (!detail.createdBy) detail.createdBy = actorUserId;

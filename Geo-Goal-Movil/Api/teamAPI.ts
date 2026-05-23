@@ -61,6 +61,7 @@ export async function updateCoachLineup(
     startingXI: Array<Record<string, unknown>>;
     bench?: Array<Record<string, unknown>>;
     unavailable?: Array<Record<string, unknown>>;
+    formation?: string;
   }
 ): Promise<{ message: string; data: unknown }> {
   const { data } = await api.put<{ message: string; data: unknown }>(

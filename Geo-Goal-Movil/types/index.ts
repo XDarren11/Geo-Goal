@@ -70,7 +70,9 @@ export interface Team {
 // Match
 export interface Match {
   id: number
-  leagueId: number
+  leagueId: number | null
+  seasonId?: number | null
+  type?: 'league' | 'friendly'
   homeTeamId: number
   awayTeamId: number
   date?: string | null
@@ -111,6 +113,8 @@ export interface PublicMatchDetail {
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]
   awayBench?: MatchDetailLineupEntry[]
+  homeFormation?: string | null
+  awayFormation?: string | null
   referee?: string | null
   weather?: string | null
   attendance?: number | null

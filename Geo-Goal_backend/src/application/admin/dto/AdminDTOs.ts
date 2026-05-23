@@ -61,3 +61,17 @@ export type ChangeSeasonStatusBodyDTO = {
 export type AuditReasonBodyDTO = {
   reason?: string;
 };
+
+// --- Friendly Match ---
+
+export type CreateFriendlyMatchBodyDTO = {
+  homeTeamId: number;
+  awayTeamId: number;
+  roundName?: string;
+  date?: string;
+  reason?: string;
+};
+
+export type DeleteFriendlyMatchBodyDTO = {
+  reason?: string;
+};

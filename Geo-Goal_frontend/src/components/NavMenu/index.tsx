@@ -67,6 +67,7 @@ export default function NavMenu({ name, role, onNavigate }: NavMenuProps) {
     { to: "/admin/users", label: "Usuarios", icon: UserGroupIcon },
     { to: "/admin/fields", label: "Campos", icon: MapPinIcon },
     { to: "/admin/seasons", label: "Temporadas", icon: CalendarDaysIcon },
+    { to: "/admin/friendly-matches", label: "Amistosos", icon: CalendarDaysIcon },
     { to: "/admin/audit-logs", label: "Auditoría", icon: ClipboardDocumentListIcon },
     { to: "/admin/referee", label: "Centro de árbitro", icon: ShieldCheckIcon },
   ];

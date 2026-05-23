@@ -9,11 +9,18 @@ import { MatchSquadPlayer } from './MatchSquadPlayer';
 export class Match extends Model {
     
     @ForeignKey(() => League)
-    @Column({ type: DataType.INTEGER, allowNull: false })
-    declare leagueId: number;
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare leagueId: number | null;
 
     @BelongsTo(() => League)
     declare league: League;
+
+    @Column({
+        type: DataType.ENUM('league', 'friendly'),
+        allowNull: false,
+        defaultValue: 'league',
+    })
+    declare type: 'league' | 'friendly';
 
     @ForeignKey(() => Season)
     @Column({ type: DataType.INTEGER, allowNull: true })

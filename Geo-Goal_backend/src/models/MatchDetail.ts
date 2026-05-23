@@ -64,6 +64,12 @@ export class MatchDetail extends Model {
   @Column({ type: DataType.JSONB, allowNull: false, defaultValue: [] })
   declare awayBench: Array<Record<string, unknown>>;
 
+  @Column({ type: DataType.STRING(10), allowNull: true })
+  declare homeFormation: string | null;
+
+  @Column({ type: DataType.STRING(10), allowNull: true })
+  declare awayFormation: string | null;
+
   @Column({ type: DataType.STRING, allowNull: true })
   declare referee: string | null;
 

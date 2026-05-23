@@ -3,10 +3,12 @@ import {
   AdminAssignLeagueAdminHandler,
   AdminChangeSeasonStatusHandler,
   AdminCreateFieldHandler,
+  AdminCreateFriendlyMatchHandler,
   AdminCreateSeasonHandler,
   AdminCreateUserHandler,
   AdminDashboardSummaryHandler,
   AdminDeleteFieldHandler,
+  AdminDeleteFriendlyMatchHandler,
   AdminDeleteSeasonHandler,
   AdminDeleteUserHandler,
   AdminGetAuditLogByIdHandler,
@@ -14,6 +16,7 @@ import {
   AdminGetSeasonByIdHandler,
   AdminListAuditLogsHandler,
   AdminListFieldsHandler,
+  AdminListFriendlyMatchesHandler,
   AdminListLeagueAdminsHandler,
   AdminListSeasonsByLeagueHandler,
   AdminListUsersByLeagueHandler,
@@ -50,5 +53,8 @@ export function buildAdminMediator(): Mediator {
   m.register("admin.deleteSeason", new AdminDeleteSeasonHandler());
   m.register("admin.listAuditLogs", new AdminListAuditLogsHandler());
   m.register("admin.getAuditLogById", new AdminGetAuditLogByIdHandler());
+  m.register("admin.createFriendlyMatch", new AdminCreateFriendlyMatchHandler());
+  m.register("admin.listFriendlyMatches", new AdminListFriendlyMatchesHandler());
+  m.register("admin.deleteFriendlyMatch", new AdminDeleteFriendlyMatchHandler());
   return m;
 }

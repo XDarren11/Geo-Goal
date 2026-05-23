@@ -32,6 +32,112 @@ const BASE_SPOTS = [
   { x: 48, y: 65 },
 ];
 
+const FORMATIONS_11_FRONTEND = ['4-4-2', '4-3-3', '4-2-3-1', '3-5-2', '5-4-1', '3-4-3', '4-5-1', '4-3-2-1'];
+const FORMATIONS_7_FRONTEND = ['2-3-1', '3-2-1', '2-1-3', '2-2-2', '3-1-2', '1-3-2'];
+
+type FormationDef = {
+  name: string;
+  spots: Array<{ x: number; y: number }>;
+};
+
+const FORMATIONS_11: FormationDef[] = [
+  { name: '4-4-2', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 45, y: 22 }, { x: 45, y: 40 }, { x: 45, y: 60 }, { x: 45, y: 78 },
+    { x: 70, y: 35 }, { x: 70, y: 65 },
+  ]},
+  { name: '4-3-3', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 45, y: 30 }, { x: 45, y: 50 }, { x: 45, y: 70 },
+    { x: 72, y: 22 }, { x: 72, y: 50 }, { x: 72, y: 78 },
+  ]},
+  { name: '4-2-3-1', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 42, y: 35 }, { x: 42, y: 65 },
+    { x: 58, y: 24 }, { x: 58, y: 50 }, { x: 58, y: 76 },
+    { x: 78, y: 50 },
+  ]},
+  { name: '3-5-2', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 30 }, { x: 22, y: 50 }, { x: 22, y: 70 },
+    { x: 42, y: 15 }, { x: 42, y: 32 }, { x: 42, y: 50 }, { x: 42, y: 68 }, { x: 42, y: 85 },
+    { x: 72, y: 35 }, { x: 72, y: 65 },
+  ]},
+  { name: '5-4-1', spots: [
+    { x: 6, y: 50 },
+    { x: 18, y: 15 }, { x: 18, y: 32 }, { x: 18, y: 50 }, { x: 18, y: 68 }, { x: 18, y: 85 },
+    { x: 42, y: 22 }, { x: 42, y: 40 }, { x: 42, y: 60 }, { x: 42, y: 78 },
+    { x: 75, y: 50 },
+  ]},
+  { name: '3-4-3', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 30 }, { x: 22, y: 50 }, { x: 22, y: 70 },
+    { x: 45, y: 20 }, { x: 45, y: 40 }, { x: 45, y: 60 }, { x: 45, y: 80 },
+    { x: 72, y: 24 }, { x: 72, y: 50 }, { x: 72, y: 76 },
+  ]},
+  { name: '4-5-1', spots: [
+    { x: 6, y: 50 },
+    { x: 22, y: 20 }, { x: 22, y: 40 }, { x: 22, y: 60 }, { x: 22, y: 80 },
+    { x: 42, y: 15 }, { x: 42, y: 32 }, { x: 42, y: 50 }, { x: 42, y: 68 }, { x: 42, y: 85 },
+    { x: 75, y: 50 },
+  ]},
+  { name: '4-3-2-1', spots: [
+    { x: 6, y: 50 },
+    { x: 20, y: 20 }, { x: 20, y: 40 }, { x: 20, y: 60 }, { x: 20, y: 80 },
+    { x: 38, y: 30 }, { x: 38, y: 50 }, { x: 38, y: 70 },
+    { x: 56, y: 35 }, { x: 56, y: 65 },
+    { x: 78, y: 50 },
+  ]},
+];
+
+const FORMATIONS_7: FormationDef[] = [
+  { name: '2-3-1', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 33 }, { x: 26, y: 67 },
+    { x: 52, y: 20 }, { x: 52, y: 50 }, { x: 52, y: 80 },
+    { x: 78, y: 50 },
+  ]},
+  { name: '3-2-1', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 22 }, { x: 26, y: 50 }, { x: 26, y: 78 },
+    { x: 52, y: 35 }, { x: 52, y: 65 },
+    { x: 78, y: 50 },
+  ]},
+  { name: '2-1-3', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 33 }, { x: 26, y: 67 },
+    { x: 50, y: 50 },
+    { x: 74, y: 24 }, { x: 74, y: 50 }, { x: 74, y: 76 },
+  ]},
+  { name: '2-2-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 33 }, { x: 26, y: 67 },
+    { x: 48, y: 33 }, { x: 48, y: 67 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+  { name: '3-1-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 22 }, { x: 26, y: 50 }, { x: 26, y: 78 },
+    { x: 50, y: 50 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+  { name: '1-3-2', spots: [
+    { x: 8, y: 50 },
+    { x: 26, y: 50 },
+    { x: 48, y: 20 }, { x: 48, y: 50 }, { x: 48, y: 80 },
+    { x: 74, y: 35 }, { x: 74, y: 65 },
+  ]},
+];
+
+function getFormationSpots(formation: string | null | undefined, lineupMode: 7 | 11): Array<{ x: number; y: number }> {
+  const list = lineupMode === 7 ? FORMATIONS_7 : FORMATIONS_11;
+  const found = list.find((f) => f.name === formation);
+  return found?.spots ?? BASE_SPOTS;
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
   const date = new Date(value);
@@ -174,15 +280,20 @@ function TacticalPitch({
   homeName,
   awayName,
   analytics,
+  homeFormation,
+  awayFormation,
 }: {
   homeStarters?: MatchDetailLineupEntry[];
   awayStarters?: MatchDetailLineupEntry[];
   homeName: string;
   awayName: string;
   analytics: Awaited<ReturnType<typeof getPublicMatchAnalytics>> | undefined;
+  homeFormation?: string | null;
+  awayFormation?: string | null;
 }) {
   const home = normalizeLineup(homeStarters);
   const away = normalizeLineup(awayStarters);
+  const lineupMode: 7 | 11 = home.length === 7 || away.length === 7 ? 7 : 11;
   const incidents = buildIncidentMap(analytics);
   const frames = analytics?.trackingFrames ?? [];
   const [frameIndex, setFrameIndex] = useState(0);
@@ -253,7 +364,9 @@ function TacticalPitch({
   }, [trackedPlayers]);
 
   const toSpot = (idx: number, side: Side) => {
-    const base = BASE_SPOTS[Math.min(idx, BASE_SPOTS.length - 1)] ?? BASE_SPOTS[0];
+    const formation = side === 'home' ? homeFormation : awayFormation;
+    const spots = getFormationSpots(formation, lineupMode);
+    const base = spots[Math.min(idx, spots.length - 1)] ?? spots[0];
     if (side === "home") return base;
     return { x: 100 - base.x, y: base.y };
   };
@@ -295,11 +408,33 @@ function TacticalPitch({
           <div className="absolute left-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-l-0" />
           <div className="absolute right-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-r-0" />
 
-          <div className="absolute left-3 top-2 rounded bg-black/30 px-2 py-1 text-xs font-bold text-emerald-200">
-            {homeName}
+          <div className="absolute left-3 top-2 flex items-center gap-2">
+            <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-emerald-200">
+              {homeName}
+            </span>
+            {homeFormation ? (
+              <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-400/30">
+                {homeFormation}
+              </span>
+            ) : (
+              <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400/60 border border-emerald-400/20">
+                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+              </span>
+            )}
           </div>
-          <div className="absolute right-3 top-2 rounded bg-black/30 px-2 py-1 text-xs font-bold text-sky-200">
-            {awayName}
+          <div className="absolute right-3 top-2 flex items-center gap-2">
+            {awayFormation ? (
+              <span className="rounded bg-sky-400/20 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 border border-sky-400/30">
+                {awayFormation}
+              </span>
+            ) : (
+              <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-400/60 border border-sky-400/20">
+                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+              </span>
+            )}
+            <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-sky-200">
+              {awayName}
+            </span>
           </div>
 
           {home.map((p) => {
@@ -378,19 +513,28 @@ function TeamLineupCard({
   bench,
   roster,
   unavailable,
+  formation,
 }: {
   title: string;
   starters?: MatchDetailLineupEntry[];
   bench?: MatchDetailLineupEntry[];
   roster?: MatchSquadPlayerView[];
   unavailable?: MatchSquadPlayerView[];
+  formation?: string | null;
 }) {
   const safeStarters = Array.isArray(starters) ? starters : [];
   const safeBench = Array.isArray(bench) ? bench : [];
 
   return (
     <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
-      <h3 className="font-black text-[var(--geo-text)]">{title}</h3>
+      <h3 className="font-black text-[var(--geo-text)]">
+        {title}
+        {formation ? (
+          <span className="ml-2 inline-flex items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-200">
+            {formation}
+          </span>
+        ) : null}
+      </h3>
 
       <div className="mt-4">
         <p className="text-sm font-bold text-geo-green">11 en cancha</p>
@@ -466,6 +610,7 @@ export default function PublicMatchDetailView() {
   const [selectedBench, setSelectedBench] = useState<number[]>([]);
   const [selectedUnavailable, setSelectedUnavailable] = useState<number[]>([]);
   const [lineupMode, setLineupMode] = useState<7 | 11>(11);
+  const [selectedFormation, setSelectedFormation] = useState<string | null>(null);
   const [lineupError, setLineupError] = useState<string | null>(null);
   const [positionFilter, setPositionFilter] = useState<string>("all");
   const lineupInitializedRef = useRef(false);
@@ -815,6 +960,7 @@ export default function PublicMatchDetailView() {
       startingXI: Array<Record<string, unknown>>;
       bench?: Array<Record<string, unknown>>;
       unavailable?: Array<Record<string, unknown>>;
+      formation?: string;
     }) => updateCoachLineup(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["public-match-detail", id] });
@@ -986,7 +1132,7 @@ export default function PublicMatchDetailView() {
       };
     });
 
-    lineupMutation.mutate({ startingXI, bench, unavailable });
+    lineupMutation.mutate({ startingXI, bench, unavailable, formation: selectedFormation ?? undefined });
   };
 
   const rosterPositions = useMemo(() => {
@@ -1348,6 +1494,28 @@ export default function PublicMatchDetailView() {
               </div>
             </div>
 
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-[var(--geo-text-muted)] mb-2">
+                Formación
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(effectiveLineupMode === 7 ? FORMATIONS_7_FRONTEND : FORMATIONS_11_FRONTEND).map((f) => (
+                  <button
+                    key={`f-${f}`}
+                    type="button"
+                    onClick={() => setSelectedFormation(selectedFormation === f ? null : f)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                      selectedFormation === f
+                        ? "border-geo-green bg-geo-green/10 text-geo-green"
+                        : "border-white/10 bg-white/[0.04] text-[var(--geo-text-muted)] hover:border-white/30"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {lineupError ? (
               <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
                 {lineupError}
@@ -1470,6 +1638,7 @@ export default function PublicMatchDetailView() {
             bench={homeBench}
             roster={detail.squads?.home?.roster}
             unavailable={detail.squads?.home?.unavailable}
+            formation={detail.homeFormation}
           />
           <TeamLineupCard
             title={`Alineación ${match.awayTeam?.name ?? "Visitante"}`}
@@ -1477,6 +1646,7 @@ export default function PublicMatchDetailView() {
             bench={awayBench}
             roster={detail.squads?.away?.roster}
             unavailable={detail.squads?.away?.unavailable}
+            formation={detail.awayFormation}
           />
         </section>
 
@@ -1486,6 +1656,8 @@ export default function PublicMatchDetailView() {
           homeName={match.homeTeam?.name ?? "Local"}
           awayName={match.awayTeam?.name ?? "Visitante"}
           analytics={analytics}
+          homeFormation={detail.homeFormation}
+          awayFormation={detail.awayFormation}
         />
 
         <section className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
