@@ -434,6 +434,11 @@ export default function MatchDetailMobileScreen() {
     return { x: 100 - base.x, y: base.y };
   };
 
+  const fieldLat = toNum(detail?.field?.lat);
+  const fieldLng = toNum(detail?.field?.lng);
+  const fieldName = detail?.field?.name ?? 'Cancha';
+  const hasFieldLocation = fieldLat != null && fieldLng != null;
+
   return (
     <>
     <ScrollView className="flex-1 bg-geo-black px-4 py-5">
@@ -474,6 +479,23 @@ export default function MatchDetailMobileScreen() {
           <MetaPill label="Duración" value={typeof detail.durationMinutes === 'number' ? `${detail.durationMinutes} min` : '—'} />
         </View>
         {detail.notes ? <Text className="text-gray-400 text-xs mt-3">{detail.notes}</Text> : null}
+        {hasFieldLocation ? (
+          <TouchableOpacity
+            onPress={() => {
+              router.push({
+                pathname: '/navigation',
+                params: {
+                  destLat: fieldLat,
+                  destLng: fieldLng,
+                  fieldName,
+                },
+              });
+            }}
+            className="mt-4 self-start border border-geo-green rounded px-3 py-2"
+          >
+            <Text className="text-geo-green text-xs font-bold">Cómo llegar (GPS)</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {analytics ? (

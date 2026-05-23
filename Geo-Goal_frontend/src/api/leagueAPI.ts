@@ -176,3 +176,25 @@ export async function updateLeagueLogo(leagueId: number, logo: File): Promise<{ 
   );
   return data;
 }
+
+
+export const getMatchPlayers = async (matchId: number) => {
+  // 👇 Le agregamos el prefijo correcto
+  const { data } = await api.get(`/league/matches/${matchId}/players`);
+  return data;
+};
+
+// 2. Para actualizar los goles
+export const updatePlayerMatchGoals = async (
+  matchId: number, 
+  teamId: number, 
+  playerId: number, 
+  goals: number
+) => {
+  const { data } = await api.put(`/league/matches/${matchId}/player-goals`, {
+    teamId,
+    playerId,
+    goals
+  });
+  return data;
+};

@@ -97,6 +97,16 @@ export interface PublicMatchDetail {
   durationMinutes?: number
   endTime?: string | null
   matchDay?: string | null
+  field?: {
+    id?: number
+    name?: string | null
+    address?: string | null
+    city?: string | null
+    state?: string | null
+    country?: string | null
+    lat?: number | null
+    lng?: number | null
+  } | null
   homeStartingXI?: MatchDetailLineupEntry[]
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]

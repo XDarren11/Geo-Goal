@@ -5,10 +5,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 function decodeJwtPayload(token: string): { exp: number } | null {
     try {
         const base64Url = token.split('.')[1];
+        if (!base64Url) return null;
         let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         while (base64.length % 4) base64 += '=';
+        if (typeof atob !== 'function') return null;
         const jsonPayload = decodeURIComponent(
-            atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+            atob(base64)
+                .split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
         );
         return JSON.parse(jsonPayload);
     } catch {
@@ -17,7 +22,6 @@ function decodeJwtPayload(token: string): { exp: number } | null {
 }
 
 const TOKEN_REFRESH_BUFFER_MS = 30 * 60 * 1000; // 30 minutos
-
 const isTokenExpiringSoon = (token: string): boolean => {
     const payload = decodeJwtPayload(token);
     if (!payload?.exp) return false;
@@ -45,19 +49,31 @@ const AUTH_ENDPOINTS = new Set([
     '/auth/refresh-token',
 ]);
 
+const normalizePath = (url?: string): string | null => {
+    if (!url) return null;
+    try {
+        if (url.startsWith('http')) {
+            const parsed = new URL(url);
+            return parsed.pathname.replace(/\/+$/, "");
+        }
+        return url.startsWith('/') ? url : `/${url}`;
+    } catch {
+        return null;
+    }
+};
+
 const shouldSkipRefresh = (url?: string, config?: any) => {
     if (config?.skipAuthRefresh) return true;
-    if (!url) return false;
-    return AUTH_ENDPOINTS.has(url);
+    const path = normalizePath(url);
+    if (!path) return false;
+    return AUTH_ENDPOINTS.has(path);
 };
 
 // --- Refresh mutex ---
 let refreshPromise: Promise<string | null> | null = null;
-
 const refreshAccessToken = async (): Promise<string | null> => {
     const currentRefreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
     if (!currentRefreshToken) return null;
-
     if (!refreshPromise) {
         refreshPromise = (async () => {
             try {
@@ -67,7 +83,6 @@ const refreshAccessToken = async (): Promise<string | null> => {
                 );
                 const accessToken = data?.accessToken || data?.token;
                 if (!accessToken) return null;
-
                 await AsyncStorage.setItem('AUTH_TOKEN', accessToken);
                 if (data?.refreshToken) {
                     await AsyncStorage.setItem('REFRESH_TOKEN', data.refreshToken);
@@ -85,7 +100,6 @@ const refreshAccessToken = async (): Promise<string | null> => {
             }
         })();
     }
-
     return refreshPromise;
 };
 
@@ -93,8 +107,14 @@ const refreshAccessToken = async (): Promise<string | null> => {
 api.interceptors.request.use(async (config) => {
     try {
         let token = await AsyncStorage.getItem('AUTH_TOKEN');
+        const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
 
-        if (token && !shouldSkipRefresh(config.url, config) && isTokenExpiringSoon(token)) {
+        if (
+            token &&
+            refreshToken &&
+            !shouldSkipRefresh(config.url, config) &&
+            isTokenExpiringSoon(token)
+        ) {
             const newToken = await refreshAccessToken();
             if (newToken) {
                 token = newToken;
@@ -117,17 +137,17 @@ api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config as any;
-        if (error?.response?.status === 401 && !originalRequest?._retry) {
-            if (shouldSkipRefresh(originalRequest?.url, originalRequest)) {
+        const status = error?.response?.status;
+        const isAuthEndpoint = shouldSkipRefresh(originalRequest?.url, originalRequest);
+
+        if (status === 401 && !originalRequest?._retry && !isAuthEndpoint) {
+            const currentAccessToken = await AsyncStorage.getItem('AUTH_TOKEN');
+            const currentRefreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
+            if (!currentAccessToken || !currentRefreshToken) {
                 return Promise.reject(error);
             }
 
-            const hasRefreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
-            if (!hasRefreshToken) {
-                return Promise.reject(error);
-            }
             originalRequest._retry = true;
-
             const newAccessToken = await refreshAccessToken();
             if (newAccessToken) {
                 originalRequest.headers = {
@@ -141,5 +161,4 @@ api.interceptors.response.use(
     }
 );
 
-export { rawApi };
 export default api;

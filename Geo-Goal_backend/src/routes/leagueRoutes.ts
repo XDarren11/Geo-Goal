@@ -694,4 +694,14 @@ router.post('/join-by-code',
     asyncHandler(LeagueInvitationController.joinByCode)
 );
 
+// Ruta privada (SOLO ADMINS/ÁRBITROS) para capturar los goles del partido
+router.put(
+  "/matches/:matchId/player-goals", 
+  // authMiddleware, 
+  // isRefereeOrAdminMiddleware, 
+  LeagueController.updateMatchGoals
+);
+
+router.get("/matches/:matchId/players", LeagueController.getMatchPlayers);
+
 export default router

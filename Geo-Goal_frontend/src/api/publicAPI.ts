@@ -171,3 +171,9 @@ export async function getAnalysisFrame(matchId: number): Promise<AnalysisFrameRe
   );
   return data;
 }
+
+
+export const getTopScorers = async (leagueId: number) => {
+  const { data } = await api.get(`${BASE}/${leagueId}/top-scorers`);
+  return data;
+};

@@ -6,6 +6,7 @@ import { handleInputError } from "../middleware/validation";
 import { uploadVideo } from "../middleware/upload";
 import { PublicController } from "../controllers/PublicController";
 import { MatchDetailController } from "../controllers/MatchDetailController";
+import { LeagueController } from "../controllers/LeagueController";
 
 const router = Router();
 
@@ -145,5 +146,8 @@ router.put(
   handleInputError,
   asyncHandler(MatchDetailController.claimAnalysisJob)
 );
+
+
+router.get("/:leagueId/top-scorers", LeagueController.getTopScorers);
 
 export default router;
