@@ -19,8 +19,8 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
 }
 
 export async function listUsers(): Promise<AdminUser[]> {
-  const { data } = await api.get<AdminUser[]>(`${BASE}/users`);
-  return data;
+  const { data } = await api.get<{ data: AdminUser[] }>(`${BASE}/users`);
+  return data.data ?? [];
 }
 
 export async function listUsersByLeague(leagueId: number): Promise<AdminUser[]> {
@@ -86,8 +86,8 @@ export async function removeLeagueAdmin(leagueId: number, userId: number): Promi
 }
 
 export async function listFields(): Promise<AdminField[]> {
-  const { data } = await api.get<AdminField[]>(`${BASE}/fields`);
-  return data;
+  const { data } = await api.get<{ data: AdminField[] }>(`${BASE}/fields`);
+  return data.data ?? [];
 }
 
 export async function getFieldById(fieldId: number): Promise<AdminField> {
