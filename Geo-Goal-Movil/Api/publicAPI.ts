@@ -1,4 +1,4 @@
-import api from "@/lib/axios";
+import api, { rawApi } from "@/lib/axios";
 import type {
   FixtureByRound,
   Match,
@@ -12,7 +12,7 @@ import type {
 const BASE = "/public";
 
 export async function getPublicLeagues(): Promise<PublicLeagueSummary[]> {
-  const { data } = await api.get<PublicLeagueSummary[] | { data: PublicLeagueSummary[] }>(
+  const { data } = await rawApi.get<PublicLeagueSummary[] | { data: PublicLeagueSummary[] }>(
     `${BASE}/leagues`
   );
   if (Array.isArray(data)) return data;
@@ -20,36 +20,36 @@ export async function getPublicLeagues(): Promise<PublicLeagueSummary[]> {
 }
 
 export async function getPublicLeagueDetail(leagueId: number): Promise<PublicLeagueDetail> {
-  const { data } = await api.get<PublicLeagueDetail>(`${BASE}/leagues/${leagueId}`);
+  const { data } = await rawApi.get<PublicLeagueDetail>(`${BASE}/leagues/${leagueId}`);
   return data;
 }
 
 export async function getPublicStandings(leagueId: number): Promise<PublicStanding[]> {
-  const { data } = await api.get<PublicStanding[]>(`${BASE}/leagues/${leagueId}/standings`);
+  const { data } = await rawApi.get<PublicStanding[]>(`${BASE}/leagues/${leagueId}/standings`);
   return Array.isArray(data) ? data : [];
 }
 
 export async function getPublicFixture(leagueId: number): Promise<FixtureByRound> {
-  const { data } = await api.get<FixtureByRound>(`${BASE}/leagues/${leagueId}/fixture`);
+  const { data } = await rawApi.get<FixtureByRound>(`${BASE}/leagues/${leagueId}/fixture`);
   return data && typeof data === "object" && !Array.isArray(data) ? data : {};
 }
 
 export async function getPublicFixtureWithLocations(
   leagueId: number
 ): Promise<Array<Match & { location?: { lat: number; lng: number; fieldAddress?: string } | null }>> {
-  const { data } = await api.get<
+  const { data } = await rawApi.get<
     Array<Match & { location?: { lat: number; lng: number; fieldAddress?: string } | null }>
   >(`${BASE}/leagues/${leagueId}/fixture/locations`);
   return Array.isArray(data) ? data : [];
 }
 
 export async function getPublicMatchDetail(matchId: number): Promise<PublicMatchDetailResponse> {
-  const { data } = await api.get<PublicMatchDetailResponse>(`${BASE}/matches/${matchId}/detail`);
+  const { data } = await rawApi.get<PublicMatchDetailResponse>(`${BASE}/matches/${matchId}/detail`);
   return data;
 }
 
 export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAnalyticsResponse> {
-  const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
+  const { data } = await rawApi.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
   return data;
 }
 

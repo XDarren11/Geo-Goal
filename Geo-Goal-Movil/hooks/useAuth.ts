@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getUser, logout as logoutApi } from "@/Api/AuthApi";
+import { decodeJwtPayload } from "@/lib/axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const useAuth = () => {
@@ -34,7 +35,12 @@ export const useAuth = () => {
 export const checkAuthToken = async (): Promise<boolean> => {
     try {
         const token = await AsyncStorage.getItem('AUTH_TOKEN');
-        if (token) return true;
+        if (token) {
+            const payload = decodeJwtPayload(token);
+            if (payload?.exp && payload.exp * 1000 > Date.now()) {
+                return true;
+            }
+        }
         const refreshToken = await AsyncStorage.getItem('REFRESH_TOKEN');
         return !!refreshToken;
     } catch (error) {

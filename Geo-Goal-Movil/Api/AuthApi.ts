@@ -167,9 +167,10 @@ export async function logout() {
         if (refreshToken) {
             await api.post('/auth/logout', { refreshToken });
         }
+    } catch (error) {
+        console.error("Error al cerrar sesión en el servidor", error);
+    } finally {
         await AsyncStorage.removeItem('AUTH_TOKEN');
         await AsyncStorage.removeItem('REFRESH_TOKEN');
-    } catch (error) {
-        console.error("Error al cerrar sesión", error);
     }
 }
