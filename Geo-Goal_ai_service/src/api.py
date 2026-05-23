@@ -5,7 +5,9 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import httpx
 from pydantic import BaseModel
 
 from api_client import APIClient
@@ -67,6 +69,30 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+security = HTTPBearer()
+
+
+async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    token = credentials.credentials
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                f"{API_BASE}/auth/user",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            r.raise_for_status()
+        except httpx.HTTPStatusError:
+            raise HTTPException(status_code=401, detail="Token inválido o expirado")
+        except Exception:
+            raise HTTPException(status_code=503, detail="No se puede conectar con el backend")
+
+    user: dict = r.json()
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden acceder")
+
+    return user
+
 
 # ---------------------------------------------------------------------------
 # Models
@@ -107,7 +133,7 @@ app.include_router(dashboard_router)
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health():
+async def health(_: dict = Depends(require_admin)):
     import state
     w = state.worker
     return HealthResponse(
@@ -120,7 +146,7 @@ async def health():
 
 
 @app.get("/jobs", response_model=JobStatus)
-async def get_jobs_status():
+async def get_jobs_status(_: dict = Depends(require_admin)):
     import state
     w = state.worker
     return JobStatus(
@@ -130,7 +156,7 @@ async def get_jobs_status():
 
 
 @app.post("/jobs/process")
-async def process_job_manually(req: ProcessJobRequest):
+async def process_job_manually(req: ProcessJobRequest, _: dict = Depends(require_admin)):
     """Manually trigger processing of a specific job."""
     import state
     w = state.worker
@@ -148,7 +174,7 @@ async def process_job_manually(req: ProcessJobRequest):
 
 
 @app.post("/jobs/poll")
-async def force_poll():
+async def force_poll(_: dict = Depends(require_admin)):
     """Force an immediate poll for pending jobs."""
     import state
     w = state.worker
