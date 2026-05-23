@@ -1,12 +1,46 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { BackHandler, Platform } from 'react-native';
 import Loader from '@/components/Loader';
 import { useAuth } from '@/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   const { data: user, isLoading } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const rootTabPaths = new Set([
+      '/(tabs)/home',
+      '/(tabs)/explore',
+      '/(tabs)/codes',
+      '/(tabs)/account',
+      '/(tabs)/public',
+      '/(tabs)/referee',
+    ]);
+
+    const guestRootPaths = new Set([
+      '/(tabs)/public',
+    ]);
+
+    const onBackPress = () => {
+      if (!user && guestRootPaths.has(pathname)) {
+        router.replace('/(Auth)/login');
+        return true;
+      }
+      if (rootTabPaths.has(pathname)) {
+        BackHandler.exitApp();
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [pathname, router, user]);
 
   if (isLoading) {
     return <Loader fullScreen label="Preparando tu inicio..." />;

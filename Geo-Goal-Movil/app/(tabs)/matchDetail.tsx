@@ -59,6 +59,12 @@ function buildIncidentMap(analytics?: MatchAnalyticsResponse) {
   return map;
 }
 
+function toNum(value: unknown): number | null {
+  if (value == null) return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 
 export default function MatchDetailMobileScreen() {
   const router = useRouter();

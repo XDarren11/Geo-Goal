@@ -161,4 +161,5 @@ api.interceptors.response.use(
     }
 );
 
+export { rawApi };
 export default api;
