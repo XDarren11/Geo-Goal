@@ -431,4 +431,12 @@ export class PublicService {
     }
     return MatchAnalyticsService.getMatchAnalytics(id);
   }
+
+  static async exportFrames(matchId: string, page = 1, pageSize = 1000) {
+    const id = Number(matchId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError(400, "ID de partido no válido");
+    }
+    return MatchAnalyticsService.exportFrames(id, page, pageSize);
+  }
 }

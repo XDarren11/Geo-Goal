@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { buildPublicMediator } from "../application/public/PublicMediator";
 import { PublicServiceAdapter } from "../services/PublicServiceAdapter";
 import {
+  ExportPublicFramesRequest,
   GetLeagueDetailRequest,
   GetLeaguesRequest,
   GetNewsRequest,
@@ -64,6 +65,16 @@ export class PublicController {
   static getMatchAnalytics = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const data = await publicMediator.send(new GetPublicMatchAnalyticsRequest(matchId));
+    res.json(data);
+  };
+
+  static exportFrames = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 1000;
+    const data = await publicMediator.send(
+      new ExportPublicFramesRequest(matchId, page, pageSize)
+    );
     res.json(data);
   };
 }

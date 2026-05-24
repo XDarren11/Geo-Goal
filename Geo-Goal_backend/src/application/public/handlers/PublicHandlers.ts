@@ -1,6 +1,7 @@
 import type { RequestHandler } from "../../mediator/RequestHandler";
 import type { IPublicService } from "../../../services/contracts/IPublicService";
 import {
+  ExportPublicFramesRequest,
   GetLeagueDetailRequest,
   GetLeaguesRequest,
   GetNewsRequest,
@@ -70,5 +71,14 @@ export class GetPublicMatchAnalyticsHandler
   constructor(private readonly svc: IPublicService) {}
   handle(request: GetPublicMatchAnalyticsRequest): Promise<unknown> {
     return this.svc.getMatchAnalytics(request.matchId);
+  }
+}
+
+export class ExportPublicFramesHandler
+  implements RequestHandler<ExportPublicFramesRequest, unknown>
+{
+  constructor(private readonly svc: IPublicService) {}
+  handle(request: ExportPublicFramesRequest): Promise<unknown> {
+    return this.svc.exportFrames(request.matchId, request.page, request.pageSize);
   }
 }

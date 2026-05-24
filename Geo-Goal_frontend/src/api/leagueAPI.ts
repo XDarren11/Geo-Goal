@@ -166,6 +166,25 @@ export async function getMatchAnalytics(matchId: number): Promise<MatchAnalytics
   return data;
 }
 
+export interface ExportFramesResult {
+  frames: unknown[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getMatchFramesExport(
+  matchId: number,
+  page = 1,
+  pageSize = 1000
+): Promise<ExportFramesResult> {
+  const { data } = await api.get<ExportFramesResult>(
+    `${BASE}/matches/${matchId}/frames/export`,
+    { params: { page, pageSize } }
+  );
+  return data;
+}
+
 export async function updateLeagueLogo(leagueId: number, logo: File): Promise<{ logoUrl: string }> {
   const formData = new FormData();
   formData.append("logo", logo);

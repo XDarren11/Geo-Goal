@@ -1102,4 +1102,8 @@ export class RefereeService {
   static async getMatchAnalytics(matchId: number) {
     return MatchAnalyticsService.getMatchAnalytics(matchId);
   }
+
+  static async exportFrames(matchId: number, page = 1, pageSize = 1000) {
+    return MatchAnalyticsService.exportFrames(matchId, page, pageSize);
+  }
 }

@@ -377,7 +377,7 @@ export class MatchAnalyticsService {
 
     if (!match) throw new AppError(404, "Partido no encontrado");
 
-    const [playerStats, teamStats, passEvents, spatialEvents, timelineEvents, trackingFrames] = await Promise.all([
+    const [playerStats, teamStats, passEvents, spatialEvents, timelineEvents, trackingFrames, totalFrames] = await Promise.all([
       PlayerMatchStat.findAll({
         where: { matchId },
         include: [
@@ -434,7 +434,7 @@ export class MatchAnalyticsService {
           "createdAt",
         ],
         order: [["matchTimestampSec", "ASC"], ["minute", "ASC"], ["id", "ASC"]],
-        limit: 200,
+        limit: 1000,
       }),
       MatchTrackingFrame.findAll({
         where: { matchId },
@@ -452,8 +452,9 @@ export class MatchAnalyticsService {
           "createdAt",
         ],
         order: [["timestampMs", "ASC"]],
-        limit: 160,
+        limit: 5000,
       }),
+      MatchTrackingFrame.count({ where: { matchId } }),
     ]);
 
     const passEdgesMap = new Map<string, { teamId: number; fromPlayerId: number; toPlayerId: number; count: number }>();
@@ -496,6 +497,7 @@ export class MatchAnalyticsService {
         totalPlayersWithStats: playerStats.length,
         totalPassEdges: passEdgesMap.size,
         totalSpatialEvents: spatialEvents.length,
+        totalFrames,
       },
       topPlayers: playerStats.slice(0, 10),
       playerStats,
@@ -505,5 +507,37 @@ export class MatchAnalyticsService {
       timelineEvents,
       trackingFrames,
     };
+  }
+
+  static async exportFrames(
+    matchId: number,
+    page: number = 1,
+    pageSize: number = 1000,
+  ): Promise<{ frames: unknown[]; total: number; page: number; pageSize: number }> {
+    const MAX_PAGE_SIZE = 2000;
+    const safePageSize = Math.min(pageSize, MAX_PAGE_SIZE);
+    const safePage = Math.max(1, page);
+
+    const { count: total, rows: frames } = await MatchTrackingFrame.findAndCountAll({
+      where: { matchId },
+      attributes: [
+        "id",
+        "timestampMs",
+        "period",
+        "ballX",
+        "ballY",
+        "ballZ",
+        "players",
+        "source",
+        "confidence",
+        "coordSystem",
+        "createdAt",
+      ],
+      order: [["timestampMs", "ASC"]],
+      limit: safePageSize,
+      offset: (safePage - 1) * safePageSize,
+    });
+
+    return { frames, total, page: safePage, pageSize: safePageSize };
   }
 }

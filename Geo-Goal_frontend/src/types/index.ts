@@ -559,6 +559,7 @@ export interface MatchAnalyticsResponse {
     totalPlayersWithStats: number
     totalPassEdges: number
     totalSpatialEvents: number
+    totalFrames: number
   }
   topPlayers: MatchAnalyticsPlayerStat[]
   playerStats: MatchAnalyticsPlayerStat[]

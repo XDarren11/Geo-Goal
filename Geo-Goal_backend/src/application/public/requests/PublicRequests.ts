@@ -65,3 +65,14 @@ export class GetPublicMatchAnalyticsRequest extends PublicRequest<unknown> {
     super();
   }
 }
+
+export class ExportPublicFramesRequest extends PublicRequest<unknown> {
+  readonly requestName = "public.exportFrames";
+  constructor(
+    public readonly matchId: string,
+    public readonly page: number = 1,
+    public readonly pageSize: number = 1000,
+  ) {
+    super();
+  }
+}
