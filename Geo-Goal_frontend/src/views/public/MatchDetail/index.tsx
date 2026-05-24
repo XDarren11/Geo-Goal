@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, type AnalysisStatusResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
+import { PitchPreview2D } from "@/components/Pitch/PitchPreview2D";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -136,6 +137,78 @@ function getFormationSpots(formation: string | null | undefined, lineupMode: 7 |
   const list = lineupMode === 7 ? FORMATIONS_7 : FORMATIONS_11;
   const found = list.find((f) => f.name === formation);
   return found?.spots ?? BASE_SPOTS;
+}
+
+/**
+ * Auto-asignación heurística: mapea cada detección al jugador de la formación
+ * más cercano del mismo equipo.
+ *
+ * Corrección vs plan original: el radio de búsqueda es dinámico (15% del largo
+ * de la cancha) en lugar de 25m fijos, para que funcione en canchas pequeñas
+ * (ej. fútbol 7 en cancha de 50m → radio ~7.5m) y estándar (105m → ~15.75m).
+ */
+import type { PreviewResponse as _PR } from "@/api/publicAPI";
+function autoAssignByFormation(
+  preview: _PR,
+  homeStarters: any[],
+  awayStarters: any[],
+  homeFormation: string | null | undefined,
+  awayFormation: string | null | undefined,
+  lineupMode: 7 | 11,
+): Record<number, number> {
+  const result: Record<number, number> = {};
+
+  // Radio dinámico: 15% del largo de cancha (cuadrado para comparar con dist²)
+  const radiusM = preview.pitch.length_m * 0.15;
+  const radiusSq = radiusM * radiusM;
+
+  const buildExpected = (starters: any[], formation: string | null | undefined, side: "home" | "away") => {
+    const spots = getFormationSpots(formation, lineupMode);
+    return starters.slice(0, spots.length).map((p, idx) => {
+      const base = spots[idx];
+      // Misma lógica de flip que MatchPitchPanel: visitante refleja en X
+      const xPct = side === "home" ? base.x : 100 - base.x;
+      return {
+        userId: p.userId as number | undefined,
+        x_m: (xPct / 100) * preview.pitch.length_m,
+        y_m: (base.y / 100) * preview.pitch.width_m,
+        side,
+      };
+    });
+  };
+
+  const expected = [
+    ...buildExpected(homeStarters, homeFormation, "home"),
+    ...buildExpected(awayStarters, awayFormation, "away"),
+  ];
+
+  const usedDetections = new Set<number>();
+  const usedUsers = new Set<number>();
+
+  for (const exp of expected) {
+    if (!exp.userId || usedUsers.has(exp.userId)) continue;
+    let bestId = -1;
+    let bestDist = Infinity;
+    for (const d of preview.players) {
+      if (usedDetections.has(d.tracker_id)) continue;
+      if (d.team !== exp.side) continue;
+      const dx = d.x_m - exp.x_m;
+      const dy = d.y_m - exp.y_m;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestId = d.tracker_id;
+      }
+    }
+    // Solo asignar si la detección más cercana está dentro del radio dinámico
+    if (bestId >= 0 && bestDist < radiusSq) {
+      result[bestId] = exp.userId;
+      usedDetections.add(bestId);
+      usedUsers.add(exp.userId);
+    }
+  }
+
+  return result;
 }
 
 function formatDateTime(value?: string | null) {
@@ -625,7 +698,7 @@ export default function PublicMatchDetailView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---- annotation state ----
-  const [uploadStep, setUploadStep] = useState<"select" | "annotate" | "progress">("select");
+  const [uploadStep, setUploadStep] = useState<"select" | "annotate" | "preview" | "progress">("select");
   const [srcPts, setSrcPts] = useState<Array<{ x: number; y: number }>>([]);
   const [frameExtracting, setFrameExtracting] = useState(false);
   const [frameError, setFrameError] = useState<string | null>(null);
@@ -634,6 +707,13 @@ export default function PublicMatchDetailView() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
   const [aiHealth, setAiHealth] = useState<AIServiceHealth | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  // Preview state (Fase 1 + 2)
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewResponse | null>(null);
+  // Fase 2: asignación de identidad tracker_id → userId
+  const [identityMap, setIdentityMap] = useState<Record<number, number>>({});
+  const [selectedTrackerId, setSelectedTrackerId] = useState<number | null>(null);
   // Player tagging
   const [annotationMode, setAnnotationMode] = useState<"keypoints" | "players">("keypoints");
   const [playerTags, setPlayerTags] = useState<Array<PlayerTag>>([]);
@@ -671,8 +751,11 @@ export default function PublicMatchDetailView() {
       };
 
       video.onloadeddata = () => {
-        setTimeout(() => { if (!handled) drawAndResolve(); }, 400);
-        video.currentTime = 0;
+        // Corrección: seek al 5% de la duración (mínimo 1s) para evitar
+        // frame 0 negro o con logo del canal de transmisión.
+        const seekTo = Math.max(1, (video.duration || 0) * 0.05);
+        video.currentTime = isFinite(seekTo) ? seekTo : 1;
+        setTimeout(() => { if (!handled) drawAndResolve(); }, 600);
       };
 
       video.onseeked = () => drawAndResolve();
@@ -744,7 +827,11 @@ export default function PublicMatchDetailView() {
     setSubmittingKeypoints(true);
     setUploadError(null);
     try {
-      await submitAnalysisKeypoints(id, srcPts, playerTags.length > 0 ? playerTags : undefined);
+      await submitAnalysisKeypoints(id, {
+        srcPts,
+        playerTags: playerTags.length > 0 ? playerTags : undefined,
+        identityMap: Object.keys(identityMap).length > 0 ? identityMap : undefined,
+      });
       setUploadStep("progress");
       setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
     } catch (e: any) {
@@ -796,6 +883,11 @@ export default function PublicMatchDetailView() {
     setFrameDataUrl(null);
     setAnalysisStatus(null);
     setUploadProgress(0);
+    setPreviewData(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+    setIdentityMap({});
+    setSelectedTrackerId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -826,6 +918,87 @@ export default function PublicMatchDetailView() {
 
   const handleResetPoints = () => {
     setSrcPts([]);
+  };
+
+  // Llama al endpoint preview del AI service para validar la homografía visualmente
+  const runPreview = async () => {
+    if (srcPts.length !== 4 || !frameDataUrl) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const result = await postAnalysisPreview(id, {
+        frameBase64: frameDataUrl,
+        srcPts,
+      });
+      if (!result.homography_ok) {
+        setPreviewError(result.error ?? "Homografía inválida — revisa las esquinas");
+        return;
+      }
+      if (result.players.length === 0) {
+        setPreviewError("No se detectaron jugadores en este frame. El AI service está buscando — intenta de nuevo o salta el preview.");
+        return;
+      }
+      setPreviewData(result);
+
+      // Auto-asignación heurística: pre-pobla identityMap por proximidad a
+      // la formación esperada. El admin solo corrige los erróneos.
+      const auto = autoAssignByFormation(
+        result,
+        data?.detail?.homeStartingXI ?? [],
+        data?.detail?.awayStartingXI ?? [],
+        data?.detail?.homeFormation,
+        data?.detail?.awayFormation,
+        effectiveLineupMode,
+      );
+      setIdentityMap(auto);
+
+      setUploadStep("preview");
+    } catch (e: any) {
+      setPreviewError(e?.response?.data?.error ?? e?.message ?? "Error al previsualizar — verifica que el AI service esté corriendo");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Fase 3: auto-disparar preview cuando se completan las 4 esquinas.
+  // Si el admin vuelve a "annotate" (ajustar esquinas), previewData se limpia
+  // y el effect vuelve a disparar cuando hay 4 puntos de nuevo.
+  useEffect(() => {
+    if (
+      uploadStep === "annotate" &&
+      srcPts.length === 4 &&
+      !previewData &&
+      !previewLoading &&
+      !previewError &&
+      frameDataUrl        // frame ya disponible (extraído localmente)
+    ) {
+      runPreview();
+    }
+    // runPreview es estable entre renders → no hace falta incluirla
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [srcPts.length, uploadStep, previewData, previewLoading, previewError, frameDataUrl]);
+
+  // Fase 2: asignar userId real a una detección seleccionada
+  const handleAssignIdentity = (userId: number) => {
+    if (selectedTrackerId == null) return;
+    setIdentityMap((prev) => {
+      const next: Record<number, number> = {};
+      // Limpiar asignaciones previas del mismo userId (no duplicar)
+      for (const [tid, uid] of Object.entries(prev)) {
+        if (uid !== userId) next[Number(tid)] = uid;
+      }
+      next[selectedTrackerId] = userId;
+      return next;
+    });
+    setSelectedTrackerId(null);
+  };
+
+  const handleUnassign = (trackerId: number) => {
+    setIdentityMap((prev) => {
+      const next = { ...prev };
+      delete next[trackerId];
+      return next;
+    });
   };
 
   // Redraw canvas markers when srcPts or playerTags changes
@@ -1148,6 +1321,18 @@ export default function PublicMatchDetailView() {
     if (positionFilter === "all") return coachRoster;
     return coachRoster.filter((p) => p.preferredPosition === positionFilter);
   }, [coachRoster, positionFilter]);
+
+  // Fase 2: mapa userId → datos del jugador (para el panel de asignación)
+  const rosterById = useMemo(() => {
+    const map = new Map<number, { name: string; number: number | null; side: "home" | "away" }>();
+    (data?.detail?.homeStartingXI ?? []).forEach((p: any) => {
+      if (p.userId) map.set(p.userId, { name: p.name ?? "—", number: p.number ?? null, side: "home" });
+    });
+    (data?.detail?.awayStartingXI ?? []).forEach((p: any) => {
+      if (p.userId) map.set(p.userId, { name: p.name ?? "—", number: p.number ?? null, side: "away" });
+    });
+    return map;
+  }, [data?.detail?.homeStartingXI, data?.detail?.awayStartingXI]);
 
   const enforcedLineupMode = [7, 11].includes(Number(data?.match?.league?.lineupMode))
     ? (Number(data?.match?.league?.lineupMode) as 7 | 11)
@@ -1993,28 +2178,170 @@ export default function PublicMatchDetailView() {
                         </div>
                       )}
 
-                      <button
-                        disabled={uploadingVideo || submittingKeypoints || srcPts.length !== 4}
-                        onClick={handleSubmitKeypoints}
-                        className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                      >
-                        {submittingKeypoints
-                          ? "Iniciando análisis…"
-                          : uploadingVideo
-                            ? "Esperando subida…"
-                            : "Iniciar análisis"}
-                      </button>
+                      {/* Botones: Previsualizar (Fase 1) o Saltar directo */}
+                      {srcPts.length === 4 && (
+                        <div className="flex flex-col gap-2 pt-1">
+                          {previewError && (
+                            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-300">
+                              {previewError}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={runPreview}
+                              disabled={previewLoading || uploadingVideo}
+                              className="flex-1 rounded-lg bg-geo-green px-4 py-2.5 text-sm font-bold text-black disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                            >
+                              {previewLoading ? "Analizando frame…" : "Previsualizar detección"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSubmitKeypoints}
+                              disabled={uploadingVideo || submittingKeypoints}
+                              className="rounded-lg border border-[var(--geo-border)] px-4 py-2.5 text-sm text-[var(--geo-text)] hover:bg-[var(--geo-bg)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                              title="Enviar keypoints directamente sin previsualizar"
+                            >
+                              {submittingKeypoints ? "Enviando…" : "Saltar y procesar"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {srcPts.length < 4 && (
+                        <button
+                          disabled={uploadingVideo || submittingKeypoints || srcPts.length !== 4}
+                          onClick={handleSubmitKeypoints}
+                          className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        >
+                          Iniciar análisis
+                        </button>
+                      )}
 
                       <p className="text-xs text-[var(--geo-text-muted)] text-center">
                         {uploadingVideo
                           ? "Subiendo video en segundo plano…"
                           : srcPts.length < 4
-                            ? "Marca los 4 puntos de esquina para habilitar el análisis."
+                            ? "Marca los 4 puntos de esquina para previsualizar."
                             : playerTags.length === 0
-                              ? "Opcional: cambia a modo Jugadores para identificar equipos y balón."
-                              : `${playerTags.length} jugador(es) etiquetado(s). Inicia el análisis cuando estés listo.`}
+                              ? "Opcional: previsualiza para validar la homografía antes de procesar."
+                              : `${playerTags.length} jugador(es) etiquetado(s). Previsualiza o procesa directamente.`}
                       </p>
                     </>
+                  )}
+
+                  {/* Step preview: cancha 2D + asignación de identidad (Fase 2) */}
+                  {uploadStep === "preview" && previewData && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-geo-green">
+                          Paso 2 de 2 — Asignar jugadores
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setUploadStep("annotate"); setPreviewData(null); setPreviewError(null); setIdentityMap({}); setSelectedTrackerId(null); }}
+                          className="text-sm text-[var(--geo-text-muted)] hover:text-geo-green transition-colors"
+                        >
+                          ← Ajustar esquinas
+                        </button>
+                      </div>
+
+                      <div className="rounded-lg border border-geo-green/30 bg-geo-green/10 p-3 text-xs text-[var(--geo-text-muted)]">
+                        <strong className="text-white">1.</strong> Clica un círculo en la cancha para seleccionarlo (se hará más grande).<br />
+                        <strong className="text-white">2.</strong> Clica el jugador de la lista que corresponde para asignarle identidad.<br />
+                        <strong className="text-white">3.</strong> Asigna al menos los más visibles — el resto usará números genéricos.
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-[1fr_240px]">
+                        <PitchPreview2D
+                          pitch={previewData.pitch}
+                          detections={previewData.players}
+                          ball={previewData.ball}
+                          identityMap={identityMap}
+                          rosterById={rosterById}
+                          onSelectDetection={(tid) => setSelectedTrackerId((prev) => prev === tid ? null : tid)}
+                          selectedTrackerId={selectedTrackerId}
+                        />
+
+                        {/* Panel lateral de alineación */}
+                        <div className="max-h-[420px] overflow-y-auto rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-2 space-y-1">
+                          {selectedTrackerId == null && (
+                            <p className="px-1 py-2 text-[10px] text-[var(--geo-text-muted)] italic">
+                              Selecciona un círculo en la cancha primero
+                            </p>
+                          )}
+
+                          <p className="px-1 text-xs font-bold text-emerald-400">LOCAL</p>
+                          {(data?.detail?.homeStartingXI ?? []).map((p: any) => {
+                            const assigned = Object.values(identityMap).includes(p.userId);
+                            return (
+                              <button
+                                key={p.userId}
+                                type="button"
+                                onClick={() => handleAssignIdentity(p.userId)}
+                                disabled={selectedTrackerId == null || assigned}
+                                className={`w-full text-left rounded px-2 py-1.5 text-xs transition ${
+                                  assigned
+                                    ? "bg-emerald-500/20 text-emerald-300 line-through opacity-60"
+                                    : selectedTrackerId != null
+                                      ? "bg-emerald-500/10 hover:bg-emerald-500/30 text-white cursor-pointer"
+                                      : "text-[var(--geo-text-muted)] cursor-not-allowed"
+                                }`}
+                              >
+                                #{p.number ?? "?"} {p.name}
+                              </button>
+                            );
+                          })}
+
+                          <p className="mt-2 px-1 text-xs font-bold text-sky-400">VISITANTE</p>
+                          {(data?.detail?.awayStartingXI ?? []).map((p: any) => {
+                            const assigned = Object.values(identityMap).includes(p.userId);
+                            return (
+                              <button
+                                key={p.userId}
+                                type="button"
+                                onClick={() => handleAssignIdentity(p.userId)}
+                                disabled={selectedTrackerId == null || assigned}
+                                className={`w-full text-left rounded px-2 py-1.5 text-xs transition ${
+                                  assigned
+                                    ? "bg-sky-500/20 text-sky-300 line-through opacity-60"
+                                    : selectedTrackerId != null
+                                      ? "bg-sky-500/10 hover:bg-sky-500/30 text-white cursor-pointer"
+                                      : "text-[var(--geo-text-muted)] cursor-not-allowed"
+                                }`}
+                              >
+                                #{p.number ?? "?"} {p.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Barra de estado de asignación */}
+                      <div className="flex items-center justify-between text-xs text-[var(--geo-text-muted)]">
+                        <span>
+                          Asignados: <strong className="text-white">{Object.keys(identityMap).length}</strong> / {previewData.players.length} detecciones
+                        </span>
+                        {selectedTrackerId != null && (
+                          <button
+                            type="button"
+                            onClick={() => { handleUnassign(selectedTrackerId); setSelectedTrackerId(null); }}
+                            className="text-amber-400 hover:underline"
+                          >
+                            Quitar asignación #{selectedTrackerId}
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleSubmitKeypoints}
+                        disabled={submittingKeypoints}
+                        className="w-full rounded-lg bg-geo-green px-4 py-3 text-sm font-bold text-black disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                      >
+                        {submittingKeypoints ? "Enviando…" : "Procesar video completo"}
+                      </button>
+                    </div>
                   )}
 
                   {/* Step 3: Processing progress */}

@@ -594,6 +594,7 @@ class VideoProcessor:
         api_base: Optional[str] = None,
         output_dir: str = "./output",
         player_tags: Optional[List[Dict[str, Any]]] = None,
+        identity_map: Optional[Dict[int, int]] = None,
     ) -> None:
         self.detector = ObjectDetector(model_name, device)
         self.tracker = ObjectTracker()
@@ -604,6 +605,8 @@ class VideoProcessor:
         self._cap: Optional[cv2.VideoCapture] = None
         self._fps: float = 25.0
         self._total_frames: int = 0
+        # tracker_id → real userId asignado por admin en el paso de preview
+        self.identity_map: Dict[int, int] = identity_map or {}
 
     # ------------------------------------------------------------------
     # Load video
@@ -852,7 +855,7 @@ class VideoProcessor:
 
             fd.players.append(
                 Player2D(
-                    id=tracker_id,
+                    id=self.identity_map.get(tracker_id, tracker_id),  # userId real si asignado, si no tracker_id
                     x=x,
                     y=y,
                     team=teams[i] if i < len(teams) else "unknown",

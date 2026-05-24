@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
+
+import os
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import httpx
 from pydantic import BaseModel
@@ -21,6 +24,19 @@ from state import (
     DEVICE,
 )
 from worker import AnalysisWorker
+
+# ---------------------------------------------------------------------------
+# Singleton detector — cargado UNA vez al arrancar, reutilizado en preview
+# ---------------------------------------------------------------------------
+_detector_singleton = None
+
+def get_detector():
+    """Retorna el ObjectDetector singleton (evita recargar YOLO en cada request)."""
+    global _detector_singleton
+    if _detector_singleton is None:
+        from video_processor import ObjectDetector
+        _detector_singleton = ObjectDetector(model_name=MODEL_NAME, device=DEVICE)
+    return _detector_singleton
 
 
 def get_api_client() -> APIClient:
@@ -50,6 +66,12 @@ async def lifespan(app: FastAPI):
     )
     worker_task = asyncio.create_task(state.worker.start())
     print(f"[api] Worker started (poll every {POLL_INTERVAL}s)")
+    # Pre-cargar el detector YOLO para que el primer /analysis/preview no sufra el delay
+    try:
+        get_detector()
+        print(f"[api] YOLO detector pre-loaded (model={MODEL_NAME}, device={DEVICE})")
+    except Exception as e:
+        print(f"[api] Warning: could not pre-load detector: {e}")
     yield
     print("[api] Shutting down...")
     if state.worker:
@@ -67,6 +89,28 @@ app = FastAPI(
     title="Geo-Goal AI Service",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+# CORS: permite que el frontend llame directo al AI service (para health checks
+# y, en deploy, podría llamar también /analysis/preview si decides exponerlo).
+# Orígenes configurables via env, default permisivo para dev local.
+_cors_origins_env = os.environ.get("AI_CORS_ORIGINS", "")
+if _cors_origins_env.strip():
+    _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+else:
+    _cors_origins = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:4000",
+        "http://127.0.0.1:5173",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 security = HTTPBearer()
@@ -120,6 +164,44 @@ class JobStatus(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Preview models
+# ---------------------------------------------------------------------------
+
+class PreviewSrcPt(BaseModel):
+    x: float
+    y: float
+
+class PreviewRequest(BaseModel):
+    frame_base64: str                              # "data:image/jpeg;base64,..." o solo base64
+    src_pts: Optional[List[PreviewSrcPt]] = None   # 4 esquinas en coords pixel
+    detect_pitch: bool = False                     # auto-detectar (no implementado en v1)
+
+class PreviewDetection(BaseModel):
+    tracker_id: int
+    x_m: float
+    y_m: float
+    px: float
+    py: float
+    team: str                                      # "home"|"away"|"referee"|"unknown"
+    bbox: List[float]                              # [x1,y1,x2,y2]
+
+class PreviewBall(BaseModel):
+    x_m: float
+    y_m: float
+    px: float
+    py: float
+
+class PreviewResponse(BaseModel):
+    homography_ok: bool
+    src_pts: List[PreviewSrcPt]
+    players: List[PreviewDetection]
+    ball: Optional[PreviewBall] = None
+    pitch: dict
+    frame_dims: dict
+    error: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
 # Dashboard routes (admin web UI)
 # ---------------------------------------------------------------------------
 
@@ -133,7 +215,12 @@ app.include_router(dashboard_router)
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health(_: dict = Depends(require_admin)):
+async def health():
+    """
+    Health check público — no requiere auth.
+    El frontend lo consulta para mostrar estado del servicio en el panel del admin.
+    No expone información sensible (solo flags de estado y device).
+    """
     import state
     w = state.worker
     return HealthResponse(
@@ -187,3 +274,139 @@ async def force_poll(_: dict = Depends(require_admin)):
         return {"message": "Job found and processing started", "jobId": pending[0]["jobId"]}
 
     return {"message": "No pending jobs found"}
+
+
+# ---------------------------------------------------------------------------
+# Preview endpoint (sync, sin tocar DB)
+# ---------------------------------------------------------------------------
+
+@app.post("/analysis/preview", response_model=PreviewResponse)
+async def analysis_preview(req: PreviewRequest, _: dict = Depends(require_admin)):
+    """Detecta jugadores en 1 frame y proyecta a cancha 2D. Sin tocar DB.
+
+    Correcciones aplicadas vs plan original:
+    - Usa el singleton get_detector() → YOLO no se recarga en cada request (~0ms vs ~2s).
+    - El frame se reescala a max 1280px antes de inferencia para mayor velocidad.
+    """
+    import base64
+    import cv2
+    import numpy as np
+    from video_processor import (
+        TeamClassifier,
+        HomographyCalculator,
+        PerspectiveTransformer,
+        DEFAULT_DST_PTS,
+        PITCH_LENGTH_M,
+        PITCH_WIDTH_M,
+    )
+
+    # 1. Decode base64 → np.ndarray (BGR)
+    try:
+        b64 = req.frame_base64.split(",")[-1]   # acepta data URL o raw base64
+        raw = base64.b64decode(b64)
+        arr = np.frombuffer(raw, np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise ValueError("imdecode retornó None — formato no soportado")
+    except Exception as e:
+        return PreviewResponse(
+            homography_ok=False, src_pts=[], players=[], ball=None,
+            pitch={"length_m": PITCH_LENGTH_M, "width_m": PITCH_WIDTH_M},
+            frame_dims={"width": 0, "height": 0},
+            error=f"Frame inválido: {e}",
+        )
+
+    h, w = frame.shape[:2]
+
+    # 2. Necesitamos exactamente 4 esquinas (auto-detect no implementado en v1)
+    if not req.src_pts or len(req.src_pts) != 4:
+        return PreviewResponse(
+            homography_ok=False, src_pts=[], players=[], ball=None,
+            pitch={"length_m": PITCH_LENGTH_M, "width_m": PITCH_WIDTH_M},
+            frame_dims={"width": w, "height": h},
+            error="Se requieren exactamente 4 puntos en src_pts",
+        )
+
+    src_pts_np = np.array([[p.x, p.y] for p in req.src_pts], dtype=np.float32)
+
+    # 3. Homografía
+    try:
+        H = HomographyCalculator().compute(src_pts_np, DEFAULT_DST_PTS, method="cv2")
+        transformer = PerspectiveTransformer(H)
+    except Exception as e:
+        return PreviewResponse(
+            homography_ok=False, src_pts=req.src_pts, players=[], ball=None,
+            pitch={"length_m": PITCH_LENGTH_M, "width_m": PITCH_WIDTH_M},
+            frame_dims={"width": w, "height": h},
+            error=f"Homografía falló: {e}",
+        )
+
+    # 4. Detección YOLO — SINGLETON (no recarga modelo)
+    # Resize a max 1280px para acelerar inferencia en frames de alta resolución
+    MAX_DIM = 1280
+    scale = 1.0
+    if max(h, w) > MAX_DIM:
+        scale = MAX_DIM / max(h, w)
+        frame_inf = cv2.resize(frame, (int(w * scale), int(h * scale)))
+    else:
+        frame_inf = frame
+
+    detector = get_detector()
+    detections = detector.detect(frame_inf, conf=0.3)
+
+    if len(detections) == 0:
+        return PreviewResponse(
+            homography_ok=True, src_pts=req.src_pts, players=[], ball=None,
+            pitch={"length_m": PITCH_LENGTH_M, "width_m": PITCH_WIDTH_M},
+            frame_dims={"width": w, "height": h},
+            error="No se detectaron jugadores en este frame. Prueba con un frame del minuto 1-5.",
+        )
+
+    # 5. K-means para clasificación de equipos (solo si hay ≥3 detecciones)
+    teams = (
+        TeamClassifier().fit_predict(frame_inf, detections)
+        if len(detections) >= 3
+        else ["unknown"] * len(detections)
+    )
+
+    # 6. Proyectar cada detección a coordenadas de cancha en metros
+    players: List[PreviewDetection] = []
+    ball: Optional[PreviewBall] = None
+
+    for i in range(len(detections)):
+        xyxy_inf = detections.xyxy[i]
+        cls = int(detections.class_id[i]) if detections.class_id is not None else 0
+
+        # Revertir escala → coordenadas del frame original para homografía correcta
+        xyxy_orig = xyxy_inf / scale if scale != 1.0 else xyxy_inf
+
+        bp = transformer.player_base_point(xyxy_orig)
+        try:
+            x_m, y_m = transformer.pixel_to_pitch(*bp)
+        except Exception:
+            continue
+
+        if cls == 32:   # sports ball (COCO class 32)
+            ball = PreviewBall(
+                x_m=round(x_m, 2), y_m=round(y_m, 2),
+                px=round(bp[0], 1), py=round(bp[1], 1),
+            )
+            continue
+
+        players.append(PreviewDetection(
+            tracker_id=i,
+            x_m=round(x_m, 2), y_m=round(y_m, 2),
+            px=round(bp[0], 1), py=round(bp[1], 1),
+            team=teams[i] if i < len(teams) else "unknown",
+            bbox=xyxy_orig.tolist(),
+        ))
+
+    return PreviewResponse(
+        homography_ok=True,
+        src_pts=req.src_pts,
+        players=players,
+        ball=ball,
+        pitch={"length_m": PITCH_LENGTH_M, "width_m": PITCH_WIDTH_M},
+        frame_dims={"width": w, "height": h},
+    )
+

@@ -954,7 +954,9 @@ export class RefereeService {
       throw new AppError(400, "players supera el límite permitido");
     }
 
-    if (!input.timestampMs || Number.isNaN(Number(input.timestampMs))) {
+    // OJO: NO usar `!input.timestampMs` — el frame 0 (inicio del video) tiene
+    // timestampMs = 0, que es falsy en JS y daba falso positivo de "obligatorio".
+    if (input.timestampMs == null || Number.isNaN(Number(input.timestampMs))) {
       throw new AppError(400, "timestampMs es obligatorio");
     }
 
@@ -970,7 +972,9 @@ export class RefereeService {
       source: input.source ?? "manual",
       confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
       coordSystem: input.coordSystem ?? "normalized",
-      recordedBy: userId,
+      // M2M caller (AI service) → userId = -1. Normalizamos a null para no
+      // violar la FK contra users (la columna es nullable).
+      recordedBy: userId > 0 ? userId : null,
     });
   }
 
@@ -996,7 +1000,9 @@ export class RefereeService {
       if (f.players.length > 60) {
         throw new AppError(400, `Frame ${i}: players supera el límite permitido`);
       }
-      if (!f.timestampMs || Number.isNaN(Number(f.timestampMs))) {
+      // Mismo bug que en registerTrackingFrame: el frame 0 tiene timestampMs=0
+      // (falsy en JS). Comparar contra null/undefined explícitamente.
+      if (f.timestampMs == null || Number.isNaN(Number(f.timestampMs))) {
         throw new AppError(400, `Frame ${i}: timestampMs es obligatorio`);
       }
     }
@@ -1009,6 +1015,11 @@ export class RefereeService {
     };
 
     const isMeters = frames.some((f) => (f as any).coordSystem === "meters");
+
+    // Cuando el caller es M2M (AI service), auth.ts pone fake user.id = -1.
+    // recordedBy es nullable en la tabla; un userId no positivo significa
+    // "no es un humano real", así que guardamos null para no violar la FK.
+    const recordedBy = userId > 0 ? userId : null;
 
     const transformedFrames = frames.map((f: any) => ({
       matchId: Number(matchId),
@@ -1035,16 +1046,56 @@ export class RefereeService {
       source: f.source ?? "video",
       confidence: f.confidence != null ? Math.max(0, Math.min(1, Number(f.confidence))) : 1,
       coordSystem: "normalized",
-      recordedBy: userId,
+      recordedBy,
     }));
 
-    const created = await MatchTrackingFrame.bulkCreate(transformedFrames);
+    // Chunking obligatorio: un bulkCreate con 30k filas genera un INSERT de
+    // ~9 MB en una sola query que Supabase Postgres corta por timeout/keep-alive
+    // ("Connection terminated unexpectedly"). Procesamos de 500 en 500.
+    //
+    // Cada chunk es una query independiente — si alguno falla, lo logueamos
+    // pero seguimos con los demás para no perder lo que ya entró.
+    const CHUNK_SIZE = 500;
+    const totalFrames = transformedFrames.length;
+    let totalCreated = 0;
+    const startedAt = Date.now();
 
-    const analytics = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+    console.log(`[tracking/batch] match ${matchId}: insertando ${totalFrames} frames en chunks de ${CHUNK_SIZE}`);
+
+    for (let offset = 0; offset < totalFrames; offset += CHUNK_SIZE) {
+      const chunk = transformedFrames.slice(offset, offset + CHUNK_SIZE);
+      try {
+        const created = await MatchTrackingFrame.bulkCreate(chunk);
+        totalCreated += created.length;
+        if (offset % (CHUNK_SIZE * 10) === 0 || offset + CHUNK_SIZE >= totalFrames) {
+          console.log(
+            `[tracking/batch] match ${matchId}: ${totalCreated}/${totalFrames} insertados (${Date.now() - startedAt}ms)`
+          );
+        }
+      } catch (err: any) {
+        console.error(
+          `[tracking/batch] match ${matchId}: chunk ${offset}-${offset + chunk.length} falló: ${err.message}`
+        );
+        // Re-lanzamos para que el AI service vea el error y pueda reintentar;
+        // los chunks anteriores ya están commiteados.
+        throw err;
+      }
+    }
+
+    console.log(
+      `[tracking/batch] match ${matchId}: COMPLETO ${totalCreated}/${totalFrames} frames en ${Date.now() - startedAt}ms`
+    );
+
+    // Recalcular stats en background — no bloquear al worker AI mientras procesa frames
+    setImmediate(() => {
+      MatchAnalyticsService.recalculateForMatch(Number(matchId))
+        .then((r) => console.log(`[recalc] match ${matchId}: ${r.rows} rows`))
+        .catch((e) => console.error(`[recalc] match ${matchId} failed:`, e));
+    });
 
     return {
-      created: created.length,
-      analyticsRows: analytics.rows,
+      created: totalCreated,
+      analyticsRows: null,  // se calcula en background; no bloquear al worker
     };
   }
 

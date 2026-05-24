@@ -24,7 +24,7 @@ export default function FriendlyMatchManagementView() {
     queryFn: getLeagues,
   });
 
-  const adminLeagues: any[] = leaguesData?.data ?? (Array.isArray(leaguesData) ? leaguesData : []);
+  const adminLeagues = leaguesData ?? [];
 
   const teamQueries = useQueries({
     queries: adminLeagues.map((league: any) => ({
