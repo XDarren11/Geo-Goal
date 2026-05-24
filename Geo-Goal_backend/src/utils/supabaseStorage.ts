@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import path from "path";
 
@@ -149,4 +150,111 @@ export async function uploadVideoToSupabase(
 
   const url = `${SUPABASE_PUBLIC_BASE_URL}/${SUPABASE_BUCKET}/${key}`;
   return { url, key };
+}
+
+/**
+ * Descarga un archivo de Supabase a un path local. Para procesarlo en backend
+ * y luego volver a subirlo.
+ */
+export async function downloadVideoFromSupabase(url: string, localPath: string): Promise<void> {
+  requireSupabaseConfig();
+  const fs = await import("fs");
+  const fsp = await import("fs/promises");
+
+  await fsp.mkdir(path.dirname(localPath), { recursive: true });
+
+  const r = await fetch(url);
+  if (!r.ok) {
+    throw new Error(`Supabase devolvió ${r.status} al descargar ${url}`);
+  }
+  if (!r.body) {
+    throw new Error("Respuesta de Supabase sin body");
+  }
+
+  const writeStream = fs.createWriteStream(localPath);
+  const reader = r.body.getReader();
+  await new Promise<void>((resolve, reject) => {
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!writeStream.write(value)) {
+            await new Promise<void>((res) => writeStream.once("drain", () => res()));
+          }
+        }
+        writeStream.end(() => resolve());
+      } catch (e) {
+        writeStream.destroy();
+        reject(e);
+      }
+    };
+    pump();
+  });
+}
+
+/**
+ * Reemplaza el contenido de una key existente en Supabase con un archivo local.
+ * Útil cuando hacemos re-encoding post-upload directo y queremos sustituir
+ * el original sin cambiar la URL pública del job.
+ */
+export async function replaceSupabaseObject(params: {
+  publicUrl: string;
+  localPath: string;
+  mimetype: string;
+}): Promise<void> {
+  requireSupabaseConfig();
+  const fs = await import("fs");
+  const key = getSupabaseObjectKeyFromUrl(params.publicUrl);
+  if (!key) {
+    throw new Error(`No se pudo extraer la key de Supabase desde ${params.publicUrl}`);
+  }
+
+  const fileBuffer = fs.readFileSync(params.localPath);
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: SUPABASE_BUCKET!,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: params.mimetype,
+    })
+  );
+}
+
+/**
+ * Genera una URL firmada de PUT para que el cliente suba un video directo a Supabase Storage.
+ *
+ * Beneficio en producción: el video no pasa por el backend (un solo hop del admin a Supabase
+ * en lugar de admin → backend → Supabase).
+ *
+ * El cliente debe hacer:
+ *   PUT <uploadUrl>
+ *   Content-Type: <mimetype>
+ *   body: <bytes del video>
+ */
+export async function createSignedVideoUploadUrl(params: {
+  matchId: number;
+  filename: string;
+  mimetype: string;
+  expiresInSeconds?: number;
+}): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+  requireSupabaseConfig();
+
+  const ext = path.extname(params.filename) || ".mp4";
+  const key = `analysis/${params.matchId}/${Date.now()}-${randomUUID()}${ext}`;
+
+  const command = new PutObjectCommand({
+    Bucket: SUPABASE_BUCKET!,
+    Key: key,
+    ContentType: params.mimetype,
+  });
+
+  const uploadUrl = await getSignedUrl(s3Client, command, {
+    expiresIn: params.expiresInSeconds ?? 3600,   // 1 hora por defecto
+  });
+
+  const publicUrl = `${SUPABASE_PUBLIC_BASE_URL}/${SUPABASE_BUCKET}/${key}`;
+
+  return { uploadUrl, publicUrl, key };
 }

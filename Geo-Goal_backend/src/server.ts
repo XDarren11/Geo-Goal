@@ -17,7 +17,10 @@ const app = express();
 
 app.use(cors(corsConfig));
 app.use(morgan("dev"));
-app.use(express.json());
+// Límite alto para aceptar batches de tracking frames del AI service.
+// Un partido de 90 min con frame_skip=4 genera ~33k frames ≈ 9 MB de JSON.
+// 50mb deja margen para videos largos o frame_skip=0.
+app.use(express.json({ limit: "50mb" }));
 
 registerRoutes(app);
 setupSwagger(app);

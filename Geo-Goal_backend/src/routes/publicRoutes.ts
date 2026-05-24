@@ -82,6 +82,29 @@ router.post(
   asyncHandler(MatchDetailController.uploadVideo)
 );
 
+// Subida directa: paso 1 — pedir URL firmada para subir DIRECTO a Supabase
+router.post(
+  "/matches/:matchId/upload-video/signed-url",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("filename").isString().withMessage("filename es requerido"),
+  body("mimetype").isString().withMessage("mimetype es requerido"),
+  body("sizeBytes").optional().isInt({ min: 1 }),
+  handleInputError,
+  asyncHandler(MatchDetailController.requestVideoUploadUrl)
+);
+
+// Subida directa: paso 2 — notificar que el upload a Supabase terminó
+router.post(
+  "/matches/:matchId/upload-video/complete",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("publicUrl").isURL().withMessage("publicUrl debe ser una URL válida"),
+  body("filename").optional().isString(),
+  handleInputError,
+  asyncHandler(MatchDetailController.completeVideoUpload)
+);
+
 router.get(
   "/matches/:matchId/analysis/status",
   authenticate,
@@ -106,6 +129,7 @@ router.put(
   body("playerTags.*.x").optional().isNumeric(),
   body("playerTags.*.y").optional().isNumeric(),
   body("playerTags.*.label").optional().isIn(["home", "away", "ball"]),
+  body("identityMap").optional().isObject().withMessage("identityMap debe ser un objeto"),
   handleInputError,
   asyncHandler(MatchDetailController.submitKeypoints)
 );
@@ -130,6 +154,18 @@ router.get(
   param("matchId").isInt().withMessage("ID de partido no válido"),
   handleInputError,
   asyncHandler(MatchDetailController.getAnalysisFrame)
+);
+
+router.post(
+  "/matches/:matchId/analysis/preview",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("frameBase64").isString().withMessage("frameBase64 es requerido"),
+  body("srcPts").isArray({ min: 4, max: 4 }).withMessage("srcPts debe tener exactamente 4 puntos"),
+  body("srcPts.*.x").isNumeric().withMessage("Cada punto debe tener x numérico"),
+  body("srcPts.*.y").isNumeric().withMessage("Cada punto debe tener y numérico"),
+  handleInputError,
+  asyncHandler(MatchDetailController.analysisPreview)
 );
 
 router.get(

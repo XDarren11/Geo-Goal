@@ -60,10 +60,11 @@ class AnalysisWorker:
         job_id = job["jobId"]
         match_id = job["matchId"]
         video_url = job.get("videoSupabaseUrl")
+        video_path_hint = job.get("videoPath")        # ruta local que conoce el backend
         src_pts_raw = job.get("srcPts")
 
-        if not video_url:
-            print(f"[worker] Job {job_id}: no videoSupabaseUrl, skipping")
+        if not video_url and not video_path_hint:
+            print(f"[worker] Job {job_id}: no videoSupabaseUrl ni videoPath, skipping")
             return
 
         if not src_pts_raw:
@@ -73,6 +74,7 @@ class AnalysisWorker:
         self._current_job = job_id
         output_dir = f"./output/{match_id}"
         video_path: Optional[str] = None
+        downloaded = False                              # solo borrar si descargamos nosotros
 
         try:
             # 1. Claim the job
@@ -80,10 +82,39 @@ class AnalysisWorker:
             claimed = self.api.claim_analysis_job(match_id)
             print(f"[worker] Job {job_id}: claimed — status: {claimed.get('status')}")
 
-            # 2. Download video from Supabase
-            self.api.report_progress(match_id, "processing", progress=5, current_step="downloading")
-            print(f"[worker] Job {job_id}: downloading video from {video_url}...")
-            video_path = self.api.download_video(video_url, f"./uploads/{match_id}.mp4")
+            # 2. Resolver fuente del video, en orden de preferencia:
+            #
+            #    (a) DEV — videoPath local: backend y AI comparten FS, 0 transferencia.
+            #    (b) PROD — streaming HTTP: cv2.VideoCapture(url) lee por HTTP range
+            #        requests, sin descargar el archivo completo. Requiere que el MP4
+            #        tenga el atom `moov` al inicio (fast-start). La mayoría de
+            #        encoders modernos lo hacen, pero no todos los celulares.
+            #    (c) Fallback — descarga completa: si el streaming no abre o falla
+            #        rápido, descargamos el archivo entero y procesamos local
+            #        (comportamiento histórico).
+            if video_path_hint and os.path.exists(video_path_hint):
+                # (a) Archivo local
+                video_path = video_path_hint
+                print(f"[worker] Job {job_id}: usando video LOCAL ({video_path}) — sin transferencia")
+                self.api.report_progress(match_id, "processing", progress=5, current_step="local-file")
+
+            elif video_url and self._streaming_works(video_url, job_id):
+                # (b) Streaming directo desde Supabase — sin disco
+                video_path = video_url
+                print(f"[worker] Job {job_id}: STREAMING directo desde {video_url}")
+                self.api.report_progress(match_id, "processing", progress=5, current_step="streaming")
+
+            elif video_url:
+                # (c) Fallback: descarga clásica
+                self.api.report_progress(match_id, "processing", progress=5, current_step="downloading")
+                print(f"[worker] Job {job_id}: streaming no funcionó, descargando {video_url}...")
+                video_path = self.api.download_video(video_url, f"./uploads/{match_id}.mp4")
+                downloaded = True
+
+            else:
+                raise RuntimeError(
+                    f"No hay forma de obtener el video: videoPath '{video_path_hint}' no existe y no hay videoSupabaseUrl"
+                )
 
             # 3. Build src_pts array
             src_pts = np.array([[pt["x"], pt["y"]] for pt in src_pts_raw], dtype=np.float32)
@@ -92,12 +123,19 @@ class AnalysisWorker:
             print(f"[worker] Job {job_id}: processing video...")
             player_tags = job.get("playerTags")
             print(f"[worker] Job {job_id}: {len(player_tags) if player_tags else 0} player tags from job")
+
+            # JSON keys son strings → convertir a int para el VideoProcessor
+            identity_map_raw = job.get("identityMap") or {}
+            identity_map = {int(k): int(v) for k, v in identity_map_raw.items()}
+            print(f"[worker] Job {job_id}: identity_map has {len(identity_map)} entries")
+
             vp = VideoProcessor(
                 model_name=self.model_name,
                 device=self.device,
                 api_base=self.api.api_base,
                 output_dir=output_dir,
                 player_tags=player_tags,
+                identity_map=identity_map,
             )
             vp.load_video(video_path)
             vp.set_homography(src_pts=src_pts, method="cv2")
@@ -108,6 +146,7 @@ class AnalysisWorker:
             vp.process(
                 export_json="match_data.json",
                 push_match_id=match_id,
+                frame_skip=int(os.environ.get("ANALYSIS_FRAME_SKIP", "4")),  # 5 fps en lugar de 25 → 5× más rápido
             )
 
             # 5. Mark completed
@@ -134,13 +173,73 @@ class AnalysisWorker:
 
         finally:
             self._current_job = None
-            # Cleanup downloaded video
-            if video_path:
+            # SOLO borrar si nosotros descargamos.
+            # Si usamos el archivo local del backend, NO tocar (lo creó él).
+            if downloaded and video_path:
                 try:
                     os.unlink(video_path)
                     print(f"[worker] Job {job_id}: cleaned up {video_path}")
                 except Exception:
                     pass
+
+    def _streaming_works(self, url: str, job_id: int, probe_timeout_s: float = 8.0) -> bool:
+        """
+        Verifica si podemos procesar el video por streaming HTTP en lugar de descargarlo.
+
+        Abre cv2.VideoCapture(url) y mide cuánto tarda en leer el primer frame:
+          - Rápido (<probe_timeout_s)  → el MP4 es fast-start, podemos hacer streaming.
+          - Lento o falla              → moov al final / red mala / formato no soportado
+                                          → mejor descargar el archivo completo.
+
+        Se ejecuta en un thread para poder forzar timeout (cv2 no respeta señales).
+        """
+        # Permitir desactivar globalmente con env var (útil para debugging)
+        if os.environ.get("DISABLE_VIDEO_STREAMING", "").lower() in ("1", "true", "yes"):
+            print(f"[worker] Job {job_id}: streaming desactivado por DISABLE_VIDEO_STREAMING")
+            return False
+
+        import cv2
+        import threading
+        import time
+
+        result = {"ok": False, "elapsed": 0.0, "error": None}
+
+        def _probe():
+            t0 = time.time()
+            cap = None
+            try:
+                cap = cv2.VideoCapture(url)
+                if not cap.isOpened():
+                    result["error"] = "VideoCapture no abrió"
+                    return
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    result["error"] = "no se pudo leer el primer frame"
+                    return
+                result["ok"] = True
+            except Exception as e:
+                result["error"] = str(e)
+            finally:
+                if cap is not None:
+                    cap.release()
+                result["elapsed"] = time.time() - t0
+
+        thread = threading.Thread(target=_probe, daemon=True)
+        thread.start()
+        thread.join(timeout=probe_timeout_s)
+
+        if thread.is_alive():
+            # El probe sigue corriendo tras el timeout → el video es muy lento de abrir,
+            # casi seguro moov al final. Lo dejamos como daemon (morirá con el proceso).
+            print(f"[worker] Job {job_id}: probe HTTP excedió {probe_timeout_s}s → fallback a descarga")
+            return False
+
+        if not result["ok"]:
+            print(f"[worker] Job {job_id}: probe HTTP falló ({result['error']}) → fallback a descarga")
+            return False
+
+        print(f"[worker] Job {job_id}: probe HTTP OK en {result['elapsed']:.2f}s → streaming viable")
+        return True
 
     def _instrument_progress(self, vp: VideoProcessor, match_id: int) -> None:
         """Wrap the exporter to use our API client for progress reporting."""
