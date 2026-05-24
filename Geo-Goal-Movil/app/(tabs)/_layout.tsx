@@ -1,14 +1,25 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import React from 'react';
-import { BackHandler, Platform } from 'react-native';
+import { BackHandler, Platform, ToastAndroid } from 'react-native';
 import Loader from '@/components/Loader';
 import { useAuth } from '@/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
+
+const EXIT_DELAY_MS = 2000;
 
 export default function TabLayout() {
   const { data: user, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const exitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canExitRef = React.useRef(false);
+
+  // Limpiar el timer al desmontar
+  React.useEffect(() => {
+    return () => {
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+    };
+  }, []);
 
   React.useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -27,14 +38,32 @@ export default function TabLayout() {
     ]);
 
     const onBackPress = () => {
+      // Invitado en pestaña pública → redirigir a login
       if (!user && guestRootPaths.has(pathname)) {
         router.replace('/(Auth)/login');
         return true;
       }
-      if (rootTabPaths.has(pathname)) {
-        BackHandler.exitApp();
+
+      // Usuario autenticado en una pestaña raíz → doble toque para salir
+      if (user && rootTabPaths.has(pathname)) {
+        if (canExitRef.current) {
+          BackHandler.exitApp();
+          return true;
+        }
+
+        canExitRef.current = true;
+        ToastAndroid.show('Presiona de nuevo para salir', ToastAndroid.SHORT);
+
+        if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = setTimeout(() => {
+          canExitRef.current = false;
+        }, EXIT_DELAY_MS);
+
         return true;
       }
+
+      // Pantalla de detalle (leagueDetail, teamDetail, matchDetail, etc.)
+      // → dejar que el Stack nativo maneje el pop
       return false;
     };
 
@@ -69,6 +98,7 @@ export default function TabLayout() {
       }}>
       {!isGuest ? (
         <>
+          {/* Dashboard — todos los roles */}
           <Tabs.Screen
             name="home"
             options={{
@@ -76,13 +106,19 @@ export default function TabLayout() {
               tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
             }}
           />
-          <Tabs.Screen
-            name="explore"
-            options={{
-              title: 'Explore',
-              tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
-            }}
-          />
+
+          {/* Explore (ligas/equipos) — admin, coach, player */}
+          {user?.role !== 'referee' && (
+            <Tabs.Screen
+              name="explore"
+              options={{
+                title: 'Explore',
+                tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
+              }}
+            />
+          )}
+
+          {/* Códigos — todos los roles */}
           <Tabs.Screen
             name="codes"
             options={{
@@ -90,6 +126,8 @@ export default function TabLayout() {
               tabBarIcon: ({ color, size }) => <Ionicons name="key" size={size} color={color} />,
             }}
           />
+
+          {/* Cuenta — todos los roles */}
           <Tabs.Screen
             name="account"
             options={{
@@ -97,6 +135,8 @@ export default function TabLayout() {
               tabBarIcon: ({ color, size }) => <Ionicons name="settings" size={size} color={color} />,
             }}
           />
+
+          {/* Árbitro — solo referee */}
           {user?.role === 'referee' && (
             <Tabs.Screen
               name="referee"

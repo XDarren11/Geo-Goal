@@ -1,6 +1,7 @@
 import type { Request } from "../../mediator/Request";
 import type {
   AssignRefereeBodyDTO,
+  AutoAssignRefereesResultDTO,
   MatchDetailUpsertBodyDTO,
   RegisterBulkEventsBodyDTO,
   RegisterMatchEventBodyDTO,
@@ -101,6 +102,16 @@ export class RegisterTrackingBatchRequest extends MFR<unknown> {
 
 export class GetLeagueRefereesRequest extends MFR<unknown> {
   readonly requestName = "matchDetail.getLeagueReferees";
+  constructor(
+    public readonly leagueId: number,
+    public readonly actorUserId: number
+  ) {
+    super();
+  }
+}
+
+export class AutoAssignRefereesRequest extends MFR<AutoAssignRefereesResultDTO> {
+  readonly requestName = "matchDetail.autoAssignReferees";
   constructor(
     public readonly leagueId: number,
     public readonly actorUserId: number

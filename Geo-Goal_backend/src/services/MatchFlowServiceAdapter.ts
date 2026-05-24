@@ -63,6 +63,10 @@ export class MatchFlowServiceAdapter implements IMatchFlowService {
     return RefereeService.registerTrackingBatch(matchId, userId, body as never);
   }
 
+  autoAssignRefereesForLeague(leagueId: number, actorUserId: number): Promise<unknown> {
+    return RefereeService.autoAssignRefereesForLeague(leagueId, actorUserId);
+  }
+
   getLeagueReferees(leagueId: number, actorUserId: number): Promise<unknown> {
     return RefereeService.getLeagueReferees(leagueId, actorUserId);
   }

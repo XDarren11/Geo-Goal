@@ -6,6 +6,7 @@ import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAna
 import { getPlayersTeam, updateCoachLineup } from '@/Api/teamAPI';
 import type { MatchAnalyticsResponse, MatchDetailLineupEntry, TrackingFramePlayer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
+import BackButton from '@/components/BackButton';
 import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -564,9 +565,7 @@ export default function MatchDetailMobileScreen() {
     <>
     <ScrollView className="flex-1 bg-geo-black px-4 py-5">
       <View className="flex-row items-center mb-4">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80 border border-geo-green/20">
-          <Ionicons name="arrow-back" size={20} color="#39FF14" />
-        </TouchableOpacity>
+        <BackButton variant="compact" />
         <View className="flex-1">
           <Text className="text-white font-extrabold text-lg" numberOfLines={1}>{match.homeTeam?.name || 'Local'} vs {match.awayTeam?.name || 'Visitante'}</Text>
           <Text className="text-gray-400 text-xs">{match.roundName}</Text>

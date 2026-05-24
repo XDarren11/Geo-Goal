@@ -4,6 +4,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import BackButton from '@/components/BackButton';
 
 export default function NavigationScreen() {
   const router = useRouter();
@@ -48,9 +49,7 @@ export default function NavigationScreen() {
     return (
       <View className="flex-1 bg-gray-900 items-center justify-center px-6">
         <Text className="text-red-400 font-semibold text-center mb-4">No se encontró la ubicación del partido.</Text>
-        <TouchableOpacity onPress={() => router.back()} className="bg-geo-green px-4 py-2 rounded-full">
-          <Text className="text-geo-black font-bold">Volver</Text>
-        </TouchableOpacity>
+        <BackButton />
       </View>
     );
   }
@@ -59,9 +58,7 @@ export default function NavigationScreen() {
     return (
       <View className="flex-1 bg-gray-900 items-center justify-center px-6">
         <Text className="text-yellow-300 font-semibold text-center mb-4">Debes permitir el acceso a ubicación para ver la ruta.</Text>
-        <TouchableOpacity onPress={() => router.back()} className="bg-geo-green px-4 py-2 rounded-full">
-          <Text className="text-geo-black font-bold">Volver</Text>
-        </TouchableOpacity>
+        <BackButton />
       </View>
     );
   }
@@ -70,9 +67,7 @@ export default function NavigationScreen() {
     return (
       <View className="flex-1 bg-gray-900 items-center justify-center px-6">
         <Text className="text-red-400 font-semibold text-center mb-4">{locationError}</Text>
-        <TouchableOpacity onPress={() => router.back()} className="bg-geo-green px-4 py-2 rounded-full">
-          <Text className="text-geo-black font-bold">Volver</Text>
-        </TouchableOpacity>
+        <BackButton />
       </View>
     );
   }
@@ -129,12 +124,7 @@ export default function NavigationScreen() {
         </View>
       ) : null}
 
-      <TouchableOpacity
-        onPress={() => router.back()}
-        className="absolute top-12 left-5 bg-gray-900/80 p-3 rounded-full"
-      >
-        <Text className="text-white">⬅ Volver</Text>
-      </TouchableOpacity>
+      <BackButton variant="floating" label="" />
     </View>
   );
 }

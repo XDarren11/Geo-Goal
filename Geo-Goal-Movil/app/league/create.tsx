@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { createLeague } from "@/Api/leagueAPI"; // Usamos tu ruta de API
-import { Ionicons } from "@expo/vector-icons";
+import BackButton from "@/components/BackButton";
 
 type Form = { name: string; description: string; lineupMode: 7 | 11 };
 
@@ -28,14 +28,7 @@ export default function CreateLeagueView() {
 
   return (
     <ScrollView className="flex-1 bg-geo-black px-5 pt-8">
-      {/* Botón de regreso */}
-      <TouchableOpacity 
-        onPress={() => router.back()} 
-        className="flex-row items-center mb-6"
-      >
-        <Ionicons name="arrow-back" size={24} color="#39FF14" />
-        <Text className="text-geo-green ml-2 font-bold text-lg">Volver</Text>
-      </TouchableOpacity>
+      <BackButton />
 
       <Text className="text-gray-400 text-xs">Administración</Text>
       <Text className="font-geo text-4xl text-white tracking-wide">

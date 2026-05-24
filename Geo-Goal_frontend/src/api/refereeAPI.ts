@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { MatchAnalyticsResponse, PublicNewsItem } from "@/types";
+import type { AutoAssignResult, MatchAnalyticsResponse, PublicNewsItem } from "@/types";
 
 export type RefereeAssignment = {
   id: number;
@@ -163,5 +163,10 @@ export async function getMatchAnalytics(matchId: number): Promise<MatchAnalytics
 
 export async function getRefereeDashboardSummary(): Promise<RefereeDashboardSummary> {
   const { data } = await api.get<RefereeDashboardSummary>('/league/referee/dashboard');
+  return data;
+}
+
+export async function autoAssignRefereesForLeague(leagueId: number): Promise<AutoAssignResult> {
+  const { data } = await api.post<AutoAssignResult>(`/league/${leagueId}/auto-assign-referees`);
   return data;
 }

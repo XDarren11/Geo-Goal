@@ -10,6 +10,7 @@ import type {
 import { MatchFlowServiceAdapter } from "../services/MatchFlowServiceAdapter";
 import {
   AssignRefereeRequest,
+  AutoAssignRefereesRequest,
   GetFlowMatchAnalyticsRequest,
   GetLeagueRefereesRequest,
   GetRefereeDashboardRequest,
@@ -124,6 +125,14 @@ export class MatchDetailController {
     const { leagueId } = req.params;
     const data = await matchDetailMediator.send(
       new GetLeagueRefereesRequest(Number(leagueId), req.user!.id)
+    );
+    res.json(data);
+  };
+
+  static autoAssignReferees = async (req: Request, res: Response): Promise<void> => {
+    const { leagueId } = req.params;
+    const data = await matchDetailMediator.send(
+      new AutoAssignRefereesRequest(Number(leagueId), req.user!.id)
     );
     res.json(data);
   };

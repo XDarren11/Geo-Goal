@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback } from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 
 SplashScreen.preventAutoHideAsync();
@@ -17,7 +17,7 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
+    ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
   });
 
   const onLayoutRootView = useCallback(async () => {
