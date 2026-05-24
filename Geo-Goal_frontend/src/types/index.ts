@@ -40,6 +40,8 @@ export interface League {
   managerId?: number
   logoUrl?: string | null
   lineupMode?: 7 | 11
+  refereeAssignmentMode?: 'manual' | 'auto'
+  autoAssignWindowDays?: number
   teams?: Team[]
 }
 
