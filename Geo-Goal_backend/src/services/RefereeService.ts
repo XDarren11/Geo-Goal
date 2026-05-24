@@ -265,25 +265,13 @@ export class RefereeService {
       throw new AppError(409, "Solo puedes asignar árbitro a partidos próximos");
     }
 
-    const conflictingAssignment = await MatchRefereeAssignment.findOne({
-      where: {
-        refereeUserId: input.refereeUserId,
-        matchId: { [Op.ne]: Number(matchId) },
-        status: { [Op.in]: ["assigned", "checked_in"] },
-      },
-      include: [
-        {
-          model: Match,
-          required: true,
-          where: {
-            date: match.date,
-          },
-          attributes: ["id", "date", "roundName"],
-        },
-      ],
-    });
+    const hasConflict = await this.refereeHasConflictAtDate(
+      input.refereeUserId,
+      match.date,
+      Number(matchId)
+    );
 
-    if (conflictingAssignment) {
+    if (hasConflict) {
       throw new AppError(
         409,
         "El árbitro ya tiene un partido asignado en esa misma fecha y hora"
@@ -324,8 +312,217 @@ export class RefereeService {
     });
 
     await NotificationService.notifyRefereeAssigned(Number(matchId), input.refereeUserId);
+    await NotificationService.notifyMatchParticipantsRefereeAssigned(
+      Number(matchId),
+      referee.name
+    );
 
     return created ? "Árbitro asignado correctamente" : "Asignación de árbitro actualizada";
+  }
+
+  private static async refereeHasConflictAtDate(
+    refereeUserId: number,
+    date: Date,
+    excludeMatchId?: number
+  ): Promise<boolean> {
+    const where: Record<string, unknown> = {
+      refereeUserId,
+      status: { [Op.in]: ["assigned", "checked_in"] },
+    };
+    if (excludeMatchId != null) {
+      where.matchId = { [Op.ne]: excludeMatchId };
+    }
+
+    const conflict = await MatchRefereeAssignment.findOne({
+      where,
+      include: [
+        {
+          model: Match,
+          required: true,
+          where: { date },
+          attributes: ["id"],
+        },
+      ],
+    });
+
+    return conflict != null;
+  }
+
+  static async autoAssignRefereesForLeague(leagueId: number, actorUserId: number) {
+    await this.ensureLeagueAdmin(leagueId, actorUserId);
+
+    const league = await League.findByPk(leagueId, {
+      attributes: ["id", "refereeAssignmentMode", "autoAssignWindowDays"],
+    });
+    if (!league) throw new AppError(404, "Liga no encontrada");
+
+    if (league.refereeAssignmentMode === "manual") {
+      return {
+        assigned: 0,
+        skipped: 0,
+        message:
+          "La liga está en modo manual. Cambia a modo automático para usar esta función.",
+      };
+    }
+
+    const refereeRows = await LeagueAdmin.findAll({
+      where: { leagueId },
+      include: [
+        {
+          model: User,
+          as: "adminUser",
+          where: { role: "referee" },
+          attributes: ["id", "name", "email"],
+          required: true,
+        },
+      ],
+    });
+
+    const referees = refereeRows.map((r) => r.adminUser).filter(Boolean) as User[];
+    if (!referees.length) {
+      return {
+        assigned: 0,
+        skipped: 0,
+        message: "No hay árbitros registrados en esta liga.",
+      };
+    }
+
+    const windowDays = league.autoAssignWindowDays ?? 7;
+    const now = new Date();
+    const windowEnd = new Date(now);
+    windowEnd.setDate(windowEnd.getDate() + windowDays);
+
+    const assignedMatchIds = (
+      await MatchRefereeAssignment.findAll({
+        where: { leagueId },
+        attributes: ["matchId"],
+      })
+    ).map((a) => a.matchId);
+
+    const matchWhere: Record<string, unknown> = {
+      leagueId,
+      played: false,
+      date: {
+        [Op.gte]: now,
+        [Op.lte]: windowEnd,
+      },
+    };
+    if (assignedMatchIds.length) {
+      matchWhere.id = { [Op.notIn]: assignedMatchIds };
+    }
+
+    const matches = await Match.findAll({
+      where: matchWhere,
+      order: [["date", "ASC"]],
+    });
+
+    if (!matches.length) {
+      return {
+        assigned: 0,
+        skipped: 0,
+        message:
+          "No hay partidos sin árbitro en la ventana de asignación.",
+      };
+    }
+
+    const refereeIds = referees.map((r) => r.id);
+
+    const upcomingCounts = await Promise.all(
+      refereeIds.map(async (refId) => {
+        const count = await MatchRefereeAssignment.count({
+          where: {
+            refereeUserId: refId,
+            status: { [Op.in]: ["assigned", "checked_in"] },
+          },
+          include: [
+            {
+              model: Match,
+              required: true,
+              where: { date: { [Op.gte]: now }, played: false },
+              attributes: [],
+            },
+          ],
+        });
+        return { refereeId: refId, count };
+      })
+    );
+
+    const countMap = new Map<number, number>(
+      upcomingCounts.map((c) => [c.refereeId, c.count])
+    );
+
+    const details: Array<{
+      matchId: number;
+      roundName: string;
+      refereeUserId: number | null;
+      refereeName: string;
+      status: string;
+    }> = [];
+    let assigned = 0;
+    let skipped = 0;
+
+    for (const match of matches) {
+      const available: User[] = [];
+
+      for (const ref of referees) {
+        const hasConflict = await this.refereeHasConflictAtDate(
+          ref.id,
+          match.date
+        );
+        if (!hasConflict) {
+          available.push(ref);
+        }
+      }
+
+      if (!available.length) {
+        skipped++;
+        details.push({
+          matchId: match.id,
+          roundName: match.roundName,
+          refereeUserId: null,
+          refereeName: "",
+          status: "skipped: sin árbitro disponible",
+        });
+        continue;
+      }
+
+      available.sort(
+        (a, b) => (countMap.get(a.id) ?? 0) - (countMap.get(b.id) ?? 0)
+      );
+      const selected = available[0];
+
+      await MatchRefereeAssignment.create({
+        matchId: match.id,
+        leagueId,
+        refereeUserId: selected.id,
+        assignedBy: null,
+        status: "assigned",
+      });
+
+      await NotificationService.notifyRefereeAssigned(match.id, selected.id);
+      await NotificationService.notifyMatchParticipantsRefereeAssigned(
+        match.id,
+        selected.name
+      );
+
+      countMap.set(selected.id, (countMap.get(selected.id) ?? 0) + 1);
+      assigned++;
+
+      details.push({
+        matchId: match.id,
+        roundName: match.roundName,
+        refereeUserId: selected.id,
+        refereeName: selected.name,
+        status: "assigned",
+      });
+    }
+
+    return {
+      assigned,
+      skipped,
+      message: `Se asignaron ${assigned} árbitros. ${skipped} partidos sin asignar.`,
+      details,
+    };
   }
 
   static async getLeagueReferees(leagueId: number, actorUserId: number) {

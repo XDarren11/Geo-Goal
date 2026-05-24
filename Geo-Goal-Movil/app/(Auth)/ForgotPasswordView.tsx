@@ -18,6 +18,7 @@ import { useMutation } from '@tanstack/react-query';
 // Importa tus tipos y api
 import { ForgotPasswordForm } from '@/types/index';
 import { forgotPassword } from '@/Api/AuthApi';
+import BackButton from '@/components/BackButton';
 
 export default function ForgotPasswordView() {
     const router = useRouter();
@@ -70,6 +71,8 @@ export default function ForgotPasswordView() {
                     {/* Contenedor Negro */}
                     {/* Nota: Mantenemos el pb-40 para evitar el bug visual del teclado */}
                     <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-40 justify-start">
+
+                        <BackButton label="" />
 
                         {/* Texto descriptivo adaptado del web */}
                         <Text className="text-white text-lg font-light mb-8 text-center">

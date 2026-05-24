@@ -2,6 +2,7 @@ import { Mediator } from "../mediator/Mediator";
 import type { IMatchFlowService } from "../../services/contracts/IMatchFlowService";
 import {
   AssignRefereeHandler,
+  AutoAssignRefereesHandler,
   GetFlowMatchAnalyticsHandler,
   GetLeagueRefereesHandler,
   GetRefereeDashboardHandler,
@@ -26,6 +27,7 @@ export function buildMatchDetailMediator(svc: IMatchFlowService): Mediator {
   m.register("matchDetail.registerBulkEvents", new RegisterBulkEventsHandler(svc));
   m.register("matchDetail.registerTrackingFrame", new RegisterTrackingFrameHandler(svc));
   m.register("matchDetail.registerTrackingBatch", new RegisterTrackingBatchHandler(svc));
+  m.register("matchDetail.autoAssignReferees", new AutoAssignRefereesHandler(svc));
   m.register("matchDetail.getLeagueReferees", new GetLeagueRefereesHandler(svc));
   m.register("matchDetail.getUpcomingLeagueMatches", new GetUpcomingLeagueMatchesHandler(svc));
   m.register("matchDetail.getMatchAnalytics", new GetFlowMatchAnalyticsHandler(svc));

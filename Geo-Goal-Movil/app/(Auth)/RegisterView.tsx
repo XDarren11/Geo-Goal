@@ -17,6 +17,7 @@ import { useRouter, Link } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
 import type { UserRegistrationForm } from '@/types/index';
 import { createAccount } from '@/Api/AuthApi';
+import BackButton from '@/components/BackButton';
 
 export default function RegisterView() {
     const router = useRouter();
@@ -60,6 +61,8 @@ export default function RegisterView() {
                     </View>
 
                     <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-40 justify-start">
+
+                        <BackButton label="" />
 
                         {/* --- Input: Nombre --- */}
                         <View className="mb-6">

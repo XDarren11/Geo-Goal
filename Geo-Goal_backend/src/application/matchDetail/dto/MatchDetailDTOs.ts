@@ -49,3 +49,16 @@ export type RegisterTrackingBatchBodyDTO = {
  * Upsert de detalle de partido: muchos campos opcionales; el servicio valida.
  */
 export type MatchDetailUpsertBodyDTO = Record<string, unknown>;
+
+export type AutoAssignRefereesResultDTO = {
+  assigned: number;
+  skipped: number;
+  message: string;
+  details: Array<{
+    matchId: number;
+    roundName: string;
+    refereeUserId: number | null;
+    refereeName: string;
+    status: string;
+  }>;
+};

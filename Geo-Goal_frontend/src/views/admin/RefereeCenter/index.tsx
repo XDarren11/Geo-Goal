@@ -2,13 +2,16 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   assignRefereeToMatch,
+  autoAssignRefereesForLeague,
   getMatchAnalytics,
   getRefereeTodayMatches,
   registerMatchEvent,
   registerTrackingFrame,
   type RefereeAssignment,
 } from "@/api/refereeAPI";
+import { getLeagues } from "@/api/leagueAPI";
 import { useAuth } from "@/hooks/useAuth";
+import type { AutoAssignResult } from "@/types";
 
 const EVENT_OPTIONS = [
   "goal",
@@ -37,6 +40,8 @@ export default function RefereeCenterView() {
   const [eventType, setEventType] = useState<(typeof EVENT_OPTIONS)[number]>("goal");
   const [assignMatchId, setAssignMatchId] = useState("");
   const [assignRefereeUserId, setAssignRefereeUserId] = useState("");
+  const [autoLeagueId, setAutoLeagueId] = useState("");
+  const [autoResult, setAutoResult] = useState<AutoAssignResult | null>(null);
   const [minute, setMinute] = useState("1");
   const [extraMinute, setExtraMinute] = useState("");
   const [teamId, setTeamId] = useState("");
@@ -105,6 +110,25 @@ export default function RefereeCenterView() {
     },
   });
 
+  const { data: leagues = [] } = useQuery({
+    queryKey: ["leagues"],
+    queryFn: getLeagues,
+    enabled: role === "admin",
+  });
+
+  const autoAssignMutation = useMutation({
+    mutationFn: async () => {
+      if (!autoLeagueId) throw new Error("Selecciona una liga");
+      return autoAssignRefereesForLeague(Number(autoLeagueId));
+    },
+    onSuccess: (data) => {
+      setAutoResult(data);
+    },
+    onError: (e: any) => {
+      alert(e?.response?.data?.error || e?.message || "No se pudo auto-asignar");
+    },
+  });
+
   const trackingMutation = useMutation({
     mutationFn: async () => {
       if (!selectedMatchId) throw new Error("Selecciona un partido");
@@ -143,8 +167,9 @@ export default function RefereeCenterView() {
       </p>
 
       {role === "admin" ? (
+      <>
       <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
-        <h2 className="font-bold text-[var(--geo-text)]">Asignar árbitro</h2>
+        <h2 className="font-bold text-[var(--geo-text)]">Asignar árbitro (Manual)</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <input value={assignMatchId} onChange={(e) => setAssignMatchId(e.target.value)} placeholder="matchId" className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2" />
           <input value={assignRefereeUserId} onChange={(e) => setAssignRefereeUserId(e.target.value)} placeholder="refereeUserId" className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2" />
@@ -158,6 +183,51 @@ export default function RefereeCenterView() {
           </button>
         </div>
       </div>
+
+      <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
+        <h2 className="font-bold text-[var(--geo-text)]">Auto-Asignar Árbitros</h2>
+        <p className="mt-1 text-sm text-[var(--geo-text-muted)]">
+          Asigna automáticamente árbitros a los partidos próximos de una liga, evitando empalmes de horario y distribuyendo equitativamente.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <select
+            value={autoLeagueId}
+            onChange={(e) => { setAutoLeagueId(e.target.value); setAutoResult(null); }}
+            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2"
+          >
+            <option value="">Seleccionar liga</option>
+            {leagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.name} (ID: {l.id})</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!autoLeagueId || autoAssignMutation.isPending}
+            onClick={() => autoAssignMutation.mutate()}
+            className="rounded-lg bg-geo-green px-4 py-2 font-bold text-black disabled:opacity-60"
+          >
+            {autoAssignMutation.isPending ? "Asignando..." : "Auto-Asignar"}
+          </button>
+        </div>
+
+        {autoResult && (
+          <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
+            <p className="font-semibold text-[var(--geo-text)]">{autoResult.message}</p>
+            {autoResult.details.length > 0 && (
+              <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-sm text-[var(--geo-text-muted)]">
+                {autoResult.details.map((d) => (
+                  <li key={d.matchId} className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-geo-green">{d.status === "assigned" ? "OK" : "—"}</span>
+                    <span>{d.roundName} (ID: {d.matchId})</span>
+                    {d.refereeName && <span className="text-[var(--geo-text)]">→ {d.refereeName}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+      </>
       ) : null}
 
       {role === "referee" ? (
