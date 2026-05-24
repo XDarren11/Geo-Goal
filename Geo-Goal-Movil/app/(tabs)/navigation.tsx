@@ -10,7 +10,7 @@ export default function NavigationScreen() {
   const { destLat, destLng, fieldName } = useLocalSearchParams();
 
   const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
-  
+
   const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export default function NavigationScreen() {
         </View>
       ) : null}
 
-      <TouchableOpacity 
+      <TouchableOpacity
         onPress={() => router.back()}
         className="absolute top-12 left-5 bg-gray-900/80 p-3 rounded-full"
       >

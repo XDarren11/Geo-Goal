@@ -53,6 +53,10 @@ router.post('/',
         .notEmpty().withMessage('El nombre de la liga es obligatorio'),
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
+    body('lineupMode')
+        .isInt()
+        .isIn([7, 11])
+        .withMessage('El formato debe ser 7 u 11'),
     handleInputError,
     asyncHandler(LeagueController.createLeague)
 )
@@ -180,6 +184,11 @@ router.put('/:leagueId',
         .notEmpty().withMessage('El nombre de la liga es obligatorio'),
     body('description')
         .notEmpty().withMessage('La descripcion debe ser obligatoria'),
+    body('lineupMode')
+        .optional()
+        .isInt()
+        .isIn([7, 11])
+        .withMessage('El formato debe ser 7 u 11'),
     handleInputError,
     asyncHandler(LeagueController.updateLeague)
 )
@@ -551,7 +560,6 @@ router.get('/matches/:matchId/analytics',
 
 // 2. Ver Tabla de Posiciones (P?blico o Autenticado)
 router.get('/:id/standings',
-    authenticate,
     param('id').isInt(),
     handleInputError,
     asyncHandler(LeagueController.getStandings)
@@ -559,7 +567,6 @@ router.get('/:id/standings',
 
 // Ver los resultados de las jornadas
 router.get('/:id/matches',
-    authenticate,
     param('id').isNumeric().withMessage('ID de la liga no v?lido'),
     handleInputError,
     asyncHandler(LeagueController.getLeagueMatches)
@@ -567,7 +574,6 @@ router.get('/:id/matches',
 
 // Reestructurar calendario a mitad de torneo (cuando entran o salen equipos)
 router.post('/:id/restructure-fixture',
-    authenticate,
     hasRole('admin'),
     param('id').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
@@ -602,7 +608,6 @@ router.post('/:id/restructure-fixture',
  *         description: C?digo generado exitosamente
  */
 router.post('/:leagueId/invitation',
-    authenticate,
     hasRole('admin'),
     param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
@@ -625,7 +630,6 @@ router.post('/:leagueId/invitation',
  *           type: integer
  */
 router.get('/:leagueId/invitation',
-    authenticate,
     hasRole('admin'),
     param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
@@ -648,7 +652,6 @@ router.get('/:leagueId/invitation',
  *           type: integer
  */
 router.delete('/:leagueId/invitation',
-    authenticate,
     hasRole('admin'),
     param('leagueId').isInt().withMessage('El ID de la liga no es v?lido'),
     handleInputError,
@@ -684,7 +687,6 @@ router.delete('/:leagueId/invitation',
  *         description: Equipo unido a la liga
  */
 router.post('/join-by-code',
-    authenticate,
     hasRole('coach', 'referee'),
     body('code').notEmpty().withMessage('El c?digo es obligatorio'),
     body('teamId').optional({ nullable: true }).isInt().withMessage('El ID del equipo debe ser un n?mero'),

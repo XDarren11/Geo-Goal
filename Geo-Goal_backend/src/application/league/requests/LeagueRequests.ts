@@ -23,7 +23,11 @@ export class CreateLeagueRequest extends LeagueRequest<string> {
 
 export class GetAllLeaguesRequest extends LeagueRequest<unknown> {
   readonly requestName = "league.getAll";
-  constructor(public readonly managerId: number) {
+  constructor(
+    public readonly managerId: number,
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }

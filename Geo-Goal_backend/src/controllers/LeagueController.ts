@@ -40,7 +40,9 @@ export class LeagueController {
   };
 
   static getAllLeagues = async (req: Request, res: Response): Promise<void> => {
-    const data = await leagueMediator.send(new GetAllLeaguesRequest(req.user!.id));
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
+    const data = await leagueMediator.send(new GetAllLeaguesRequest(req.user!.id, page, pageSize));
     res.json(data);
   };
 

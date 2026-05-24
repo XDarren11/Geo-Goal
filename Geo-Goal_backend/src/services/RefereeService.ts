@@ -4,6 +4,7 @@ import {LeagueAdmin} from "../models/LeagueAdmin";
 import {League} from "../models/League";
 import {Match} from "../models/Match";
 import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
+import {MatchDetail} from "../models/MatchDetail";
 import {MatchEvent} from "../models/MatchEvent";
 import {MatchTrackingFrame} from "../models/MatchTrackingFrame";
 import {Season} from "../models/Season";
@@ -71,6 +72,12 @@ type RegisterTrackingInput = {
   players: Array<Record<string, unknown>>;
   source?: "manual" | "inferred" | "video" | "simulated";
   confidence?: number;
+  coordSystem?: "normalized" | "meters";
+};
+
+type RegisterTrackingBatchInput = {
+  frames: RegisterTrackingInput[];
+  pitch?: { length_m: number; width_m: number };
 };
 
 function normalizeCoordinate(value: unknown): number | null {
@@ -83,6 +90,10 @@ function normalizeCoordinate(value: unknown): number | null {
 }
 
 export class RefereeService {
+  private static isValidStartingCount(count: number, expected: number): boolean {
+    return count === expected;
+  }
+
   private static async ensureActiveSeasonForLeague(leagueId: number): Promise<void> {
     const activeSeason = await Season.findOne({
       where: {
@@ -223,6 +234,31 @@ export class RefereeService {
     // Check-in implies operational start of the match flow.
     if (input.status === "checked_in") {
       await this.ensureActiveSeasonForLeague(match.leagueId);
+
+      const detail = await MatchDetail.findOne({
+        where: { matchId: Number(matchId) },
+        attributes: ["homeStartingXI", "awayStartingXI"],
+      });
+
+      const league = await League.findByPk(match.leagueId, { attributes: ["id", "lineupMode"] });
+      const expected = Number(league?.lineupMode);
+      if (!league || ![7, 11].includes(expected)) {
+        throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
+      }
+
+      const homeCount = Array.isArray(detail?.homeStartingXI)
+        ? detail?.homeStartingXI.length
+        : 0;
+      const awayCount = Array.isArray(detail?.awayStartingXI)
+        ? detail?.awayStartingXI.length
+        : 0;
+
+      if (!this.isValidStartingCount(homeCount, expected) || !this.isValidStartingCount(awayCount, expected)) {
+        throw new AppError(
+          409,
+          `Para iniciar el partido, ambos entrenadores deben registrar su ${expected} inicial`
+        );
+      }
     }
 
     if (!match.date || new Date(match.date).getTime() <= Date.now()) {
@@ -312,12 +348,14 @@ export class RefereeService {
     return rows.map((row) => row.adminUser);
   }
 
-  static async getUpcomingLeagueMatches(leagueId: number, actorUserId: number) {
+  static async getUpcomingLeagueMatches(leagueId: number, actorUserId: number, page = 1, pageSize = 50) {
     await this.ensureLeagueAdmin(leagueId, actorUserId);
 
     const now = new Date();
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
 
-    return Match.findAll({
+    const { rows, count } = await Match.findAndCountAll({
       where: {
         leagueId,
         played: false,
@@ -330,7 +368,11 @@ export class RefereeService {
         { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
       ],
       order: [["date", "ASC"]],
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getTodayAssignedMatches(userId: number) {
@@ -730,8 +772,83 @@ export class RefereeService {
       players: input.players,
       source: input.source ?? "manual",
       confidence: input.confidence != null ? Math.max(0, Math.min(1, Number(input.confidence))) : 1,
+      coordSystem: input.coordSystem ?? "normalized",
       recordedBy: userId,
     });
+  }
+
+  static async registerTrackingBatch(matchId: string, userId: number, input: RegisterTrackingBatchInput) {
+    const frames = Array.isArray(input.frames) ? input.frames : [];
+    if (!frames.length) {
+      throw new AppError(400, "frames debe contener al menos un frame");
+    }
+
+    const match = await Match.findByPk(Number(matchId), {
+      attributes: ["id", "leagueId", "homeTeamId", "awayTeamId", "seasonId"],
+    });
+    if (!match) throw new AppError(404, "Partido no encontrado");
+
+    await this.ensureActiveSeasonForLeague(match.leagueId);
+
+    // Validate each frame
+    for (let i = 0; i < frames.length; i++) {
+      const f = frames[i];
+      if (!Array.isArray(f.players)) {
+        throw new AppError(400, `Frame ${i}: players debe ser un arreglo`);
+      }
+      if (f.players.length > 60) {
+        throw new AppError(400, `Frame ${i}: players supera el límite permitido`);
+      }
+      if (!f.timestampMs || Number.isNaN(Number(f.timestampMs))) {
+        throw new AppError(400, `Frame ${i}: timestampMs es obligatorio`);
+      }
+    }
+
+    // Map AI team IDs (1=home, 2=away) to real DB team IDs and normalize coordinates
+    const normalizeCoord = (raw: unknown, maxDim: number): number | null => {
+      const v = Number(raw);
+      if (!Number.isFinite(v)) return null;
+      return Math.round((v / maxDim) * 10000) / 100;
+    };
+
+    const isMeters = frames.some((f) => (f as any).coordSystem === "meters");
+
+    const transformedFrames = frames.map((f: any) => ({
+      matchId: Number(matchId),
+      leagueId: match.leagueId,
+      timestampMs: Number(f.timestampMs),
+      period: f.period ?? null,
+      ballX: isMeters ? normalizeCoord(f.ball?.x, 105) : (f.ball?.x ?? null),
+      ballY: isMeters ? normalizeCoord(f.ball?.y, 68) : (f.ball?.y ?? null),
+      ballZ: f.ball?.z ?? null,
+      players: Array.isArray(f.players)
+        ? f.players.map((p: any) => {
+            let teamId = Number(p.teamId ?? -1);
+            if (teamId === 1) teamId = match.homeTeamId;
+            else if (teamId === 2) teamId = match.awayTeamId;
+
+            return {
+              playerId: p.playerId ?? p.id ?? null,
+              teamId,
+              x: isMeters ? normalizeCoord(p.x, 105) : Number(p.x ?? 0),
+              y: isMeters ? normalizeCoord(p.y, 68) : Number(p.y ?? 0),
+            };
+          })
+        : [],
+      source: f.source ?? "video",
+      confidence: f.confidence != null ? Math.max(0, Math.min(1, Number(f.confidence))) : 1,
+      coordSystem: "normalized",
+      recordedBy: userId,
+    }));
+
+    const created = await MatchTrackingFrame.bulkCreate(transformedFrames);
+
+    const analytics = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+
+    return {
+      created: created.length,
+      analyticsRows: analytics.rows,
+    };
   }
 
   static async getMatchAnalytics(matchId: number) {

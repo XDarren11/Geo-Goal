@@ -11,8 +11,9 @@ function resolveMediaUrl(value: string | null | undefined): string {
 }
 
 export async function getLeagues(): Promise<League[]> {
-  const { data } = await api.get<League[]>(BASE);
-  return data;
+  const { data } = await api.get<League[] | { data: League[] }>(BASE);
+  if (Array.isArray(data)) return data;
+  return Array.isArray((data as any)?.data) ? (data as any).data : [];
 }
 
 export async function getLeagueById(leagueId: number): Promise<League & { teams: Team[] }> {
@@ -20,10 +21,11 @@ export async function getLeagueById(leagueId: number): Promise<League & { teams:
   return data;
 }
 
-export async function createLeague(body: { name: string; description: string; logo?: File }): Promise<string> {
+export async function createLeague(body: { name: string; description: string; lineupMode: 7 | 11; logo?: File }): Promise<string> {
   const formData = new FormData();
   formData.append("name", body.name);
   formData.append("description", body.description);
+  formData.append("lineupMode", String(body.lineupMode));
   if (body.logo) formData.append("logo", body.logo);
   const { data } = await api.post<string>(BASE, formData, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -33,7 +35,7 @@ export async function createLeague(body: { name: string; description: string; lo
 
 export async function updateLeague(
   leagueId: number,
-  body: { name: string; description: string }
+  body: { name: string; description: string; lineupMode?: 7 | 11 }
 ): Promise<string> {
   const { data } = await api.put<string>(`${BASE}/${leagueId}`, body);
   return data;

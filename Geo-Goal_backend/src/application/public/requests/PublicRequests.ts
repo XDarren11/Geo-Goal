@@ -13,7 +13,10 @@ export class GetNewsRequest extends PublicRequest<unknown> {
 
 export class GetLeaguesRequest extends PublicRequest<unknown> {
   readonly requestName = "public.getLeagues";
-  constructor() {
+  constructor(
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }

@@ -55,6 +55,22 @@ export async function addPlayerToTeam(teamId: number, playerId: number): Promise
   return data;
 }
 
+export async function updateCoachLineup(
+  matchId: number,
+  body: {
+    startingXI: Array<Record<string, unknown>>;
+    bench?: Array<Record<string, unknown>>;
+    unavailable?: Array<Record<string, unknown>>;
+    formation?: string;
+  }
+): Promise<{ message: string; data: unknown }> {
+  const { data } = await api.put<{ message: string; data: unknown }>(
+    `${BASE}/matches/${matchId}/lineup`,
+    body
+  );
+  return data;
+}
+
 export function teamLogoUrl(path: string | null | undefined): string {
   return resolveMediaUrl(path);
 }

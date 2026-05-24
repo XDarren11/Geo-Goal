@@ -2,7 +2,7 @@ import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- JWT Decode ---
-function decodeJwtPayload(token: string): { exp: number } | null {
+export function decodeJwtPayload(token: string): { exp: number } | null {
     try {
         const base64Url = token.split('.')[1];
         if (!base64Url) return null;
@@ -161,4 +161,5 @@ api.interceptors.response.use(
     }
 );
 
+export { rawApi };
 export default api;

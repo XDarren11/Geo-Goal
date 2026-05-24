@@ -39,6 +39,7 @@ export interface League {
   description?: string
   managerId?: number
   logoUrl?: string | null
+  lineupMode?: 7 | 11
   teams?: Team[]
 }
 
@@ -86,7 +87,9 @@ export interface Team {
 
 export interface Match {
   id: number
-  leagueId: number
+  leagueId: number | null
+  seasonId?: number | null
+  type?: 'league' | 'friendly'
   homeTeamId: number
   awayTeamId: number
   date?: string | null
@@ -96,6 +99,7 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  league?: Pick<League, 'id' | 'name' | 'lineupMode'>
   lat?: number;
   lng?: number;
   fieldAddress?: string;
@@ -179,6 +183,8 @@ export interface PublicMatchDetail {
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]
   awayBench?: MatchDetailLineupEntry[]
+  homeFormation?: string | null
+  awayFormation?: string | null
   squads?: {
     home: MatchSquadTeamView
     away: MatchSquadTeamView

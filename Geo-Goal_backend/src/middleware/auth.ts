@@ -27,6 +27,10 @@ const unauthorized = (res: Response, message = "No autorizado") =>
   res.status(401).json({ error: message });
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  if (req.user) {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return unauthorized(res);

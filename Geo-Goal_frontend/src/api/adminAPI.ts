@@ -5,8 +5,10 @@ import type {
   AdminUser,
   AuditLog,
   LeagueAdminAssignment,
+  Match,
   Season,
   SeasonStatus,
+  Team,
 } from "@/types";
 
 const BASE = "/admin";
@@ -17,8 +19,8 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
 }
 
 export async function listUsers(): Promise<AdminUser[]> {
-  const { data } = await api.get<AdminUser[]>(`${BASE}/users`);
-  return data;
+  const { data } = await api.get<{ data: AdminUser[] }>(`${BASE}/users`);
+  return data.data ?? [];
 }
 
 export async function listUsersByLeague(leagueId: number): Promise<AdminUser[]> {
@@ -84,8 +86,8 @@ export async function removeLeagueAdmin(leagueId: number, userId: number): Promi
 }
 
 export async function listFields(): Promise<AdminField[]> {
-  const { data } = await api.get<AdminField[]>(`${BASE}/fields`);
-  return data;
+  const { data } = await api.get<{ data: AdminField[] }>(`${BASE}/fields`);
+  return data.data ?? [];
 }
 
 export async function getFieldById(fieldId: number): Promise<AdminField> {
@@ -211,5 +213,57 @@ export async function listAuditLogs(filters?: {
 
 export async function getAuditLogById(logId: number): Promise<AuditLog> {
   const { data } = await api.get<AuditLog>(`${BASE}/audit-logs/${logId}`);
+  return data;
+}
+
+// --- Friendly Matches ---
+
+export interface FriendlyMatchListItem extends Match {
+  type: "friendly";
+  homeTeam?: Pick<Team, "id" | "name" | "logoUrl" | "leagueId">;
+  awayTeam?: Pick<Team, "id" | "name" | "logoUrl" | "leagueId">;
+  createdAt?: string;
+}
+
+export type FriendlyMatchesPaginated = {
+  data: FriendlyMatchListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function listFriendlyMatches(
+  page = 1,
+  pageSize = 50
+): Promise<FriendlyMatchesPaginated> {
+  const { data } = await api.get<FriendlyMatchesPaginated>(
+    `${BASE}/friendly-matches`,
+    { params: { page, pageSize } }
+  );
+  return data;
+}
+
+export async function createFriendlyMatch(body: {
+  homeTeamId: number;
+  awayTeamId: number;
+  roundName?: string;
+  date?: string;
+  reason?: string;
+}): Promise<{ message: string; match: Match }> {
+  const { data } = await api.post<{ message: string; match: Match }>(
+    `${BASE}/friendly-matches`,
+    body
+  );
+  return data;
+}
+
+export async function deleteFriendlyMatch(
+  matchId: number,
+  reason?: string
+): Promise<string> {
+  const { data } = await api.delete<string>(
+    `${BASE}/friendly-matches/${matchId}`,
+    { data: reason ? { reason } : undefined }
+  );
   return data;
 }

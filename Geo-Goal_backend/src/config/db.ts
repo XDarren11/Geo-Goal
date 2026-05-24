@@ -1,8 +1,9 @@
 import colors from 'colors'
 import { Sequelize } from "sequelize-typescript";
 import dotenv from 'dotenv'
+import path from 'path'
 
-dotenv.config()
+dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true })
 
 const db = new Sequelize(process.env.DATABASE_URL!, {
     models: [__dirname + '/../models/**/*.ts']

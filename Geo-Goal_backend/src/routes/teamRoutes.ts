@@ -5,6 +5,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { TeamController } from "../controllers/TeamController";
 import { TeamInvitationController } from "../controllers/TeamInvitationController";
+import { MatchDetailController } from "../controllers/MatchDetailController";
 import { upload, uploadAvatar } from "../middleware/upload";
 import { asyncHandler } from "../middleware/asyncHandler";
 
@@ -112,18 +113,28 @@ router.patch(
 );
 
 router.get('/leagues/coach/active',
-    authenticate,
     hasRole("coach"),
     handleInputError,
     TeamController.getCoachActiveLeagues
 );
 
 router.get('/leagues/:leagueId/teams/:teamId/dashboard',
-    authenticate,
     param('leagueId').isInt(),
     param('teamId').isInt(),
     handleInputError,
     TeamController.getTeamDashboard
+);
+
+router.put(
+  "/matches/:matchId/lineup",
+  hasRole("coach"),
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  body("startingXI").isArray().withMessage("Titulares debe ser un arreglo"),
+  body("bench").optional().isArray().withMessage("Banca inválida"),
+  body("unavailable").optional().isArray().withMessage("No disponibles inválido"),
+  body("formation").optional().isString().trim().isLength({ min: 3, max: 10 }).withMessage("Formación inválida"),
+  handleInputError,
+  asyncHandler(MatchDetailController.upsertCoachLineup)
 );
 
 /**
@@ -154,7 +165,6 @@ router.get('/leagues/:leagueId/teams/:teamId/dashboard',
  *         description: Código generado exitosamente
  */
 router.post('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -177,7 +187,6 @@ router.post('/:teamId/invitation',
  *           type: integer
  */
 router.get('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -200,7 +209,6 @@ router.get('/:teamId/invitation',
  *           type: integer
  */
 router.delete('/:teamId/invitation',
-    authenticate,
   hasRole('coach'),
     param('teamId').isInt().withMessage('El ID del equipo no es válido'),
     handleInputError,
@@ -232,7 +240,6 @@ router.delete('/:teamId/invitation',
  *         description: Jugador unido al equipo
  */
 router.post('/join-by-code',
-    authenticate,
   hasRole('player'),
     body('code').notEmpty().withMessage('El código es obligatorio'),
     body('playerName').isString().trim().notEmpty().withMessage('El nombre de jugador es obligatorio'),

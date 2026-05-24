@@ -37,6 +37,12 @@ export type RegisterTrackingFrameBodyDTO = {
   players: Array<Record<string, unknown>>;
   source?: "manual" | "inferred" | "video" | "simulated";
   confidence?: number;
+  coordSystem?: "normalized" | "meters";
+};
+
+export type RegisterTrackingBatchBodyDTO = {
+  frames: RegisterTrackingFrameBodyDTO[];
+  pitch?: { length_m: number; width_m: number };
 };
 
 /**

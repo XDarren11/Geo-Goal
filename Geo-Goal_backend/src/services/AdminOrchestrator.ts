@@ -3,11 +3,14 @@ import { AuditService } from "./AuditService";
 import { User } from "../models/User";
 import { LeagueAdmin } from "../models/LeagueAdmin";
 import { Field } from "../models/Field";
+import { Match } from "../models/Match";
 import type {
   ChangeSeasonStatusBodyDTO,
   CreateFieldBodyDTO,
+  CreateFriendlyMatchBodyDTO,
   CreateSeasonBodyDTO,
   CreateUserBodyDTO,
+  DeleteFriendlyMatchBodyDTO,
   LeagueAdminRoleDTO,
   UpdateFieldBodyDTO,
   UpdateSeasonBodyDTO,
@@ -32,8 +35,8 @@ export class AdminOrchestrator {
     return AdminService.listUsersByLeague(leagueId, currentAdminId);
   }
 
-  static listUsers() {
-    return AdminService.listUsers();
+  static listUsers(page = 1, pageSize = 50) {
+    return AdminService.listUsers(page, pageSize);
   }
 
   static async createUser(body: CreateUserBodyDTO, ctx: AdminActorContext): Promise<string> {
@@ -232,8 +235,8 @@ export class AdminOrchestrator {
     return result;
   }
 
-  static listFields() {
-    return AdminService.listFields();
+  static listFields(page = 1, pageSize = 50) {
+    return AdminService.listFields(page, pageSize);
   }
 
   static getFieldById(fieldId: string) {
@@ -445,5 +448,58 @@ export class AdminOrchestrator {
 
   static getAuditLogById(logId: string) {
     return AdminService.getAuditLogById(logId);
+  }
+
+  // --- Friendly Matches ---
+
+  static async createFriendlyMatch(
+    body: CreateFriendlyMatchBodyDTO,
+    adminId: number,
+    ctx: AdminActorContext
+  ): Promise<{ message: string; match: Match }> {
+    const { reason, ...input } = body;
+    const match = await AdminService.createFriendlyMatch(adminId, input);
+
+    await AuditService.log({
+      actorUserId: ctx.actorUserId,
+      entityType: "match",
+      entityId: match.id,
+      action: "create",
+      afterData: match.toJSON() as Record<string, unknown>,
+      reason: reason ?? "Creación de partido amistoso",
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent,
+    });
+
+    return { message: "Partido amistoso creado correctamente", match };
+  }
+
+  static listFriendlyMatches(adminId: number, page = 1, pageSize = 50) {
+    return AdminService.listFriendlyMatches(adminId, page, pageSize);
+  }
+
+  static async deleteFriendlyMatch(
+    matchId: string,
+    adminId: number,
+    body: DeleteFriendlyMatchBodyDTO,
+    ctx: AdminActorContext
+  ): Promise<string> {
+    const before = await Match.findByPk(matchId);
+    const result = await AdminService.deleteFriendlyMatch(matchId, adminId);
+
+    if (before) {
+      await AuditService.log({
+        actorUserId: ctx.actorUserId,
+        entityType: "match",
+        entityId: matchId,
+        action: "delete",
+        beforeData: before.toJSON() as Record<string, unknown>,
+        reason: body.reason ?? "Eliminación de partido amistoso",
+        ip: ctx.ip ?? null,
+        userAgent: ctx.userAgent,
+      });
+    }
+
+    return result;
   }
 }

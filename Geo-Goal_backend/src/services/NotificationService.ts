@@ -150,4 +150,34 @@ export class NotificationService {
       },
     });
   }
+
+  static async notifyLineupUpdated(matchId: number, teamId: number): Promise<void> {
+    const match = await Match.findByPk(matchId, {
+      include: [
+        { model: Team, as: 'homeTeam', attributes: ['id', 'name', 'trainerId'] },
+        { model: Team, as: 'awayTeam', attributes: ['id', 'name', 'trainerId'] },
+      ],
+    });
+
+    if (!match) return;
+
+    const homeName = (match as any).homeTeam?.name ?? 'Local';
+    const awayName = (match as any).awayTeam?.name ?? 'Visitante';
+    const homeTrainer = (match as any).homeTeam?.trainerId ?? null;
+    const awayTrainer = (match as any).awayTeam?.trainerId ?? null;
+
+    const targetTrainerId = teamId === match.homeTeamId ? homeTrainer : awayTrainer;
+    if (!targetTrainerId) return;
+
+    await this.createForUsers([targetTrainerId], {
+      type: 'lineup_update',
+      title: 'Alineación registrada',
+      message: `Tu alineación para ${homeName} vs ${awayName} fue registrada.`,
+      payload: {
+        matchId: match.id,
+        leagueId: match.leagueId,
+        roundName: match.roundName,
+      },
+    });
+  }
 }

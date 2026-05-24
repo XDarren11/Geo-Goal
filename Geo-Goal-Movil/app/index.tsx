@@ -25,6 +25,8 @@ export default function index() {
       try {
         const hasToken = await checkAuthToken();
         if (!hasToken) {
+          queryClient.removeQueries({ queryKey: ['user'] });
+          queryClient.clear();
           setIsCheckingSession(false);
           return;
         }
@@ -33,7 +35,8 @@ export default function index() {
         queryClient.setQueryData(['user'], user);
         router.replace('/(tabs)/home');
       } catch {
-        // Token inválido o expirado, se muestra la pantalla de inicio
+        queryClient.removeQueries({ queryKey: ['user'] });
+        queryClient.clear();
       } finally {
         setIsCheckingSession(false);
       }
@@ -86,6 +89,15 @@ export default function index() {
           >
             <Text className="text-geo-green font-bold text-2xl tracking-wide">
               Registrarse
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="mt-6"
+            onPress={() => router.push('/(tabs)/public')}
+          >
+            <Text className="text-geo-green font-bold">
+              Ver resultados sin cuenta
             </Text>
           </TouchableOpacity>
 

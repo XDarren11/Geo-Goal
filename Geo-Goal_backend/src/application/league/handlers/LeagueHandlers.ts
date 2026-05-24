@@ -31,7 +31,7 @@ export class GetAllLeaguesHandler implements RequestHandler<GetAllLeaguesRequest
   constructor(private readonly leagueService: ILeagueService) {}
 
   handle(request: GetAllLeaguesRequest): Promise<unknown> {
-    return this.leagueService.getAllLeagues(request.managerId);
+    return this.leagueService.getAllLeagues(request.managerId, request.page, request.pageSize);
   }
 }
 
