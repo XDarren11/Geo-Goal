@@ -465,6 +465,13 @@ router.post('/matches/:matchId/referee/assign',
     asyncHandler(MatchDetailController.assignReferee)
 );
 
+router.post('/:leagueId/auto-assign-referees',
+    hasRole('admin'),
+    param('leagueId').isInt().withMessage('ID de liga no válido'),
+    handleInputError,
+    asyncHandler(MatchDetailController.autoAssignReferees)
+);
+
 router.get('/:leagueId/referees',
     hasRole('admin'),
     param('leagueId').isInt().withMessage('ID de liga no v?lido'),

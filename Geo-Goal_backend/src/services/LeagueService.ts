@@ -10,6 +10,7 @@ import {TeamMember} from "../models/TeamMember";
 import {MatchGenerator} from "../utils/MatchGenerator";
 import {AppError} from "../types/errors";
 import {NotificationService} from "./NotificationService";
+import {RefereeService} from "./RefereeService";
 import {AuditService} from "./AuditService";
 import {
   uploadImageToSupabase,
@@ -477,6 +478,12 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
           return NotificationService.notifyMatchScheduled(m.id, new Date(m.date));
         })
       );
+
+      try {
+        await RefereeService.autoAssignRefereesForLeague(Number(leagueId), managerId);
+      } catch {
+        // Auto-assignment failure should not block fixture generation
+      }
     }
 
     return {

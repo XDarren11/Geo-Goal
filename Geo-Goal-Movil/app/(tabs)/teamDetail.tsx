@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { addPlayerToTeam, findPlayer, getTeamById, getPlayersTeam, teamLogoUrl, avatarUrl, updatePlayerProfile, updateTeam } from '@/Api/teamAPI';
 import { Ionicons } from '@expo/vector-icons';
 import Loader from '@/components/Loader';
+import BackButton from '@/components/BackButton';
 import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
@@ -168,9 +169,7 @@ export default function TeamDetailScreen() {
     <View className="flex-1 bg-geo-black">
       {/* Header */}
       <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-6 pb-5 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()} className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-gray-800/80">
-          <Ionicons name="arrow-back" size={20} color="#39FF14" />
-        </TouchableOpacity>
+        <BackButton variant="compact" />
         <View className="flex-1 flex-row items-center gap-3">
           <View className="h-14 w-14 rounded-2xl overflow-hidden bg-gray-800 items-center justify-center border border-geo-green/30">
             {team.logoUrl ? (

@@ -1,7 +1,9 @@
 import type { RequestHandler } from "../../mediator/RequestHandler";
 import type { IMatchFlowService } from "../../../services/contracts/IMatchFlowService";
+import type { AutoAssignRefereesResultDTO } from "../dto/MatchDetailDTOs";
 import {
   AssignRefereeRequest,
+  AutoAssignRefereesRequest,
   GetFlowMatchAnalyticsRequest,
   GetLeagueRefereesRequest,
   GetRefereeDashboardRequest,
@@ -109,6 +111,18 @@ export class GetUpcomingLeagueMatchesHandler
   constructor(private readonly svc: IMatchFlowService) {}
   handle(request: GetUpcomingLeagueMatchesRequest): Promise<unknown> {
     return this.svc.getUpcomingLeagueMatches(request.leagueId, request.actorUserId, request.page, request.pageSize);
+  }
+}
+
+export class AutoAssignRefereesHandler
+  implements RequestHandler<AutoAssignRefereesRequest, AutoAssignRefereesResultDTO>
+{
+  constructor(private readonly svc: IMatchFlowService) {}
+  handle(request: AutoAssignRefereesRequest): Promise<AutoAssignRefereesResultDTO> {
+    return this.svc.autoAssignRefereesForLeague(
+      request.leagueId,
+      request.actorUserId
+    ) as Promise<AutoAssignRefereesResultDTO>;
   }
 }
 

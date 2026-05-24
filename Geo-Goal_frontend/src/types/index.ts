@@ -604,3 +604,22 @@ export interface MatchAnalyticsResponse {
     createdAt?: string
   }>
 }
+
+
+export interface AutoAssignResult {
+  assigned: number
+  skipped: number
+  message: string
+  details: Array<{
+    matchId: number
+    roundName: string
+    refereeUserId: number | null
+    refereeName: string
+    status: string
+  }>
+}
+
+export interface LeagueRefereeAssignmentSettings {
+  refereeAssignmentMode: 'manual' | 'auto'
+  autoAssignWindowDays: number
+}
