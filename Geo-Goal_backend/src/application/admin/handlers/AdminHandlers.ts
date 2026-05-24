@@ -4,10 +4,12 @@ import {
   AdminAssignLeagueAdminRequest,
   AdminChangeSeasonStatusRequest,
   AdminCreateFieldRequest,
+  AdminCreateFriendlyMatchRequest,
   AdminCreateSeasonRequest,
   AdminCreateUserRequest,
   AdminDashboardSummaryRequest,
   AdminDeleteFieldRequest,
+  AdminDeleteFriendlyMatchRequest,
   AdminDeleteSeasonRequest,
   AdminDeleteUserRequest,
   AdminGetAuditLogByIdRequest,
@@ -15,6 +17,7 @@ import {
   AdminGetSeasonByIdRequest,
   AdminListAuditLogsRequest,
   AdminListFieldsRequest,
+  AdminListFriendlyMatchesRequest,
   AdminListLeagueAdminsRequest,
   AdminListSeasonsByLeagueRequest,
   AdminListUsersByLeagueRequest,
@@ -43,8 +46,8 @@ export class AdminListUsersByLeagueHandler
 }
 
 export class AdminListUsersHandler implements RequestHandler<AdminListUsersRequest, unknown> {
-  handle(_request: AdminListUsersRequest): Promise<unknown> {
-    return AdminOrchestrator.listUsers();
+  handle(request: AdminListUsersRequest): Promise<unknown> {
+    return AdminOrchestrator.listUsers(request.page, request.pageSize);
   }
 }
 
@@ -126,8 +129,8 @@ export class AdminRemoveLeagueAdminHandler
 }
 
 export class AdminListFieldsHandler implements RequestHandler<AdminListFieldsRequest, unknown> {
-  handle(_request: AdminListFieldsRequest): Promise<unknown> {
-    return AdminOrchestrator.listFields();
+  handle(request: AdminListFieldsRequest): Promise<unknown> {
+    return AdminOrchestrator.listFields(request.page, request.pageSize);
   }
 }
 
@@ -228,5 +231,44 @@ export class AdminGetAuditLogByIdHandler
 {
   handle(request: AdminGetAuditLogByIdRequest): Promise<unknown> {
     return AdminOrchestrator.getAuditLogById(request.logId);
+  }
+}
+
+// --- Friendly Match ---
+
+export class AdminCreateFriendlyMatchHandler
+  implements RequestHandler<AdminCreateFriendlyMatchRequest, { message: string; match: unknown }>
+{
+  handle(request: AdminCreateFriendlyMatchRequest): Promise<{ message: string; match: unknown }> {
+    return AdminOrchestrator.createFriendlyMatch(
+      request.body,
+      request.adminId,
+      request.ctx
+    );
+  }
+}
+
+export class AdminListFriendlyMatchesHandler
+  implements RequestHandler<AdminListFriendlyMatchesRequest, unknown>
+{
+  handle(request: AdminListFriendlyMatchesRequest): Promise<unknown> {
+    return AdminOrchestrator.listFriendlyMatches(
+      request.adminId,
+      request.page,
+      request.pageSize
+    );
+  }
+}
+
+export class AdminDeleteFriendlyMatchHandler
+  implements RequestHandler<AdminDeleteFriendlyMatchRequest, string>
+{
+  handle(request: AdminDeleteFriendlyMatchRequest): Promise<string> {
+    return AdminOrchestrator.deleteFriendlyMatch(
+      request.matchId,
+      request.adminId,
+      request.body,
+      request.ctx
+    );
   }
 }

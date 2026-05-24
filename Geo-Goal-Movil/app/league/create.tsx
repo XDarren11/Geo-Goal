@@ -4,16 +4,16 @@ import { useRouter } from "expo-router";
 import { useForm, Controller } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
 import { createLeague } from "@/Api/leagueAPI"; // Usamos tu ruta de API
-import { Ionicons } from "@expo/vector-icons";
+import BackButton from "@/components/BackButton";
 
-type Form = { name: string; description: string };
+type Form = { name: string; description: string; lineupMode: 7 | 11 };
 
 export default function CreateLeagueView() {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false); // Para efecto de archivo (placeholder)
 
   const { control, handleSubmit, formState: { errors } } = useForm<Form>({
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: "", description: "", lineupMode: 11 },
   });
 
   const { mutate, isPending } = useMutation({
@@ -28,14 +28,7 @@ export default function CreateLeagueView() {
 
   return (
     <ScrollView className="flex-1 bg-geo-black px-5 pt-8">
-      {/* Botón de regreso */}
-      <TouchableOpacity 
-        onPress={() => router.back()} 
-        className="flex-row items-center mb-6"
-      >
-        <Ionicons name="arrow-back" size={24} color="#39FF14" />
-        <Text className="text-geo-green ml-2 font-bold text-lg">Volver</Text>
-      </TouchableOpacity>
+      <BackButton />
 
       <Text className="text-gray-400 text-xs">Administración</Text>
       <Text className="font-geo text-4xl text-white tracking-wide">
@@ -92,6 +85,31 @@ export default function CreateLeagueView() {
           />
           {errors.description && (
             <Text className="text-red-500 text-sm mt-1">{errors.description.message}</Text>
+          )}
+        </View>
+
+        <View className="mb-5">
+          <Text className="text-white font-bold mb-2">Formato de la liga</Text>
+          <Controller
+            control={control}
+            name="lineupMode"
+            rules={{ required: "Selecciona el formato" }}
+            render={({ field: { onChange, value } }) => (
+              <View className="flex-row rounded-xl border border-gray-700 overflow-hidden">
+                {[11, 7].map((mode) => (
+                  <TouchableOpacity
+                    key={`mode-${mode}`}
+                    onPress={() => onChange(mode as 7 | 11)}
+                    className={`flex-1 py-3 items-center ${value === mode ? 'bg-geo-green' : 'bg-geo-black'}`}
+                  >
+                    <Text className={`${value === mode ? 'text-black' : 'text-gray-300'} font-bold`}>{mode} vs {mode}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          />
+          {errors.lineupMode && (
+            <Text className="text-red-500 text-sm mt-1">{errors.lineupMode.message}</Text>
           )}
         </View>
 

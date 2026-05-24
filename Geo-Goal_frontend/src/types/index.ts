@@ -39,6 +39,9 @@ export interface League {
   description?: string
   managerId?: number
   logoUrl?: string | null
+  lineupMode?: 7 | 11
+  refereeAssignmentMode?: 'manual' | 'auto'
+  autoAssignWindowDays?: number
   teams?: Team[]
 }
 
@@ -86,7 +89,9 @@ export interface Team {
 
 export interface Match {
   id: number
-  leagueId: number
+  leagueId: number | null
+  seasonId?: number | null
+  type?: 'league' | 'friendly'
   homeTeamId: number
   awayTeamId: number
   date?: string | null
@@ -96,6 +101,7 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  league?: Pick<League, 'id' | 'name' | 'lineupMode'>
   lat?: number;
   lng?: number;
   fieldAddress?: string;
@@ -179,6 +185,8 @@ export interface PublicMatchDetail {
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]
   awayBench?: MatchDetailLineupEntry[]
+  homeFormation?: string | null
+  awayFormation?: string | null
   squads?: {
     home: MatchSquadTeamView
     away: MatchSquadTeamView
@@ -597,4 +605,23 @@ export interface MatchAnalyticsResponse {
     confidence?: number
     createdAt?: string
   }>
+}
+
+
+export interface AutoAssignResult {
+  assigned: number
+  skipped: number
+  message: string
+  details: Array<{
+    matchId: number
+    roundName: string
+    refereeUserId: number | null
+    refereeName: string
+    status: string
+  }>
+}
+
+export interface LeagueRefereeAssignmentSettings {
+  refereeAssignmentMode: 'manual' | 'auto'
+  autoAssignWindowDays: number
 }

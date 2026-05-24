@@ -34,6 +34,7 @@ import TeamDashboardView from "./views/league/JoinLeague/TeamDashboardView";
 import UserManagementView from "@/views/admin/UserManagement";
 import FieldManagementView from "@/views/admin/FieldManagement";
 import SeasonManagementView from "@/views/admin/SeasonManagement";
+import FriendlyMatchManagementView from "@/views/admin/FriendlyMatchManagement";
 import AuditLogsView from "@/views/admin/AuditLogs";
 import RefereeCenterView from "@/views/admin/RefereeCenter";
 import CoachTeamsView from "./views/team/TeamView/CoachTeamsView";
@@ -123,6 +124,14 @@ export default function Router() {
             element={
               <RoleGuard allowedRoles={["admin"]}>
                 <AuditLogsView />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/admin/friendly-matches"
+            element={
+              <RoleGuard allowedRoles={["admin"]}>
+                <FriendlyMatchManagementView />
               </RoleGuard>
             }
           />

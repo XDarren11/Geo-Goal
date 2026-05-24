@@ -71,6 +71,12 @@ export class NewsService {
   private static async ensureGeneratedNews(leagueIds: number[]): Promise<void> {
     if (!leagueIds.length) return;
 
+    const existingCount = await News.count({
+      where: { leagueId: { [Op.in]: leagueIds } },
+    });
+
+    if (existingCount > 0) return;
+
     const [leagues, seasons, matches] = await Promise.all([
       League.findAll({
         where: { id: { [Op.in]: leagueIds } },
@@ -100,56 +106,69 @@ export class NewsService {
       }
     }
 
+    const upsertPromises: Promise<unknown>[] = [];
+
     for (const league of leagues) {
-      await News.upsert({
-        leagueId: league.id,
-        seasonId: null,
-        matchId: null,
-        title: `Radar de liga: ${league.name} entra en escena`,
-        summary:
-          league.description ||
-          `${league.name} continúa su actividad competitiva con movimientos recientes en calendario, tabla y rendimiento de equipos.`,
-        type: "league",
-        isPublished: true,
-        source: `league:${league.id}`,
-        payload: { leagueId: league.id },
-      });
+      upsertPromises.push(
+        News.upsert({
+          leagueId: league.id,
+          seasonId: null,
+          matchId: null,
+          title: `Radar de liga: ${league.name} entra en escena`,
+          summary:
+            league.description ||
+            `${league.name} continúa su actividad competitiva con movimientos recientes en calendario, tabla y rendimiento de equipos.`,
+          type: "league",
+          isPublished: true,
+          source: `league:${league.id}`,
+          payload: { leagueId: league.id },
+        })
+      );
 
       const season = currentSeasonByLeague.get(league.id);
       if (season) {
-        await News.upsert({
-          leagueId: league.id,
-          seasonId: season.id,
-          matchId: null,
-          title: `Boletín de temporada: ${season.name} (${season.year})`,
-          summary: `${league.name}: la temporada ${season.name} ${this.seasonStatusLabel(season.status)}. Se esperan nuevas historias jornada a jornada.`,
-          type: "season",
-          isPublished: true,
-          source: `season:${season.id}`,
-          payload: { leagueId: league.id, seasonId: season.id, seasonStatus: season.status },
-        });
+        upsertPromises.push(
+          News.upsert({
+            leagueId: league.id,
+            seasonId: season.id,
+            matchId: null,
+            title: `Boletín de temporada: ${season.name} (${season.year})`,
+            summary: `${league.name}: la temporada ${season.name} ${this.seasonStatusLabel(season.status)}. Se esperan nuevas historias jornada a jornada.`,
+            type: "season",
+            isPublished: true,
+            source: `season:${season.id}`,
+            payload: { leagueId: league.id, seasonId: season.id, seasonStatus: season.status },
+          })
+        );
       }
     }
 
     for (const match of matches) {
       const copy = this.buildMatchCopy(match);
-      await News.upsert({
-        leagueId: match.leagueId,
-        seasonId: null,
-        matchId: match.id,
-        title: copy.title,
-        summary: copy.summary,
-        type: "match",
-        isPublished: true,
-        source: `match:${match.id}`,
-        payload: {
+      upsertPromises.push(
+        News.upsert({
           leagueId: match.leagueId,
+          seasonId: null,
           matchId: match.id,
-          played: match.played,
-          homeScore: match.homeScore,
-          awayScore: match.awayScore,
-        },
-      });
+          title: copy.title,
+          summary: copy.summary,
+          type: "match",
+          isPublished: true,
+          source: `match:${match.id}`,
+          payload: {
+            leagueId: match.leagueId,
+            matchId: match.id,
+            played: match.played,
+            homeScore: match.homeScore,
+            awayScore: match.awayScore,
+          },
+        })
+      );
+    }
+
+    const chunkSize = 20;
+    for (let i = 0; i < upsertPromises.length; i += chunkSize) {
+      await Promise.all(upsertPromises.slice(i, i + chunkSize));
     }
   }
 

@@ -8,14 +8,14 @@ import ErrorMessage from "@/components/ErrorMessage";
 import { Link } from "react-router-dom";
 import { getApiErrorMessage } from "@/utils/getApiErrorMessage";
 
-type Form = { name: string; description: string };
+type Form = { name: string; description: string; lineupMode: 7 | 11 };
 
 export default function CreateLeagueView() {
   const navigate = useNavigate();
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<Form>({
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: "", description: "", lineupMode: 11 },
   });
 
   const { mutate, isPending } = useMutation({
@@ -71,6 +71,19 @@ export default function CreateLeagueView() {
           {errors.description && (
             <ErrorMessage>{errors.description.message}</ErrorMessage>
           )}
+        </div>
+        <div>
+          <label className="block text-sm font-semibold tracking-wide text-[var(--geo-text)]">
+            Formato de la liga
+          </label>
+          <select
+            className="input-pitch mt-1.5 w-full"
+            {...register("lineupMode", { required: "Selecciona el formato", valueAsNumber: true })}
+          >
+            <option value={11}>11 vs 11</option>
+            <option value={7}>7 vs 7</option>
+          </select>
+          {errors.lineupMode && <ErrorMessage>{errors.lineupMode.message}</ErrorMessage>}
         </div>
         <div>
           <label className="block text-sm font-semibold text-[var(--geo-text)]">

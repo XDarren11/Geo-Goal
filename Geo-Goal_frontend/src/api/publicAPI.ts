@@ -12,9 +12,17 @@ import type {
 
 const BASE = "/public";
 
+interface PaginatedLeaguesResponse {
+  data: PublicLeagueSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export async function getPublicLeagues(): Promise<PublicLeagueSummary[]> {
-  const { data } = await api.get<PublicLeagueSummary[]>(`${BASE}/leagues`);
-  return Array.isArray(data) ? data : [];
+  const { data } = await api.get<PublicLeagueSummary[] | PaginatedLeaguesResponse>(`${BASE}/leagues`);
+  if (Array.isArray(data)) return data;
+  return Array.isArray((data as PaginatedLeaguesResponse)?.data) ? (data as PaginatedLeaguesResponse).data : [];
 }
 
 export async function getPublicNews(limit = 12): Promise<PublicNewsItem[]> {
@@ -72,3 +80,100 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   const { data } = await api.get<MatchAnalyticsResponse>(`${BASE}/matches/${matchId}/analytics`);
   return data;
 }
+
+export interface AnalysisStatusResponse {
+  status: "none" | "uploaded" | "annotating" | "queued" | "processing" | "completed" | "failed";
+  jobId?: number;
+  progress?: number;
+  currentStep?: string;
+  framesProcessed?: number;
+  totalFrames?: number;
+  error?: string;
+  videoSupabaseUrl?: string | null;
+  pid?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// AI Service health check
+const AI_SERVICE_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined)?.trim() || "http://localhost:8000";
+
+export interface AIServiceHealth {
+  status: "ok" | "error";
+  worker_running: boolean;
+  current_job: number | null;
+  poll_interval: number;
+  device: string;
+}
+
+export async function getAIServiceHealth(): Promise<AIServiceHealth> {
+  const { data } = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
+  return data;
+}
+
+export async function uploadMatchVideo(
+  matchId: number,
+  videoFile: File,
+  onProgress?: (pct: number) => void
+): Promise<{ message: string; jobId: number; filename: string }> {
+  const formData = new FormData();
+  formData.append("video", videoFile);
+  const { data } = await api.post<{ message: string; jobId: number; filename: string }>(
+    `${BASE}/matches/${matchId}/upload-video`,
+    formData,
+    {
+      timeout: 300_000,
+      onUploadProgress: (event) => {
+        const total = event.total ?? videoFile.size;
+        if (total && onProgress) {
+          onProgress(Math.round((event.loaded * 100) / total));
+        }
+      },
+    }
+  );
+  return data;
+}
+
+export async function getAnalysisStatus(matchId: number): Promise<AnalysisStatusResponse> {
+  const { data } = await api.get<AnalysisStatusResponse>(
+    `${BASE}/matches/${matchId}/analysis/status`
+  );
+  return data;
+}
+
+export interface PlayerTag {
+  x: number;
+  y: number;
+  label: "home" | "away" | "ball";
+}
+
+export async function submitAnalysisKeypoints(
+  matchId: number,
+  srcPts: Array<{ x: number; y: number }>,
+  playerTags?: PlayerTag[]
+): Promise<{ message: string; jobId: number; status: string }> {
+  const { data } = await api.put<{ message: string; jobId: number; status: string }>(
+    `${BASE}/matches/${matchId}/analysis/keypoints`,
+    { srcPts, playerTags }
+  );
+  return data;
+}
+
+export interface AnalysisFrameResponse {
+  frame: string;
+  width: number;
+  height: number;
+}
+
+export async function getAnalysisFrame(matchId: number): Promise<AnalysisFrameResponse> {
+  const { data } = await api.get<AnalysisFrameResponse>(
+    `${BASE}/matches/${matchId}/analysis/frame`
+  );
+  return data;
+}
+
+
+export const getTopScorers = async (leagueId: number) => {
+  const { data } = await api.get(`${BASE}/${leagueId}/top-scorers`);
+  return data;
+};

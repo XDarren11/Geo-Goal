@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Linking, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -59,10 +59,16 @@ export default function HomeScreen() {
     router.replace('/');
   };
 
-  const openDirections = async (lat?: number, lng?: number) => {
+  const openDirections = (lat?: number, lng?: number, fieldName?: string | null) => {
     if (lat == null || lng == null) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    await Linking.openURL(url);
+    router.push({
+      pathname: '/navigation',
+      params: {
+        destLat: lat,
+        destLng: lng,
+        fieldName: fieldName ?? undefined,
+      },
+    });
   };
 
   const formatDate = (date?: string | null) => {
@@ -147,6 +153,7 @@ export default function HomeScreen() {
                   key={`a-next-${m.id}`}
                   title={`${m.homeTeam?.name || 'Local'} vs ${m.awayTeam?.name || 'Visitante'}`}
                   subtitle={`${m.league?.name || 'Liga'} · ${formatDate(m.date)}`}
+                  onPress={() => openMatchDetail(m.id)}
                 />
               ))}
             </Section>
@@ -196,7 +203,7 @@ export default function HomeScreen() {
                     <TouchableOpacity 
                       onPress={() => {
                         router.push({
-                          pathname: "/navigation",
+                          pathname: "/(tabs)/navigation",
                           params: { 
                             destLat: m.location.lat, 
                             destLng: m.location.lng,
@@ -252,8 +259,15 @@ export default function HomeScreen() {
                   <Text className="text-gray-400 text-xs">{formatDate(playerDashboard.nextMatch.date)}</Text>
                   <Text className="text-gray-400 text-xs">Cancha: {playerDashboard.nextMatch.fieldAddress || 'Por confirmar'}</Text>
                   {playerDashboard.nextMatch.location?.lat != null && playerDashboard.nextMatch.location?.lng != null ? (
-                    <TouchableOpacity onPress={() => openDirections(playerDashboard.nextMatch.location?.lat, playerDashboard.nextMatch.location?.lng)} className="mt-2 self-start border border-geo-green rounded px-2 py-1">
-                      <Text className="text-geo-green text-xs font-bold">Cómo llegar</Text>
+                    <TouchableOpacity
+                      onPress={() => openDirections(
+                        playerDashboard.nextMatch.location?.lat,
+                        playerDashboard.nextMatch.location?.lng,
+                        playerDashboard.nextMatch.location?.fieldName
+                      )}
+                      className="mt-2 self-start border border-geo-green rounded px-2 py-1"
+                    >
+                      <Text className="text-geo-green text-xs font-bold">Cómo llegar (GPS)</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>

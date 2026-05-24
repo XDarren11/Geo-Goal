@@ -18,11 +18,18 @@ export class PublicService {
     return league;
   }
 
-  static async getLeagues() {
-    return League.findAll({
+  static async getLeagues(page = 1, pageSize = 50) {
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await League.findAndCountAll({
       attributes: ["id", "name", "description", "createdAt"],
       order: [["createdAt", "DESC"], ["id", "DESC"]],
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getNews(limit = 12) {

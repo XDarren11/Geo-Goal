@@ -37,9 +37,28 @@ export type RegisterTrackingFrameBodyDTO = {
   players: Array<Record<string, unknown>>;
   source?: "manual" | "inferred" | "video" | "simulated";
   confidence?: number;
+  coordSystem?: "normalized" | "meters";
+};
+
+export type RegisterTrackingBatchBodyDTO = {
+  frames: RegisterTrackingFrameBodyDTO[];
+  pitch?: { length_m: number; width_m: number };
 };
 
 /**
  * Upsert de detalle de partido: muchos campos opcionales; el servicio valida.
  */
 export type MatchDetailUpsertBodyDTO = Record<string, unknown>;
+
+export type AutoAssignRefereesResultDTO = {
+  assigned: number;
+  skipped: number;
+  message: string;
+  details: Array<{
+    matchId: number;
+    roundName: string;
+    refereeUserId: number | null;
+    refereeName: string;
+    status: string;
+  }>;
+};

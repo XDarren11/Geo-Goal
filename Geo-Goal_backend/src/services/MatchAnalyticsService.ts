@@ -117,6 +117,12 @@ export class MatchAnalyticsService {
     const prevPos = new Map<string, { x: number; y: number }>();
 
     for (const frame of frames) {
+      // "meters" coordinates are already in real metres → factor 1.0
+      // "normalized" coordinates are 0-100 → 1 unit = 1.05 m (x) / 0.68 m (y)
+      const isMeters = (frame as any).coordSystem === "meters";
+      const xFactor = isMeters ? 1.0 : 1.05;
+      const yFactor = isMeters ? 1.0 : 0.68;
+
       const rows = Array.isArray(frame.players) ? frame.players : [];
       for (const rowRaw of rows) {
         const row = rowRaw as Record<string, unknown>;
@@ -138,8 +144,8 @@ export class MatchAnalyticsService {
           continue;
         }
 
-        const dxMeters = (x - prev.x) * 1.05;
-        const dyMeters = (y - prev.y) * 0.68;
+        const dxMeters = (x - prev.x) * xFactor;
+        const dyMeters = (y - prev.y) * yFactor;
         const d = Math.sqrt(dxMeters * dxMeters + dyMeters * dyMeters);
 
         if (Number.isFinite(d) && d >= 0) {
@@ -174,7 +180,7 @@ export class MatchAnalyticsService {
       }),
       MatchTrackingFrame.findAll({
         where: { matchId },
-        attributes: ["players", "timestampMs"],
+        attributes: ["players", "timestampMs", "coordSystem"],
         order: [["timestampMs", "ASC"]],
       }),
     ]);
@@ -442,6 +448,7 @@ export class MatchAnalyticsService {
           "players",
           "source",
           "confidence",
+          "coordSystem",
           "createdAt",
         ],
         order: [["timestampMs", "ASC"]],

@@ -15,8 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { authenticateUser, getUser } from '@/Api/AuthApi'; 
-import type { UserLoginForm } from '@/types'; 
+import { authenticateUser, getUser } from '@/Api/AuthApi';
+import type { UserLoginForm } from '@/types';
+import BackButton from '@/components/BackButton'; 
 
 export default function LoginScreen() {
     const [showPassword, setShowPassword] = useState(false);
@@ -68,7 +69,9 @@ export default function LoginScreen() {
                 </View>
 
                 <View className="flex-1 bg-geo-black rounded-t-[48px] px-8 pt-10 pb-10 justify-start">
-                    
+
+                    <BackButton to="/" label="" />
+
                     {/* --- Input: Email --- */}
                     <View className="mb-6">
                         <Text className="text-geo-green font-bold mb-2 ml-5">Email</Text>

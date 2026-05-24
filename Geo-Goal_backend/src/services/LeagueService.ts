@@ -3,12 +3,14 @@ import {League} from "../models/League";
 import {Team} from "../models/Team";
 import {User} from "../models/User";
 import {Match} from "../models/Match";
+import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
 import {Season} from "../models/Season";
 import {TeamLeagueStat} from "../models/TeamLeagueStat";
 import {TeamMember} from "../models/TeamMember";
 import {MatchGenerator} from "../utils/MatchGenerator";
 import {AppError} from "../types/errors";
 import {NotificationService} from "./NotificationService";
+import {RefereeService} from "./RefereeService";
 import {AuditService} from "./AuditService";
 import {
   uploadImageToSupabase,
@@ -207,12 +209,17 @@ export class LeagueService {
 
   static async createLeague(
     managerId: number,
-    data: { name: string; description: string; logoFile?: UploadedImageFile | null }
+    data: { name: string; description: string; lineupMode: 7 | 11; logoFile?: UploadedImageFile | null }
   ): Promise<string> {
+    const parsedLineupMode = Number(data.lineupMode);
+    if (![7, 11].includes(parsedLineupMode)) {
+      throw new AppError(400, "La liga debe definir formato 7 u 11");
+    }
     const league = new League({
       name: data.name,
       description: data.description,
       managerId,
+      lineupMode: parsedLineupMode,
     });
     if (data.logoFile) {
       const uploadedLogo = await uploadImageToSupabase(data.logoFile, "leagues");
@@ -222,10 +229,17 @@ export class LeagueService {
     return "Liga Creada Correctamente";
   }
 
-  static async getAllLeagues(managerId: number) {
-    return League.findAll({
+  static async getAllLeagues(managerId: number, page = 1, pageSize = 50) {
+    const limit = Math.min(Math.max(1, pageSize), 200);
+    const offset = Math.max(0, page - 1) * limit;
+
+    const { rows, count } = await League.findAndCountAll({
       where: { managerId },
+      limit,
+      offset,
     });
+
+    return { data: rows, total: count, page, pageSize: limit };
   }
 
   static async getLeagueById(leagueId: string, _managerId: number) {
@@ -242,7 +256,7 @@ export class LeagueService {
   static async updateLeague(
     leagueId: string,
     managerId: number,
-    data: { name: string; description: string }
+    data: { name: string; description: string; lineupMode?: 7 | 11 }
   ): Promise<string> {
     const league = await League.findOne({
       where: { id: leagueId, managerId },
@@ -252,6 +266,13 @@ export class LeagueService {
     }
     league.name = data.name;
     league.description = data.description;
+    if (data.lineupMode !== undefined) {
+      const parsedLineupMode = Number(data.lineupMode);
+      if (![7, 11].includes(parsedLineupMode)) {
+        throw new AppError(400, "La liga debe definir formato 7 u 11");
+      }
+      league.lineupMode = parsedLineupMode;
+    }
     await league.save();
     return `Liga: ${league.name} actualizada correctamente`;
   }
@@ -457,6 +478,12 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
           return NotificationService.notifyMatchScheduled(m.id, new Date(m.date));
         })
       );
+
+      try {
+        await RefereeService.autoAssignRefereesForLeague(Number(leagueId), managerId);
+      } catch {
+        // Auto-assignment failure should not block fixture generation
+      }
     }
 
     return {
@@ -834,6 +861,18 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     const playedMatches = await Match.findAll({
       where: { leagueId, seasonId: activeSeasonId, played: true },
     });
+
+    const unplayedMatches = await Match.findAll({
+      where: { leagueId, seasonId: activeSeasonId, played: false },
+      attributes: ["id"],
+    });
+    const unplayedMatchIds = unplayedMatches.map((m) => m.id);
+
+    if (unplayedMatchIds.length > 0) {
+      await MatchRefereeAssignment.destroy({
+        where: { matchId: { [Op.in]: unplayedMatchIds } },
+      });
+    }
 
     await Match.destroy({
       where: { leagueId, seasonId: activeSeasonId, played: false },

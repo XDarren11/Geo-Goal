@@ -1,0 +1,14 @@
+# Exclude everything except the mobile app
+Geo-Goal_ai_service/
+Geo-Goal_backend/
+Geo-Goal_frontend/
+*.mp4
+node_modules/
+.expo/
+dist/
+android/
+ios/
+.git/
+web-build/
+.DS_Store
+*.log

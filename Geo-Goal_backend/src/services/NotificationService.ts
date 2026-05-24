@@ -125,6 +125,24 @@ export class NotificationService {
     });
   }
 
+  private static async collectMatchPlayersAndCoaches(match: Match): Promise<number[]> {
+    const teams = await Team.findAll({
+      where: { id: [match.homeTeamId, match.awayTeamId] },
+      attributes: ['id', 'trainerId'],
+    });
+
+    const trainerIds = teams.map((t) => t.trainerId).filter(Boolean) as number[];
+
+    const members = await TeamMember.findAll({
+      where: { teamId: [match.homeTeamId, match.awayTeamId] },
+      attributes: ['userId'],
+    });
+
+    const playerIds = members.map((m) => m.userId);
+
+    return [...new Set([...trainerIds, ...playerIds])];
+  }
+
   static async notifyRefereeAssigned(matchId: number, refereeUserId: number): Promise<void> {
     const match = await Match.findByPk(matchId, {
       include: [
@@ -147,6 +165,67 @@ export class NotificationService {
         leagueId: match.leagueId,
         roundName: match.roundName,
         scheduledAt: match.date ? new Date(match.date).toISOString() : null,
+      },
+    });
+  }
+
+  static async notifyMatchParticipantsRefereeAssigned(
+    matchId: number,
+    refereeName: string
+  ): Promise<void> {
+    const match = await Match.findByPk(matchId, {
+      include: [
+        { model: Team, as: 'homeTeam', attributes: ['id', 'name'] },
+        { model: Team, as: 'awayTeam', attributes: ['id', 'name'] },
+      ],
+    });
+
+    if (!match) return;
+
+    const recipientIds = await this.collectMatchPlayersAndCoaches(match);
+    const homeName = (match as any).homeTeam?.name ?? 'Local';
+    const awayName = (match as any).awayTeam?.name ?? 'Visitante';
+
+    await this.createForUsers(recipientIds, {
+      type: 'referee_assigned_to_match',
+      title: 'Árbitro designado',
+      message: `${refereeName} será el árbitro para ${homeName} vs ${awayName}${match.date ? ` — ${new Date(match.date).toLocaleString()}` : ''}`,
+      payload: {
+        matchId: match.id,
+        leagueId: match.leagueId,
+        roundName: match.roundName,
+        refereeName,
+        scheduledAt: match.date ? new Date(match.date).toISOString() : null,
+      },
+    });
+  }
+
+  static async notifyLineupUpdated(matchId: number, teamId: number): Promise<void> {
+    const match = await Match.findByPk(matchId, {
+      include: [
+        { model: Team, as: 'homeTeam', attributes: ['id', 'name', 'trainerId'] },
+        { model: Team, as: 'awayTeam', attributes: ['id', 'name', 'trainerId'] },
+      ],
+    });
+
+    if (!match) return;
+
+    const homeName = (match as any).homeTeam?.name ?? 'Local';
+    const awayName = (match as any).awayTeam?.name ?? 'Visitante';
+    const homeTrainer = (match as any).homeTeam?.trainerId ?? null;
+    const awayTrainer = (match as any).awayTeam?.trainerId ?? null;
+
+    const targetTrainerId = teamId === match.homeTeamId ? homeTrainer : awayTrainer;
+    if (!targetTrainerId) return;
+
+    await this.createForUsers([targetTrainerId], {
+      type: 'lineup_update',
+      title: 'Alineación registrada',
+      message: `Tu alineación para ${homeName} vs ${awayName} fue registrada.`,
+      payload: {
+        matchId: match.id,
+        leagueId: match.leagueId,
+        roundName: match.roundName,
       },
     });
   }

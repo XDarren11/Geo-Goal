@@ -1,9 +1,11 @@
 import type { Request } from "../../mediator/Request";
 import type {
   AssignRefereeBodyDTO,
+  AutoAssignRefereesResultDTO,
   MatchDetailUpsertBodyDTO,
   RegisterBulkEventsBodyDTO,
   RegisterMatchEventBodyDTO,
+  RegisterTrackingBatchBodyDTO,
   RegisterTrackingFrameBodyDTO,
 } from "../dto/MatchDetailDTOs";
 
@@ -87,8 +89,29 @@ export class RegisterTrackingFrameRequest extends MFR<unknown> {
   }
 }
 
+export class RegisterTrackingBatchRequest extends MFR<unknown> {
+  readonly requestName = "matchDetail.registerTrackingBatch";
+  constructor(
+    public readonly matchId: string,
+    public readonly userId: number,
+    public readonly body: RegisterTrackingBatchBodyDTO
+  ) {
+    super();
+  }
+}
+
 export class GetLeagueRefereesRequest extends MFR<unknown> {
   readonly requestName = "matchDetail.getLeagueReferees";
+  constructor(
+    public readonly leagueId: number,
+    public readonly actorUserId: number
+  ) {
+    super();
+  }
+}
+
+export class AutoAssignRefereesRequest extends MFR<AutoAssignRefereesResultDTO> {
+  readonly requestName = "matchDetail.autoAssignReferees";
   constructor(
     public readonly leagueId: number,
     public readonly actorUserId: number
@@ -101,7 +124,9 @@ export class GetUpcomingLeagueMatchesRequest extends MFR<unknown> {
   readonly requestName = "matchDetail.getUpcomingLeagueMatches";
   constructor(
     public readonly leagueId: number,
-    public readonly actorUserId: number
+    public readonly actorUserId: number,
+    public readonly page = 1,
+    public readonly pageSize = 50
   ) {
     super();
   }

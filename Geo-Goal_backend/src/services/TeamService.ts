@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, fn, col } from "sequelize";
 import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { TeamMember } from "../models/TeamMember";
@@ -76,7 +76,7 @@ export class TeamService {
       include: [
         { model: Team, as: "homeTeam", attributes: ["id", "name", "lat", "lng", "fieldAddress", "logoUrl"] },
         { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
-        { model: League, attributes: ["id", "name"] },
+        { model: League, attributes: ["id", "name", "lineupMode"] },
       ],
       order: [["date", "ASC"]],
     });
@@ -604,13 +604,20 @@ export class TeamService {
       : [];
     const detailMap = new Map(detailRows.map((row) => [row.matchId, row]));
 
-    const playerCountByTeamEntries = await Promise.all(
-      teamIds.map(async (teamId) => {
-        const count = await TeamMember.count({ where: { teamId } });
-        return [teamId, count] as const;
-      })
+    const playerCountRows = teamIds.length
+      ? await TeamMember.findAll({
+          where: { teamId: { [Op.in]: teamIds } },
+          attributes: ["teamId", [fn("COUNT", col("TeamMember.userId")), "count"]],
+          group: ["teamId"],
+          raw: true,
+        })
+      : [];
+    const playerCountByTeam = new Map(
+      (playerCountRows as unknown as Array<{ teamId: number; count: string }>).map((row) => [
+        row.teamId,
+        Number(row.count),
+      ])
     );
-    const playerCountByTeam = new Map(playerCountByTeamEntries);
 
     const preMatchChecklist = upcomingMatches.slice(0, 6).map((match) => {
       const isHome = teamIds.includes(match.homeTeamId);
@@ -620,6 +627,7 @@ export class TeamService {
       const detail = detailMap.get(match.id);
       const lineup = isHome ? detail?.homeStartingXI : detail?.awayStartingXI;
       const lineupCount = Array.isArray(lineup) ? lineup.length : 0;
+      const expectedStarters = Number((match.league as League | undefined)?.lineupMode ?? 11);
 
       return {
         matchId: match.id,
@@ -630,8 +638,8 @@ export class TeamService {
         roundName: match.roundName,
         date: match.date,
         checklist: {
-          convocatoria: (playerCountByTeam.get(myTeamId) ?? 0) >= 11,
-          alineacion: lineupCount >= 11,
+          convocatoria: (playerCountByTeam.get(myTeamId) ?? 0) >= expectedStarters,
+          alineacion: lineupCount === expectedStarters,
           cancha: Boolean(detail?.fieldId || match.homeTeam?.fieldAddress),
           horario: Boolean(match.date),
         },

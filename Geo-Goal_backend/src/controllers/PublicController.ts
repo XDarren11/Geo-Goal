@@ -22,8 +22,10 @@ export class PublicController {
     res.json(data);
   };
 
-  static getLeagues = async (_req: Request, res: Response): Promise<void> => {
-    const data = await publicMediator.send(new GetLeaguesRequest());
+  static getLeagues = async (req: Request, res: Response): Promise<void> => {
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 50;
+    const data = await publicMediator.send(new GetLeaguesRequest(page, pageSize));
     res.json(data);
   };
 

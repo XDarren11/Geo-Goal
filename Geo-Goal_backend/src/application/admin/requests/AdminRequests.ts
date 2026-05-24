@@ -4,8 +4,10 @@ import type {
   AuditReasonBodyDTO,
   ChangeSeasonStatusBodyDTO,
   CreateFieldBodyDTO,
+  CreateFriendlyMatchBodyDTO,
   CreateSeasonBodyDTO,
   CreateUserBodyDTO,
+  DeleteFriendlyMatchBodyDTO,
   LeagueAdminRoleDTO,
   UpdateFieldBodyDTO,
   UpdateSeasonBodyDTO,
@@ -35,7 +37,10 @@ export class AdminListUsersByLeagueRequest extends AR<unknown> {
 
 export class AdminListUsersRequest extends AR<unknown> {
   readonly requestName = "admin.listUsers";
-  constructor() {
+  constructor(
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }
@@ -128,7 +133,10 @@ export class AdminRemoveLeagueAdminRequest extends AR<string> {
 
 export class AdminListFieldsRequest extends AR<unknown> {
   readonly requestName = "admin.listFields";
-  constructor() {
+  constructor(
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
     super();
   }
 }
@@ -260,6 +268,42 @@ export class AdminListAuditLogsRequest extends AR<unknown> {
 export class AdminGetAuditLogByIdRequest extends AR<unknown> {
   readonly requestName = "admin.getAuditLogById";
   constructor(public readonly logId: string) {
+    super();
+  }
+}
+
+// --- Friendly Match ---
+
+export class AdminCreateFriendlyMatchRequest extends AR<{ message: string; match: unknown }> {
+  readonly requestName = "admin.createFriendlyMatch";
+  constructor(
+    public readonly body: CreateFriendlyMatchBodyDTO,
+    public readonly adminId: number,
+    public readonly ctx: AdminActorContext
+  ) {
+    super();
+  }
+}
+
+export class AdminListFriendlyMatchesRequest extends AR<unknown> {
+  readonly requestName = "admin.listFriendlyMatches";
+  constructor(
+    public readonly adminId: number,
+    public readonly page = 1,
+    public readonly pageSize = 50
+  ) {
+    super();
+  }
+}
+
+export class AdminDeleteFriendlyMatchRequest extends AR<string> {
+  readonly requestName = "admin.deleteFriendlyMatch";
+  constructor(
+    public readonly matchId: string,
+    public readonly adminId: number,
+    public readonly body: DeleteFriendlyMatchBodyDTO,
+    public readonly ctx: AdminActorContext
+  ) {
     super();
   }
 }

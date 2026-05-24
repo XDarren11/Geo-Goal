@@ -32,4 +32,9 @@ export class MatchOperationsServiceAdapter implements IMatchOperationsService {
       audit
     );
   }
+
+  // 👇 ESTO ES LO ÚNICO QUE VA AQUÍ, EL PUENTE
+  getMatchPlayers(matchId: string): Promise<any[]> {
+    return MatchOperationsService.getMatchPlayers(matchId);
+  }
 }

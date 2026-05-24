@@ -18,6 +18,15 @@ export class League extends Model {
     @Column({ type: DataType.STRING, allowNull: true })
     declare logoUrl: string | null;
 
+    @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 11 })
+    declare lineupMode: number;
+
+    @Column({ type: DataType.ENUM('manual', 'auto'), allowNull: false, defaultValue: 'auto' })
+    declare refereeAssignmentMode: 'manual' | 'auto';
+
+    @Column({ type: DataType.INTEGER, allowNull: false, defaultValue: 7 })
+    declare autoAssignWindowDays: number;
+
     // Dueño de la Liga (Admin)
     @ForeignKey(() => User)
     @Column({ type: DataType.INTEGER })

@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import path from "path";
 import cors from "cors";
 import morgan from "morgan";
 import { corsConfig } from "./config/cors";
@@ -8,7 +9,7 @@ import { registerRoutes } from "./routes";
 import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middleware/errorHandler";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
 
 connectDB();
 

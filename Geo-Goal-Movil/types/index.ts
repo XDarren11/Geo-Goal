@@ -39,7 +39,21 @@ export interface League {
   description?: string
   logoUrl?: string | null
   managerId?: number
+  lineupMode?: 7 | 11
+  refereeAssignmentMode?: 'manual' | 'auto'
+  autoAssignWindowDays?: number
   teams?: Team[]
+}
+
+export interface Season {
+  id: number
+  leagueId?: number
+  name: string
+  year: number
+  status?: string
+  isCurrent?: boolean
+  startDate?: string
+  endDate?: string
 }
 
 // Team
@@ -58,7 +72,9 @@ export interface Team {
 // Match
 export interface Match {
   id: number
-  leagueId: number
+  leagueId: number | null
+  seasonId?: number | null
+  type?: 'league' | 'friendly'
   homeTeamId: number
   awayTeamId: number
   date?: string | null
@@ -68,6 +84,7 @@ export interface Match {
   played: boolean
   homeTeam?: Team
   awayTeam?: Team
+  league?: Pick<League, 'id' | 'name' | 'lineupMode'>
 }
 
 export interface MatchDetailLineupEntry {
@@ -84,10 +101,22 @@ export interface PublicMatchDetail {
   durationMinutes?: number
   endTime?: string | null
   matchDay?: string | null
+  field?: {
+    id?: number
+    name?: string | null
+    address?: string | null
+    city?: string | null
+    state?: string | null
+    country?: string | null
+    lat?: number | null
+    lng?: number | null
+  } | null
   homeStartingXI?: MatchDetailLineupEntry[]
   awayStartingXI?: MatchDetailLineupEntry[]
   homeBench?: MatchDetailLineupEntry[]
   awayBench?: MatchDetailLineupEntry[]
+  homeFormation?: string | null
+  awayFormation?: string | null
   referee?: string | null
   weather?: string | null
   attendance?: number | null
@@ -100,6 +129,10 @@ export interface PublicMatchDetailResponse {
 }
 
 export interface MatchAnalyticsResponse {
+  match?: {
+    homeTeamId: number
+    awayTeamId: number
+  }
   summary: {
     totalPlayersWithStats: number
     totalPassEdges: number
@@ -132,10 +165,52 @@ export interface MatchAnalyticsResponse {
     ballX?: number | null
     ballY?: number | null
     ballZ?: number | null
-    players: Array<Record<string, unknown>>
+    players: Array<TrackingFramePlayer>
     source?: string
     confidence?: number
   }>
+}
+
+export interface TrackingFramePlayer {
+  playerId?: number | null
+  teamId?: number | null
+  x?: number | null
+  y?: number | null
+}
+
+export interface PublicLeagueSummary {
+  id: number
+  name: string
+  description?: string
+  createdAt?: string
+}
+
+export interface PublicStanding {
+  id?: number
+  teamId: number
+  leagueId: number
+  points: number
+  gamesPlayed: number
+  wins: number
+  draws: number
+  losses: number
+  goalsFor: number
+  goalsAgainst: number
+  goalDifference: number
+  team?: Pick<Team, 'id' | 'name' | 'logoUrl'>
+}
+
+export interface PublicLeagueDetail {
+  league: League
+  currentSeason?: Season | null
+  standings: PublicStanding[]
+  fixture: FixtureByRound
+  fixtureWithLocations?: Array<Match & { location?: { lat: number; lng: number; fieldAddress?: string } | null }>
+  teams?: Team[]
+  fields?: Array<Record<string, unknown>>
+  recentMatches?: Match[]
+  seasons?: Season[]
+  news?: Array<Record<string, unknown>>
 }
 
 export type FixtureByRound = Record<string, Match[]>
@@ -147,6 +222,7 @@ export interface Player {
   username?: string | null
   playerName?: string | null
   jerseyNumber?: number | null
+  preferredPosition?: string | null
   avatarUrl?: string | null
 }
 
