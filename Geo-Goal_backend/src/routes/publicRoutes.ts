@@ -92,6 +92,22 @@ router.get(
   asyncHandler(PublicController.getWeeklyAward)
 );
 
+// ── Fase 5: xG y xT ──────────────────────────────────────────────────────────
+
+router.get(
+  "/matches/:matchId/xg",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchXG)
+);
+
+router.get(
+  "/matches/:matchId/xt",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchXT)
+);
+
 router.get(
   "/matches/:matchId/frames/export",
   param("matchId").isInt().withMessage("ID de partido no válido"),

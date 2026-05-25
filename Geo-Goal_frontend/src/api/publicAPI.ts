@@ -369,3 +369,50 @@ export async function getMatchPrediction(matchId: number): Promise<MatchPredicti
   return data;
 }
 
+// ── Fase 5: xG ────────────────────────────────────────────────────────────────
+
+export interface XGShot {
+  playerId: number | null;
+  teamId: number | null;
+  eventType: string;
+  x: number;
+  y: number;
+  xg: number;
+  outcome: "goal" | "on_target" | "missed";
+  minute: number;
+}
+
+export interface XGResponse {
+  shots: XGShot[];
+  perPlayer: Record<number, number>;
+  teamTotals: Record<number, number>;
+}
+
+export async function getMatchXG(matchId: number): Promise<XGResponse> {
+  const { data } = await api.get<XGResponse>(`${BASE}/matches/${matchId}/xg`);
+  return data;
+}
+
+// ── Fase 5: xT ────────────────────────────────────────────────────────────────
+
+export interface XTTopPass {
+  playerId: number;
+  teamId: number | null;
+  xStart: number;
+  yStart: number;
+  xEnd: number;
+  yEnd: number;
+  xtDelta: number;
+  minute: number;
+}
+
+export interface XTResponse {
+  perPlayer: Record<number, number>;
+  perTeam: Record<number, number>;
+  topPasses: XTTopPass[];
+}
+
+export async function getMatchXT(matchId: number): Promise<XTResponse> {
+  const { data } = await api.get<XTResponse>(`${BASE}/matches/${matchId}/xt`);
+  return data;
+}

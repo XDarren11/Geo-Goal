@@ -11,10 +11,20 @@
  *  - Red de pases (SVG con nodos y aristas)
  */
 
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAdvancedAnalytics, type TrackingAnalytics } from "@/api/publicAPI";
 import { PlayerHeatmap } from "@/components/Heatmap/PlayerHeatmap";
+import api from "@/lib/axios";
+
+// Tipos locales Fase 5
+interface XGShot { playerId: number | null; teamId: number | null; eventType: string; x: number; y: number; xg: number; outcome: string; minute: number }
+interface XGResponse { shots: XGShot[]; perPlayer: Record<number, number>; teamTotals: Record<number, number> }
+interface XTTopPass { playerId: number; teamId: number | null; xtDelta: number }
+interface XTResponse { perPlayer: Record<number, number>; perTeam: Record<number, number>; topPasses: XTTopPass[] }
+
+const ShotMap = lazy(() => import("./ShotMap"));
+const XTRankingTable = lazy(() => import("./XTRankingTable").then((m) => ({ default: m.XTRankingTable })));
 
 interface Props {
   matchId: number;
@@ -192,6 +202,23 @@ export function AdvancedAnalyticsPanel({ matchId, homeName, awayName, playerName
         {data.meta.framesProcessed.toLocaleString()} frames procesados ·
         calculado {new Date(data.meta.computedAt).toLocaleString("es-MX")}
       </p>
+
+      {/* ── Fase 5: xG Shot Map ───────────────────────────────────────────── */}
+      <XGSection
+        matchId={matchId}
+        homeName={homeName}
+        awayName={awayName}
+        homeTeamId={data.meta.homeTeamId}
+      />
+
+      {/* ── Fase 5: xT Ranking ────────────────────────────────────────────── */}
+      <XTSection
+        matchId={matchId}
+        homeName={homeName}
+        awayName={awayName}
+        homeTeamId={data.meta.homeTeamId}
+        playerNames={playerNames}
+      />
     </div>
   );
 }
@@ -305,3 +332,80 @@ function PassNetworkSvg({
   );
 }
 
+// ── Sección xG (Fase 5) ──────────────────────────────────────────────────────
+
+function XGSection({
+  matchId, homeName, awayName, homeTeamId,
+}: {
+  matchId: number; homeName: string; awayName: string; homeTeamId: number;
+}) {
+  const { data, isLoading, isError } = useQuery<XGResponse>({
+    queryKey: ["match-xg", matchId],
+    queryFn: async () => {
+      const { data } = await api.get<XGResponse>(`/public/matches/${matchId}/xg`);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  return (
+    <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+        ⚽ Expected Goals (xG) — Mapa de tiros
+      </p>
+      {isLoading && <p className="text-xs text-[var(--geo-text-muted)]">Calculando xG...</p>}
+      {isError && <p className="text-xs text-red-400">No hay tiros registrados con coordenadas aún.</p>}
+      {data && (
+        <Suspense fallback={null}>
+          <ShotMap
+            shots={data.shots}
+            homeName={homeName}
+            awayName={awayName}
+            homeTeamId={homeTeamId}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+// ── Sección xT (Fase 5) ──────────────────────────────────────────────────────
+
+function XTSection({
+  matchId, homeName, awayName, homeTeamId, playerNames,
+}: {
+  matchId: number; homeName: string; awayName: string;
+  homeTeamId: number; playerNames: Record<number, string>;
+}) {
+  const { data, isLoading, isError } = useQuery<XTResponse>({
+    queryKey: ["match-xt", matchId],
+    queryFn: async () => {
+      const { data } = await api.get<XTResponse>(`/public/matches/${matchId}/xt`);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  return (
+    <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+        📈 Expected Threat (xT) — Creadores de peligro
+      </p>
+      {isLoading && <p className="text-xs text-[var(--geo-text-muted)]">Calculando xT...</p>}
+      {isError && <p className="text-xs text-red-400">No hay pases con coordenadas registrados aún.</p>}
+      {data && (
+        <Suspense fallback={null}>
+          <XTRankingTable
+            xt={data}
+            playerNames={playerNames}
+            homeName={homeName}
+            awayName={awayName}
+            homeTeamId={homeTeamId}
+          />
+        </Suspense>
+      )}
+    </div>
+  );
+}

@@ -118,6 +118,32 @@ export class PublicController {
     res.json(award);
   };
 
+  // ── Fase 5: xG ───────────────────────────────────────────────────────────
+
+  static getMatchXG = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { XGService } = await import("../services/XGService.js");
+    const [shots, perPlayer] = await Promise.all([
+      XGService.shotsForMatch(matchId),
+      XGService.playerXGForMatch(matchId),
+    ]);
+    // totalXG por equipo derivado de los tiros
+    const teamTotals: Record<number, number> = {};
+    shots.forEach((s: any) => {
+      if (s.teamId) teamTotals[s.teamId] = Number(((teamTotals[s.teamId] || 0) + s.xg).toFixed(3));
+    });
+    res.json({ shots, perPlayer, teamTotals });
+  };
+
+  // ── Fase 5: xT ───────────────────────────────────────────────────────────
+
+  static getMatchXT = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { XTService } = await import("../services/XTService.js");
+    const result = await XTService.computeForMatch(matchId);
+    res.json(result);
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;
