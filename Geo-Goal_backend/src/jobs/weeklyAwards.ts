@@ -1,12 +1,12 @@
 import cron from "node-cron";
 import { Sequelize, Op } from "sequelize";
-import { League } from "../models/League.js";
-import { Match } from "../models/Match.js";
-import { PlayerMatchStat } from "../models/PlayerMatchStat.js";
-import { WeeklyAward } from "../models/WeeklyAward.js";
-import { NotificationService } from "../services/NotificationService.js";
-import { User } from "../models/User.js";
-import { Team } from "../models/Team.js";
+import { League } from "../models/League";
+import { Match } from "../models/Match";
+import { PlayerMatchStat } from "../models/PlayerMatchStat";
+import { WeeklyAward } from "../models/WeeklyAward";
+import { NotificationService } from "../services/NotificationService";
+import { User } from "../models/User";
+import { Team } from "../models/Team";
 
 /**
  * Cron semanal: domingos a las 23:30 MX.

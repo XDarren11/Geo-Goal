@@ -12,8 +12,8 @@
  */
 
 import { Op } from "sequelize";
-import { Match } from "../models/Match.js";
-import { LeaguePredictionModel } from "../models/LeaguePredictionModel.js";
+import { Match } from "../models/Match";
+import { LeaguePredictionModel } from "../models/LeaguePredictionModel";
 
 interface TeamParams { alpha: number; beta: number }
 

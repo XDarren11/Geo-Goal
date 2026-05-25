@@ -1,6 +1,6 @@
 import cron from "node-cron";
-import { League } from "../models/League.js";
-import { DixonColesService } from "../services/DixonColesService.js";
+import { League } from "../models/League";
+import { DixonColesService } from "../services/DixonColesService";
 export function startPredictionRefitCron(): void {
   cron.schedule("0 4 * * 0", async () => {
     console.log("[cron] prediction refit start");

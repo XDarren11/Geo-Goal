@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { getPlayersTeam, updateCoachLineup } from "@/api/teamAPI";
 import { AdvancedAnalyticsPanel } from "@/components/AdvancedAnalytics/AdvancedAnalyticsPanel";
 import { MatchPrediction } from "@/components/MatchPrediction";
+import { H2HCard } from "@/components/Comparativas/H2HCard";
+import { TeamFormBadges } from "@/components/Comparativas/TeamFormBadges";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro" | "advanced";
@@ -2000,6 +2002,39 @@ export default function PublicMatchDetailView() {
             awayName={match.awayTeam?.name ?? "Visitante"}
           />
         </section>
+
+        {/* ── Comparativas Fase 6: H2H + Forma ─────────────────────────── */}
+        {match.homeTeamId && match.awayTeamId && (
+          <section className="mt-4 grid gap-4 sm:grid-cols-2">
+            {/* H2H */}
+            <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                ⚔️ Historial H2H
+              </p>
+              <H2HCard
+                teamAId={match.homeTeamId}
+                teamBId={match.awayTeamId}
+                teamAName={match.homeTeam?.name ?? "Local"}
+                teamBName={match.awayTeam?.name ?? "Visitante"}
+              />
+            </div>
+            {/* Forma reciente */}
+            <div className="grid gap-4">
+              <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                  📈 Forma — {match.homeTeam?.name ?? "Local"}
+                </p>
+                <TeamFormBadges teamId={match.homeTeamId} last={5} />
+              </div>
+              <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                  📈 Forma — {match.awayTeam?.name ?? "Visitante"}
+                </p>
+                <TeamFormBadges teamId={match.awayTeamId} last={5} />
+              </div>
+            </div>
+          </section>
+        )}
 
         {(isLive || liveEvents.length > 0) && (
           <section className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5">

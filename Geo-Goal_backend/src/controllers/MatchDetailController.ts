@@ -573,7 +573,7 @@ export class MatchDetailController {
 
     // ── Notificación: análisis listo → participantes del partido ──────────
     if (status === "completed") {
-      const { NotificationService } = await import("../services/NotificationService.js");
+      const { NotificationService } = await import("../services/NotificationService");
       setImmediate(async () => {
         try {
           await NotificationService.notifyMatchParticipants(Number(matchId), {

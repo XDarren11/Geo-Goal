@@ -108,6 +108,38 @@ router.get(
   asyncHandler(PublicController.getMatchXT)
 );
 
+// ── Fase 6: Comparativas ──────────────────────────────────────────────────────
+
+router.get(
+  "/teams/:teamA/h2h/:teamB",
+  param("teamA").isInt().withMessage("ID de equipo no válido"),
+  param("teamB").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getH2H)
+);
+
+router.get(
+  "/teams/:teamId/form",
+  param("teamId").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getTeamForm)
+);
+
+router.get(
+  "/players/:id1/compare/:id2",
+  param("id1").isInt().withMessage("ID de jugador no válido"),
+  param("id2").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.comparePlayers)
+);
+
+router.get(
+  "/players/:id/similar",
+  param("id").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getSimilarPlayers)
+);
+
 router.get(
   "/matches/:matchId/frames/export",
   param("matchId").isInt().withMessage("ID de partido no válido"),

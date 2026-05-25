@@ -416,3 +416,83 @@ export async function getMatchXT(matchId: number): Promise<XTResponse> {
   const { data } = await api.get<XTResponse>(`${BASE}/matches/${matchId}/xt`);
   return data;
 }
+
+// ── Fase 6: Comparativas ──────────────────────────────────────────────────────
+
+export interface H2HSummary {
+  played: number;
+  teamAWins: number;
+  teamBWins: number;
+  draws: number;
+  avgGoalsPerMatch: number;
+  goalsFor: { teamA: number; teamB: number };
+}
+
+export interface H2HMatch {
+  matchId: number;
+  date: string | null;
+  homeTeam: string;
+  awayTeam: string;
+  score: string;
+  winner: string;
+}
+
+export interface H2HResponse {
+  summary: H2HSummary;
+  recent: H2HMatch[];
+}
+
+export async function getH2H(teamA: number, teamB: number): Promise<H2HResponse> {
+  const { data } = await api.get<H2HResponse>(`${BASE}/teams/${teamA}/h2h/${teamB}`);
+  return data;
+}
+
+export interface TeamFormSummary {
+  pointsPerMatch: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  streak: string;
+}
+
+export interface TeamFormResponse {
+  summary: TeamFormSummary;
+  recent: Array<{ matchId: number; date: string | null; scoreFor: number; scoreAgainst: number; result: "W" | "D" | "L" }>;
+}
+
+export async function getTeamForm(teamId: number, last = 5): Promise<TeamFormResponse> {
+  const { data } = await api.get<TeamFormResponse>(`${BASE}/teams/${teamId}/form`, { params: { last } });
+  return data;
+}
+
+export interface PlayerRadarData {
+  goals: number;
+  assists: number;
+  passing: number;
+  distance: number;
+  rating: number;
+  shots: number;
+}
+
+export interface ComparePlayersResponse {
+  playerA: PlayerRadarData;
+  playerB: PlayerRadarData;
+}
+
+export async function comparePlayers(id1: number, id2: number): Promise<ComparePlayersResponse> {
+  const { data } = await api.get<ComparePlayersResponse>(`${BASE}/players/${id1}/compare/${id2}`);
+  return data;
+}
+
+export interface SimilarPlayer {
+  playerId: number;
+  name: string;
+  similarity: number;
+}
+
+export async function getSimilarPlayers(id: number, n = 5): Promise<SimilarPlayer[]> {
+  const { data } = await api.get<SimilarPlayer[]>(`${BASE}/players/${id}/similar`, { params: { n } });
+  return data;
+}
