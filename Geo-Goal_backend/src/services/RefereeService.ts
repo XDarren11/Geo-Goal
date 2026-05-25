@@ -1040,6 +1040,10 @@ export class RefereeService {
               teamId,
               x: isMeters ? normalizeCoord(p.x, 105) : Number(p.x ?? 0),
               y: isMeters ? normalizeCoord(p.y, 68) : Number(p.y ?? 0),
+              // Propagar el flag de interpolación al JSONB (sin migración necesaria).
+              // El frontend lo usa para renderizar las posiciones predichas con
+              // opacidad reducida y distinguirlas de detecciones reales.
+              ...(p.interpolated === true ? { interpolated: true } : {}),
             };
           })
         : [],

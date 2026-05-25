@@ -639,9 +639,12 @@ export class MatchDetailController {
         "videoSupabaseUrl",   // se mantiene como fallback (otra máquina)
         "srcPts", "playerTags", "identityMap", "createdAt",
       ],
+      include: [
+        { model: League, attributes: ["id", "lineupMode"], required: false },
+      ],
     });
 
-    res.json(jobs.map((j) => ({
+    res.json(jobs.map((j: any) => ({
       jobId: j.id,
       matchId: j.matchId,
       leagueId: j.leagueId,
@@ -650,6 +653,10 @@ export class MatchDetailController {
       srcPts: j.srcPts,
       playerTags: j.playerTags,
       identityMap: j.identityMap,
+      // lineupMode del partido (11 o 7). El AI service lo usa para limitar
+      // el número de tracks por equipo y evitar saltos visuales por
+      // detecciones espurias (banca, árbitros, fotógrafos).
+      lineupMode: j.league?.lineupMode ?? 11,
       createdAt: j.createdAt,
     })));
   };
@@ -746,6 +753,12 @@ export class MatchDetailController {
       console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
     }
 
+    // Cargar lineupMode de la liga para que el worker sepa cuántos jugadores
+    // máximos puede haber en cada equipo (limita falsos positivos: banca, etc.)
+    const league = await League.findByPk(job.leagueId, {
+      attributes: ["id", "lineupMode"],
+    });
+
     res.json({
       jobId: job.id,
       matchId: job.matchId,
@@ -755,6 +768,7 @@ export class MatchDetailController {
       srcPts: job.srcPts,
       playerTags: job.playerTags,
       identityMap: job.identityMap,
+      lineupMode: league?.lineupMode ?? 11,      // 11 o 7 — el AI lo usa como cap por equipo
       status: "processing",
     });
   };

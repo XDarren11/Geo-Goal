@@ -464,7 +464,7 @@ function TacticalPitch({
   const homeIds = useMemo(() => new Set(home.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [home]);
   const awayIds = useMemo(() => new Set(away.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [away]);
 
-  type TrackedPlayer = { userId: number | null; x: number; y: number; side: Side | "neutral"; trackerId: number | null; teamId: number | null };
+  type TrackedPlayer = { userId: number | null; x: number; y: number; side: Side | "neutral"; trackerId: number | null; teamId: number | null; interpolated: boolean };
 
   const trackedPlayers = useMemo(() => {
     if (!currentFrame || !Array.isArray(currentFrame.players)) return [] as TrackedPlayer[];
@@ -497,6 +497,7 @@ function TacticalPitch({
           teamId,
           x: Math.max(0, Math.min(100, x)),
           y: Math.max(0, Math.min(100, y)),
+          interpolated: row.interpolated === true,
           side,
         };
       })
@@ -504,11 +505,11 @@ function TacticalPitch({
   }, [currentFrame, homeIds, awayIds, homeTeamId, awayTeamId]);
 
   const trackedPositionByPlayerId = useMemo(() => {
-    const map = new Map<number, { x: number; y: number }>();
+    const map = new Map<number, { x: number; y: number; interpolated: boolean }>();
     // Direct userId matches (manual frames or identity-resolved AI frames)
     trackedPlayers.forEach((tp) => {
       if (typeof tp.userId === "number" && !map.has(tp.userId)) {
-        map.set(tp.userId, { x: tp.x, y: tp.y });
+        map.set(tp.userId, { x: tp.x, y: tp.y, interpolated: tp.interpolated });
       }
     });
 
@@ -716,13 +717,15 @@ function TacticalPitch({
             const trackedPos = typeof p.userId === "number" ? trackedPositionByPlayerId.get(p.userId) : undefined;
             const pos = trackedPos ?? toSpot(p.idx, "home");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
+            const isInterpolated = trackedPos?.interpolated === true;
             return (
               <div
                 key={`h-${p.idx}-${p.userId ?? p.name}`}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                style={{ left: `${pos.x}%`, top: `${pos.y}%`, opacity: isInterpolated ? 0.5 : 1 }}
+                title={isInterpolated ? "Posición interpolada (estimada)" : undefined}
               >
-                <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-emerald-400 text-xs font-black text-emerald-950 shadow-lg shadow-black/40">
+                <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-emerald-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-emerald-400/60" : "border-white/80 bg-emerald-400"}`}>
                   {p.number ?? p.idx + 1}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
@@ -740,13 +743,15 @@ function TacticalPitch({
             const trackedPos = typeof p.userId === "number" ? trackedPositionByPlayerId.get(p.userId) : undefined;
             const pos = trackedPos ?? toSpot(p.idx, "away");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
+            const isInterpolated = trackedPos?.interpolated === true;
             return (
               <div
                 key={`a-${p.idx}-${p.userId ?? p.name}`}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                style={{ left: `${pos.x}%`, top: `${pos.y}%`, opacity: isInterpolated ? 0.5 : 1 }}
+                title={isInterpolated ? "Posición interpolada (estimada)" : undefined}
               >
-                <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-sky-400 text-xs font-black text-sky-950 shadow-lg shadow-black/40">
+                <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-sky-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-sky-400/60" : "border-white/80 bg-sky-400"}`}>
                   {p.number ?? p.idx + 1}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
@@ -771,7 +776,8 @@ function TacticalPitch({
               <div
                 key={`trk-${i}-${tp.trackerId ?? tp.userId ?? i}`}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${tp.x}%`, top: `${tp.y}%` }}
+                style={{ left: `${tp.x}%`, top: `${tp.y}%`, opacity: tp.interpolated ? 0.5 : 1 }}
+                title={tp.interpolated ? "Posición interpolada (estimada)" : undefined}
               >
                 <div
                   className={`flex h-7 w-7 items-center justify-center rounded-full border text-[9px] font-bold shadow-lg shadow-black/40 ${colorClass} text-white/80`}
@@ -782,15 +788,26 @@ function TacticalPitch({
             );
           })}
 
-          {currentFrame && currentFrame.ballX != null && currentFrame.ballY != null ? (
-            <div
-              className="absolute -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${currentFrame.ballX}%`, top: `${currentFrame.ballY}%` }}
-            >
-              <div className="h-4 w-4 rounded-full border border-zinc-900 bg-white shadow-lg shadow-black/50" />
-              <p className="-ml-6 mt-1 w-16 text-center text-[10px] font-semibold text-white">Balón</p>
-            </div>
-          ) : null}
+          {(() => {
+            const frame = currentFrame as Record<string, unknown> | null | undefined;
+            // Formato legado: ballX / ballY planos en el frame
+            // Formato nuevo (AI post-interpolación): ball: { x, y, interpolated }
+            const ballObj = frame?.ball as Record<string, unknown> | null | undefined;
+            const ballX = (frame?.ballX as number | null) ?? (ballObj?.x as number | null);
+            const ballY = (frame?.ballY as number | null) ?? (ballObj?.y as number | null);
+            const ballInterpolated = ballObj?.interpolated === true;
+            if (ballX == null || ballY == null) return null;
+            return (
+              <div
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${ballX}%`, top: `${ballY}%`, opacity: ballInterpolated ? 0.5 : 1 }}
+                title={ballInterpolated ? "Posición del balón interpolada (estimada)" : undefined}
+              >
+                <div className="h-4 w-4 rounded-full border border-zinc-900 bg-white shadow-lg shadow-black/50" />
+                <p className="-ml-6 mt-1 w-16 text-center text-[10px] font-semibold text-white">Balón</p>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -799,6 +816,7 @@ function TacticalPitch({
         <span className="rounded bg-red-500 px-2 py-1 font-bold text-white">R: Roja</span>
         <span className="rounded bg-zinc-700 px-2 py-1 font-bold text-white">⇣ Sustituido</span>
         <span className="rounded bg-zinc-700 px-2 py-1 font-bold text-white">⇡ Entró</span>
+        <span className="rounded bg-zinc-700/60 px-2 py-1 font-bold text-white/60">50% opacidad: posición interpolada</span>
       </div>
     </div>
   );
@@ -1178,6 +1196,14 @@ export default function PublicMatchDetailView() {
   // Close modal — preserve bgAnalysis so status bar remains visible
   const closeUploadModal = () => {
     setUploadOpen(false);
+  };
+
+  // Full reset including background state (used by "Entendido" / final dismiss)
+  const resetUpload = () => {
+    closeUploadModal();
+    setBgAnalysis({ status: "idle" });
+    setBgBarDismissed(false);
+    manualSubmitRef.current = false;
     setUploadFile(null);
     setUploadResult(null);
     setUploadError(null);
@@ -1198,12 +1224,19 @@ export default function PublicMatchDetailView() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Full reset including background state (used by "Entendido" / final dismiss)
-  const resetUpload = () => {
-    closeUploadModal();
-    setBgAnalysis({ status: "idle" });
-    setBgBarDismissed(false);
-    manualSubmitRef.current = false;
+  const openAnalysisPanel = () => {
+    setUploadOpen(true);
+    setBgBarDismissed(true);
+    if (bgAnalysis.status === "processing" || bgAnalysis.status === "completed" || bgAnalysis.status === "failed") {
+      setUploadStep("progress");
+      if (!analysisStatus && dbAnalysisStatus && dbAnalysisStatus.status !== "none") {
+        setAnalysisStatus(dbAnalysisStatus);
+      }
+      return;
+    }
+    if (bgAnalysis.status === "uploaded" && uploadStep === "select") {
+      setUploadStep("annotate");
+    }
   };
 
   // ---- canvas annotation ----
@@ -1440,6 +1473,19 @@ export default function PublicMatchDetailView() {
       return prev;
     });
   }, [dbAnalysisStatus]);
+
+  const analysisSnapshot = analysisStatus ?? dbAnalysisStatus ?? null;
+  const analysisStatusLabel = (status?: AnalysisStatusResponse["status"]) => {
+    switch (status) {
+      case "uploaded": return "Video subido";
+      case "annotating": return "Anotando";
+      case "queued": return "En cola";
+      case "processing": return "Procesando";
+      case "completed": return "Completado";
+      case "failed": return "Fallido";
+      default: return "Sin análisis";
+    }
+  };
 
   const coachSide = isCoach && user?.id && data?.match
     ? data.match.homeTeam?.trainerId === user.id
@@ -1751,8 +1797,9 @@ export default function PublicMatchDetailView() {
             <h1 className="font-geo text-3xl lg:text-4xl">Detalle de partido</h1>
             <div className="flex items-center gap-3">
               {isAdmin && (
+                <>
                 <button
-                  onClick={() => { setUploadOpen(true); setBgBarDismissed(true); }}
+                  onClick={openAnalysisPanel}
                   className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                     bgAnalysis.status === "processing"
                       ? "bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
@@ -1797,6 +1844,16 @@ export default function PublicMatchDetailView() {
                     </>
                   )}
                 </button>
+                {(bgAnalysis.status === "processing" || bgAnalysis.status === "completed" || bgAnalysis.status === "failed") && (
+                  <span className="hidden sm:inline-flex text-[11px] text-[var(--geo-text-muted)]">
+                    {bgAnalysis.status === "processing"
+                      ? `${bgAnalysis.progress}% · ${bgAnalysis.framesProcessed ?? 0}/${bgAnalysis.totalFrames ?? "—"} frames`
+                      : bgAnalysis.status === "completed"
+                        ? "Detalle listo"
+                        : "Revisar error"}
+                  </span>
+                )}
+                </>
               )}
               <span
               className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${
@@ -2314,6 +2371,46 @@ export default function PublicMatchDetailView() {
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
+
+              {analysisSnapshot && analysisSnapshot.status !== "none" && (
+                <div className="mb-4 rounded-lg border border-white/10 bg-[var(--geo-bg)] p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--geo-text-muted)]">Detalle del análisis</p>
+                    <span className={`text-xs font-semibold ${analysisSnapshot.status === "failed" ? "text-red-400" : analysisSnapshot.status === "completed" ? "text-emerald-400" : analysisSnapshot.status === "processing" ? "text-amber-400" : "text-sky-300"}`}>
+                      {analysisStatusLabel(analysisSnapshot.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Job</p>
+                      <p className="font-semibold text-white">#{analysisSnapshot.jobId ?? "—"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Progreso</p>
+                      <p className="font-semibold text-white">{analysisSnapshot.progress ?? 0}%</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Paso</p>
+                      <p className="font-semibold text-white truncate">{analysisSnapshot.currentStep || "—"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Frames</p>
+                      <p className="font-semibold text-white">{analysisSnapshot.framesProcessed ?? 0} / {analysisSnapshot.totalFrames ?? "—"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--geo-text-muted)]">
+                    <span>Actualizado: {formatDateTime(analysisSnapshot.updatedAt)}</span>
+                    {analysisSnapshot.videoSupabaseUrl ? (
+                      <a className="text-geo-green hover:underline" href={analysisSnapshot.videoSupabaseUrl} target="_blank" rel="noreferrer">Ver video</a>
+                    ) : null}
+                  </div>
+                  {analysisSnapshot.error ? (
+                    <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-300">
+                      {analysisSnapshot.error}
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               {uploadResult && analysisStatus?.status !== "processing" ? (
                 <div className="space-y-4">
@@ -2900,7 +2997,7 @@ export default function PublicMatchDetailView() {
             {/* Open modal button */}
             {(bgAnalysis.status === "uploading" || bgAnalysis.status === "uploaded" || bgAnalysis.status === "processing") && (
               <button
-                onClick={() => { setUploadOpen(true); setBgBarDismissed(true); }}
+                onClick={openAnalysisPanel}
                 className="mt-2 w-full rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold transition-colors"
               >
                 {bgAnalysis.status === "uploaded" ? "Abrir panel para anotar" : "Abrir panel de análisis"}

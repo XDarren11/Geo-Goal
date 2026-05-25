@@ -129,6 +129,16 @@ class AnalysisWorker:
             identity_map = {int(k): int(v) for k, v in identity_map_raw.items()}
             print(f"[worker] Job {job_id}: identity_map has {len(identity_map)} entries")
 
+            frame_skip_val = int(os.environ.get("ANALYSIS_FRAME_SKIP", "4"))
+            # Calcular fps efectivos para el modelo Kalman interno de ByteTrack
+            base_fps = 25.0  # fps típico de broadcast de fútbol
+            effective_fps = max(1, int(round(base_fps / (frame_skip_val + 1))))
+
+            # lineupMode del partido: 11 (estándar) o 7 (cancha chica).
+            # Si el backend no lo envía (compat. hacia atrás), default 11.
+            lineup_mode = int(job.get("lineupMode") or 11)
+            print(f"[worker] Job {job_id}: lineup_mode={lineup_mode} (jugadores por equipo)")
+
             vp = VideoProcessor(
                 model_name=self.model_name,
                 device=self.device,
@@ -136,6 +146,10 @@ class AnalysisWorker:
                 output_dir=output_dir,
                 player_tags=player_tags,
                 identity_map=identity_map,
+                frame_rate=effective_fps,
+                max_gap_frames=int(os.environ.get("INTERP_MAX_GAP_FRAMES", "15")),
+                ball_predict_frames=int(os.environ.get("INTERP_BALL_PREDICT_FRAMES", "8")),
+                lineup_mode=lineup_mode,
             )
             vp.load_video(video_path)
             vp.set_homography(src_pts=src_pts, method="cv2")
@@ -148,7 +162,7 @@ class AnalysisWorker:
                 job_id=job_id,
                 export_json="match_data.json",
                 push_match_id=match_id,
-                frame_skip=int(os.environ.get("ANALYSIS_FRAME_SKIP", "4")),  # 5 fps en lugar de 25 → 5× más rápido
+                frame_skip=frame_skip_val,  # 5 fps en lugar de 25 → 5× más rápido
             )
 
             # 5. Mark completed
