@@ -348,6 +348,7 @@ function buildIncidentMap(
 }
 
 function TacticalPitch({
+  matchId,
   homeStarters,
   awayStarters,
   homeName,
@@ -356,6 +357,7 @@ function TacticalPitch({
   homeFormation,
   awayFormation,
 }: {
+  matchId: number;
   homeStarters?: MatchDetailLineupEntry[];
   awayStarters?: MatchDetailLineupEntry[];
   homeName: string;
@@ -364,35 +366,97 @@ function TacticalPitch({
   homeFormation?: string | null;
   awayFormation?: string | null;
 }) {
+  const PAGE_SIZE = 500;
+  const totalFrames = analytics?.summary?.totalFrames ?? 0;
+  const legacyFrames = analytics?.trackingFrames ?? [];
+  const useLegacyMode = totalFrames > 0 && totalFrames <= legacyFrames.length;
+
   const home = normalizeLineup(homeStarters);
   const away = normalizeLineup(awayStarters);
   const lineupMode: 7 | 11 = home.length === 7 || away.length === 7 ? 7 : 11;
   const incidents = buildIncidentMap(analytics);
-  const frames = analytics?.trackingFrames ?? [];
+
+  const maxIndex = Math.max(0, totalFrames - 1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [density, setDensity] = useState(1);
 
   useEffect(() => {
-    setFrameIndex(frames.length ? frames.length - 1 : 0);
+    setFrameIndex(maxIndex);
     setIsPlaying(false);
-  }, [frames.length]);
+  }, [totalFrames]);
 
+  // ---- Paginated frame loading (sliding window) ----
+  const currentPage = useMemo(
+    () => Math.floor(frameIndex / PAGE_SIZE) + 1,
+    [frameIndex],
+  );
+  const maxPage = Math.max(1, Math.ceil(totalFrames / PAGE_SIZE));
+
+  const { data: pageData, isFetching: pageLoading } = useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0,
+    staleTime: 120_000,
+  });
+
+  // Prefetch next page for smooth forward scrubbing
+  useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage + 1],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage + 1, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0 && currentPage < maxPage,
+    staleTime: 120_000,
+  });
+
+  // Prefetch previous page for smooth backward scrubbing
+  useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage - 1],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage - 1, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0 && currentPage > 1,
+    staleTime: 120_000,
+  });
+
+  const currentFrame = useMemo(() => {
+    if (useLegacyMode) {
+      return legacyFrames.length > 0
+        ? legacyFrames[Math.min(frameIndex, legacyFrames.length - 1)]
+        : null;
+    }
+    if (!pageData?.frames?.length) return null;
+    const localIndex = frameIndex - (currentPage - 1) * PAGE_SIZE;
+    return (pageData.frames[localIndex] ?? null) as typeof legacyFrames[0] | null;
+  }, [useLegacyMode, legacyFrames, frameIndex, pageData, currentPage]);
+
+  // ---- Playback ----
   useEffect(() => {
-    if (!isPlaying || frames.length <= 1) return;
+    if (!isPlaying || maxIndex <= 0) return;
     const timer = setInterval(() => {
       setFrameIndex((prev) => {
-        if (prev >= frames.length - 1) {
-          return 0;
-        }
-        return prev + 1;
+        const next = prev + density;
+        return next > maxIndex ? 0 : next;
       });
     }, 650);
-
     return () => clearInterval(timer);
-  }, [isPlaying, frames.length]);
+  }, [isPlaying, maxIndex, density]);
 
-  const currentFrame = frames.length ? frames[Math.min(frameIndex, frames.length - 1)] : null;
+  // ---- Time helpers ----
+  const ESTIMATED_FPS = 10;
+  const currentTimeMs = currentFrame?.timestampMs ?? frameIndex * (1000 / ESTIMATED_FPS);
 
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const jumpByTime = (seconds: number) => {
+    setFrameIndex((prev) =>
+      Math.max(0, Math.min(maxIndex, prev + Math.round(seconds * ESTIMATED_FPS))),
+    );
+  };
+
+  // ---- Player position calculations ----
   const homeIds = useMemo(() => new Set(home.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [home]);
   const awayIds = useMemo(() => new Set(away.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [away]);
 
@@ -404,9 +468,8 @@ function TacticalPitch({
       return Number.isFinite(n) ? n : null;
     };
 
-    return currentFrame.players
-      .map((entry) => {
-        const row = entry as Record<string, unknown>;
+    return (currentFrame.players as Array<Record<string, unknown>>)
+      .map((row) => {
         const userId = toNumber(row.userId ?? row.playerId);
         const x = toNumber(row.x);
         const y = toNumber(row.y);
@@ -437,49 +500,137 @@ function TacticalPitch({
   }, [trackedPlayers]);
 
   const toSpot = (idx: number, side: Side) => {
-    const formation = side === 'home' ? homeFormation : awayFormation;
+    const formation = side === "home" ? homeFormation : awayFormation;
     const spots = getFormationSpots(formation, lineupMode);
     const base = spots[Math.min(idx, spots.length - 1)] ?? spots[0];
     if (side === "home") return base;
     return { x: 100 - base.x, y: base.y };
   };
 
+  const densityOptions = [1, 5, 10, 30];
+
   return (
     <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-black text-[var(--geo-text)]">Vista táctica del partido</h2>
-        <div className="text-xs text-[var(--geo-text-muted)]">Datos arbitrales simulados</div>
+        <div className="text-xs text-[var(--geo-text-muted)]">
+          {totalFrames > 0
+            ? `${totalFrames.toLocaleString()} frames`
+            : "Sin datos de tracking"}
+        </div>
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-800/70 to-emerald-900/80 p-3">
-        <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0, frames.length - 1)}
-            value={Math.min(frameIndex, Math.max(0, frames.length - 1))}
-            onChange={(e) => setFrameIndex(Number(e.target.value))}
-            disabled={!frames.length}
-            className="w-full accent-emerald-400"
-          />
-          <button
-            type="button"
-            onClick={() => setIsPlaying((p) => !p)}
-            disabled={frames.length <= 1}
-            className="rounded bg-black/30 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {isPlaying ? "Pausar" : "Reproducir"}
-          </button>
-          <p className="text-right text-xs text-emerald-100/90">
-            {currentFrame ? `Frame ${Math.min(frameIndex, frames.length - 1) + 1}/${frames.length} · ${currentFrame.period ?? "—"}` : "Sin tracking"}
-          </p>
+        {/* Controls */}
+        <div className="mb-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] items-center">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, maxIndex)}
+              value={Math.min(frameIndex, maxIndex)}
+              onChange={(e) => setFrameIndex(Number(e.target.value))}
+              disabled={maxIndex <= 0}
+              className="w-full accent-emerald-400"
+            />
+            <p className="text-right text-xs tabular-nums text-emerald-100/90 min-w-[160px]">
+              {currentFrame
+                ? `Frame ${frameIndex + 1}/${totalFrames} · ${formatTime(currentTimeMs)} · ${currentFrame.period ?? "—"}`
+                : pageLoading
+                  ? "Cargando…"
+                  : maxIndex > 0
+                    ? "Moviendo…"
+                    : "Sin tracking"}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => jumpByTime(-30)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Retroceder 30s"
+              >
+                -30s
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(-10)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Retroceder 10s"
+              >
+                -10s
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPlaying((p) => !p)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-3 py-1 text-xs font-bold text-white disabled:opacity-50 hover:bg-black/50"
+              >
+                {isPlaying ? "Pausar" : "Reproducir"}
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(10)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Avanzar 10s"
+              >
+                +10s
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(30)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Avanzar 30s"
+              >
+                +30s
+              </button>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-[var(--geo-text-muted)]">Saltar:</span>
+              {densityOptions.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDensity(d)}
+                  disabled={maxIndex <= 0}
+                  className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                    density === d
+                      ? "bg-geo-green text-black"
+                      : "bg-black/30 text-white hover:bg-black/50"
+                  } disabled:opacity-30`}
+                >
+                  {d}x
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
+        {/* Pitch */}
         <div className="relative h-[560px] w-full rounded-lg border border-white/30">
           <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/40" />
           <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40" />
           <div className="absolute left-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-l-0" />
           <div className="absolute right-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-r-0" />
+
+          {/* Loading overlay while fetching page */}
+          {pageLoading && !currentFrame && maxIndex > 0 ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+              <div className="flex items-center gap-2 rounded-lg bg-black/60 px-4 py-2 text-sm text-white">
+                <div className="h-4 w-4 border-2 border-geo-green border-t-transparent rounded-full animate-spin" />
+                Cargando frames…
+              </div>
+            </div>
+          ) : null}
 
           <div className="absolute left-3 top-2 flex items-center gap-2">
             <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-emerald-200">
@@ -491,7 +642,7 @@ function TacticalPitch({
               </span>
             ) : (
               <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400/60 border border-emerald-400/20">
-                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+                {lineupMode === 7 ? "2-3-1" : "4-4-2"}
               </span>
             )}
           </div>
@@ -502,7 +653,7 @@ function TacticalPitch({
               </span>
             ) : (
               <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-400/60 border border-sky-400/20">
-                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+                {lineupMode === 7 ? "2-3-1" : "4-4-2"}
               </span>
             )}
             <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-sky-200">
@@ -1852,6 +2003,7 @@ export default function PublicMatchDetailView() {
         </section>
 
         <TacticalPitch
+          matchId={id}
           homeStarters={homeStarters}
           awayStarters={awayStarters}
           homeName={match.homeTeam?.name ?? "Local"}
