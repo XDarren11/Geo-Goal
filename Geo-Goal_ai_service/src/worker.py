@@ -143,7 +143,9 @@ class AnalysisWorker:
             # Override progress reporting to go through our API client
             self._instrument_progress(vp, match_id)
 
-            vp.process(
+            await asyncio.to_thread(
+                vp.process,
+                job_id=job_id,
                 export_json="match_data.json",
                 push_match_id=match_id,
                 frame_skip=int(os.environ.get("ANALYSIS_FRAME_SKIP", "4")),  # 5 fps en lugar de 25 → 5× más rápido
