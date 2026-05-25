@@ -1275,23 +1275,9 @@ export default function PublicMatchDetailView() {
     }
   };
 
-  // Fase 3: auto-disparar preview cuando se completan las 4 esquinas.
-  // Si el admin vuelve a "annotate" (ajustar esquinas), previewData se limpia
-  // y el effect vuelve a disparar cuando hay 4 puntos de nuevo.
-  useEffect(() => {
-    if (
-      uploadStep === "annotate" &&
-      srcPts.length === 4 &&
-      !previewData &&
-      !previewLoading &&
-      !previewError &&
-      frameDataUrl        // frame ya disponible (extraído localmente)
-    ) {
-      runPreview();
-    }
-    // runPreview es estable entre renders → no hace falta incluirla
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [srcPts.length, uploadStep, previewData, previewLoading, previewError, frameDataUrl]);
+  // El preview ya NO se auto-dispara. El admin decide cuándo previsualizar
+  // usando el botón "Previsualizar detección", lo que permite alternar
+  // libremente entre marcar esquinas y etiquetar jugadores.
 
   // Fase 2: asignar userId real a una detección seleccionada
   const handleAssignIdentity = (userId: number) => {
