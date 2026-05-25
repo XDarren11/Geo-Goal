@@ -9,6 +9,7 @@ import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
 import { useAuth } from "@/hooks/useAuth";
 import { getPlayersTeam, updateCoachLineup } from "@/api/teamAPI";
 import { AdvancedAnalyticsPanel } from "@/components/AdvancedAnalytics/AdvancedAnalyticsPanel";
+import { MatchPrediction } from "@/components/MatchPrediction";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro" | "advanced";
@@ -1985,6 +1986,15 @@ export default function PublicMatchDetailView() {
               <p className="mt-1 font-semibold">{detail.attendance ?? "—"}</p>
             </div>
           </div>
+        </section>
+
+        {/* ── Tarjeta de predicción (Fase 3) ──────────────────────────── */}
+        <section className="mt-4">
+          <MatchPrediction
+            matchId={id}
+            homeName={match.homeTeam?.name ?? "Local"}
+            awayName={match.awayTeam?.name ?? "Visitante"}
+          />
         </section>
 
         {(isLive || liveEvents.length > 0) && (

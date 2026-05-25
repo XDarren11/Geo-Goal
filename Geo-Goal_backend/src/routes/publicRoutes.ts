@@ -72,6 +72,13 @@ router.get(
 );
 
 router.get(
+  "/matches/:matchId/prediction",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchPrediction)
+);
+
+router.get(
   "/matches/:matchId/frames/export",
   param("matchId").isInt().withMessage("ID de partido no válido"),
   handleInputError,

@@ -8,12 +8,14 @@ import { connectDB } from "./config/db";
 import { registerRoutes } from "./routes";
 import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middleware/errorHandler";
-import {startDailyReminderCron} from "./jobs/dailyMatchReminders";
+import { startDailyReminderCron } from "./jobs/dailyMatchReminders";
+import { startPredictionRefitCron } from "./jobs/refitPredictionModels";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
 
 connectDB();
 startDailyReminderCron();
+startPredictionRefitCron();
 
 const app = express();
 

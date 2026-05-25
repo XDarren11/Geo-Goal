@@ -75,6 +75,19 @@ export class PublicController {
     res.json(data);
   };
 
+  static getMatchPrediction = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { EloService } = await import("../services/EloService.js");
+    const { DixonColesService } = await import("../services/DixonColesService.js");
+
+    const [elo, poisson] = await Promise.all([
+      EloService.predictMatch(matchId).catch(() => null),
+      DixonColesService.predictMatch(matchId).catch(() => null),
+    ]);
+
+    res.json({ elo, poisson });
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;

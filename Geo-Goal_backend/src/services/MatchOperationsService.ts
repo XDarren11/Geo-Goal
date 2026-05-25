@@ -244,6 +244,15 @@ export class MatchOperationsService {
 
     await MatchAnalyticsService.recalculateForMatch(match.id);
 
+    // ── Elo: actualizar ratings tras el resultado ──────────────────────────
+    setImmediate(() => {
+      import("./EloService.js").then(({ EloService }) =>
+        EloService.updateAfterMatch(match.id).catch((e: Error) =>
+          console.error(`[elo] match ${match.id} update failed:`, e)
+        )
+      );
+    });
+
     // ── Notificación: resultado final → followers de ambos equipos ───────────
     setImmediate(async () => {
       try {

@@ -342,3 +342,30 @@ export async function getAdvancedAnalytics(matchId: number): Promise<TrackingAna
   );
   return data;
 }
+
+// ── Predicción Elo + Dixon-Coles (Fase 3) ─────────────────────────────────
+
+export interface EloPrediction {
+  home: { winProb: number; elo: number };
+  draw: { prob: number };
+  away: { winProb: number; elo: number };
+}
+
+export interface DixonColesPrediction {
+  expectedGoals: { home: number; away: number };
+  outcomes: { homeWin: number; draw: number; awayWin: number };
+  topScores: Array<{ score: string; prob: number }>;
+}
+
+export interface MatchPredictionResponse {
+  elo: EloPrediction | null;
+  poisson: DixonColesPrediction | null;
+}
+
+export async function getMatchPrediction(matchId: number): Promise<MatchPredictionResponse> {
+  const { data } = await api.get<MatchPredictionResponse>(
+    `${BASE}/matches/${matchId}/prediction`
+  );
+  return data;
+}
+
