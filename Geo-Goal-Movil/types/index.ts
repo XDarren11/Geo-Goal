@@ -137,6 +137,7 @@ export interface MatchAnalyticsResponse {
     totalPlayersWithStats: number
     totalPassEdges: number
     totalSpatialEvents: number
+    totalFrames: number
   }
   passNetwork: Array<{
     teamId: number

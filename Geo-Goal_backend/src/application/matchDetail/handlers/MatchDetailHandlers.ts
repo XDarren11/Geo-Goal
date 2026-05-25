@@ -4,6 +4,7 @@ import type { AutoAssignRefereesResultDTO } from "../dto/MatchDetailDTOs";
 import {
   AssignRefereeRequest,
   AutoAssignRefereesRequest,
+  ExportFlowFramesRequest,
   GetFlowMatchAnalyticsRequest,
   GetLeagueRefereesRequest,
   GetRefereeDashboardRequest,
@@ -132,5 +133,14 @@ export class GetFlowMatchAnalyticsHandler
   constructor(private readonly svc: IMatchFlowService) {}
   handle(request: GetFlowMatchAnalyticsRequest): Promise<unknown> {
     return this.svc.getMatchAnalytics(request.matchId);
+  }
+}
+
+export class ExportFlowFramesHandler
+  implements RequestHandler<ExportFlowFramesRequest, unknown>
+{
+  constructor(private readonly svc: IMatchFlowService) {}
+  handle(request: ExportFlowFramesRequest): Promise<unknown> {
+    return this.svc.exportFrames(request.matchId, request.page, request.pageSize);
   }
 }

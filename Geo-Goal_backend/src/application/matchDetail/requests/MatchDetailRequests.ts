@@ -138,3 +138,14 @@ export class GetFlowMatchAnalyticsRequest extends MFR<unknown> {
     super();
   }
 }
+
+export class ExportFlowFramesRequest extends MFR<unknown> {
+  readonly requestName = "matchDetail.exportFrames";
+  constructor(
+    public readonly matchId: number,
+    public readonly page: number = 1,
+    public readonly pageSize: number = 1000,
+  ) {
+    super();
+  }
+}

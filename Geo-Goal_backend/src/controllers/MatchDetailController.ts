@@ -11,6 +11,7 @@ import { MatchFlowServiceAdapter } from "../services/MatchFlowServiceAdapter";
 import {
   AssignRefereeRequest,
   AutoAssignRefereesRequest,
+  ExportFlowFramesRequest,
   GetFlowMatchAnalyticsRequest,
   GetLeagueRefereesRequest,
   GetRefereeDashboardRequest,
@@ -26,9 +27,64 @@ import {
 import { Match } from "../models/Match";
 import { MatchAnalysisJob } from "../models/MatchAnalysisJob";
 import { MatchDetailService } from "../services/MatchDetailService";
-import { uploadVideoToSupabase } from "../utils/supabaseStorage";
+import {
+  createSignedVideoUploadUrl,
+  downloadVideoFromSupabase,
+  replaceSupabaseObject,
+  uploadVideoToSupabase,
+} from "../utils/supabaseStorage";
+import { ensureFastStart, isFastStart, isFastStartUrl } from "../utils/videoFastStart";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const matchDetailMediator = buildMatchDetailMediator(new MatchFlowServiceAdapter());
+
+/**
+ * Background job: si el video en Supabase NO es fast-start, lo descarga,
+ * re-encodea con moov al inicio y lo sube de vuelta a la misma key.
+ * No bloquea la respuesta al cliente.
+ *
+ * Si falla por cualquier razón, el AI service caerá al fallback de descarga
+ * (sigue funcionando, solo no aprovechará el streaming HTTP).
+ */
+async function ensureFastStartInSupabase(jobId: number, publicUrl: string): Promise<void> {
+  const t0 = Date.now();
+
+  // 1. ¿Ya es fast-start? Skip sin tocar nada
+  const alreadyOk = await isFastStartUrl(publicUrl);
+  if (alreadyOk) {
+    console.log(`[fast-start-bg] job ${jobId} — video YA es fast-start, skip (${Date.now() - t0}ms)`);
+    return;
+  }
+
+  // 2. Descargar a temp local
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), `faststart-${jobId}-`));
+  const inputPath = path.join(tmpDir, "input");
+  try {
+    console.log(`[fast-start-bg] job ${jobId} — descargando desde Supabase para re-encoding...`);
+    await downloadVideoFromSupabase(publicUrl, inputPath);
+
+    // 3. Re-encodear (intenta remux primero, transcoding si hace falta)
+    console.log(`[fast-start-bg] job ${jobId} — aplicando faststart...`);
+    const result = await ensureFastStart(inputPath);
+
+    // 4. Reemplazar en Supabase (misma URL, contenido reordenado)
+    console.log(`[fast-start-bg] job ${jobId} — reemplazando objeto en Supabase...`);
+    await replaceSupabaseObject({
+      publicUrl,
+      localPath: result.outputPath,
+      mimetype: "video/mp4",
+    });
+
+    console.log(
+      `[fast-start-bg] job ${jobId} — DONE (${result.reEncoded ? "transcoded" : "remux"}, total ${Date.now() - t0}ms)`
+    );
+  } finally {
+    // Limpieza
+    try { await fs.promises.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
 
 export class MatchDetailController {
   static getByMatchId = async (req: Request, res: Response): Promise<void> => {
@@ -155,6 +211,16 @@ export class MatchDetailController {
     res.json(data);
   };
 
+  static exportFrames = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 1000;
+    const data = await matchDetailMediator.send(
+      new ExportFlowFramesRequest(Number(matchId), page, pageSize)
+    );
+    res.json(data);
+  };
+
   static uploadVideo = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const file = req.file;
@@ -182,16 +248,49 @@ export class MatchDetailController {
       return;
     }
 
+    // Re-encoding fast-start ANTES de subir a Supabase.
+    // El backend ya tiene el archivo en disco, aprovechamos para garantizar
+    // que el AI service pueda hacer streaming HTTP sin descargarlo después.
+    let uploadablePath = file.path;
+    let uploadableFilename = file.filename;
+    let uploadableMimetype = file.mimetype;
+    let fastStartTempPath: string | null = null;
+
+    try {
+      const alreadyFastStart = await isFastStart(file.path);
+      if (alreadyFastStart) {
+        console.log(`[upload-video] match ${matchId} — video ya es fast-start, sin re-encoding`);
+      } else {
+        console.log(`[upload-video] match ${matchId} — re-encoding a fast-start...`);
+        const result = await ensureFastStart(file.path);
+        uploadablePath = result.outputPath;
+        uploadableFilename = uploadableFilename.replace(/\.[^.]+$/, "") + ".mp4";
+        uploadableMimetype = "video/mp4";
+        fastStartTempPath = result.outputPath;
+        console.log(
+          `[upload-video] match ${matchId} — fast-start listo (${result.reEncoded ? "transcoded" : "remux"}, ${result.durationMs}ms)`
+        );
+      }
+    } catch (err: any) {
+      console.warn(`[upload-video] match ${matchId} — re-encoding falló (${err.message}), subiendo original`);
+      // Continúa con el original: el AI service usará fallback de descarga
+    }
+
     // Upload to Supabase synchronously
     let videoSupabaseUrl: string | null = null;
     try {
-      const { url } = await uploadVideoToSupabase(file.path, file.mimetype, file.filename, Number(matchId));
+      const { url } = await uploadVideoToSupabase(uploadablePath, uploadableMimetype, uploadableFilename, Number(matchId));
       videoSupabaseUrl = url;
       console.log(`[upload-video] match ${matchId} — Supabase upload complete: ${url}`);
     } catch (err: any) {
       console.error(`[upload-video] match ${matchId} — Supabase upload failed:`, err.message);
       res.status(500).json({ error: "Error al subir el video al almacenamiento" });
       return;
+    } finally {
+      // Limpiar el archivo temporal del re-encoding (si se creó)
+      if (fastStartTempPath && fastStartTempPath !== file.path) {
+        try { fs.unlinkSync(fastStartTempPath); } catch { /* ignore */ }
+      }
     }
 
     // Create analysis job with both local path (for frame extraction) and Supabase URL (for AI service)
@@ -199,8 +298,8 @@ export class MatchDetailController {
       matchId: Number(matchId),
       leagueId: match.leagueId,
       status: "uploaded",
-      videoPath: file.path,
-      videoSupabaseUrl,
+      videoPath: file.path,                 // el original sin re-encoding (queda en local para AI)
+      videoSupabaseUrl,                     // el re-encoded está en Supabase
       videoFilename: file.filename,
       createdBy: req.user!.id,
     });
@@ -213,6 +312,132 @@ export class MatchDetailController {
       jobId: job.id,
       filename: file.filename,
       videoSupabaseUrl,
+    });
+  };
+
+  /**
+   * Paso 1 de la subida directa: el cliente pide una URL firmada de PUT.
+   * No se transfiere el video por el backend — solo metadatos.
+   */
+  static requestVideoUploadUrl = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const { filename, mimetype, sizeBytes } = req.body as {
+      filename?: string;
+      mimetype?: string;
+      sizeBytes?: number;
+    };
+
+    if (!filename || !mimetype) {
+      res.status(400).json({ error: "filename y mimetype son requeridos" });
+      return;
+    }
+
+    const allowed = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/x-matroska"];
+    if (!allowed.includes(mimetype)) {
+      res.status(415).json({ error: "Formato no permitido. Usa MP4, MOV, AVI, WebM o MKV." });
+      return;
+    }
+
+    const MAX_BYTES = 2 * 1024 * 1024 * 1024;     // 2 GB
+    if (sizeBytes && sizeBytes > MAX_BYTES) {
+      res.status(413).json({ error: "Video supera el tamaño máximo permitido (2 GB)" });
+      return;
+    }
+
+    const match = await Match.findByPk(Number(matchId), { attributes: ["id", "leagueId"] });
+    if (!match) {
+      res.status(404).json({ error: "Partido no encontrado" });
+      return;
+    }
+
+    // Bloquear si ya hay análisis completado
+    const completedJob = await MatchAnalysisJob.findOne({
+      where: { matchId: Number(matchId), status: "completed" },
+    });
+    if (completedJob) {
+      res.status(409).json({
+        error: "Este partido ya fue analizado. No se permite subir otro video.",
+        videoSupabaseUrl: completedJob.videoSupabaseUrl,
+      });
+      return;
+    }
+
+    try {
+      const { uploadUrl, publicUrl, key } = await createSignedVideoUploadUrl({
+        matchId: Number(matchId),
+        filename,
+        mimetype,
+        expiresInSeconds: 3600,
+      });
+
+      console.log(`[signed-upload] match ${matchId} — URL generada para key ${key}`);
+
+      res.status(200).json({
+        uploadUrl,           // PUT directo aquí desde el frontend
+        publicUrl,           // URL final donde quedará el video
+        key,
+        mimetype,            // recordatorio del header que debe mandar el cliente
+        expiresIn: 3600,
+      });
+    } catch (err: any) {
+      console.error(`[signed-upload] match ${matchId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo generar la URL de subida" });
+    }
+  };
+
+  /**
+   * Paso 2 de la subida directa: el cliente notifica que terminó de subir.
+   * Backend crea el MatchAnalysisJob con la URL pública.
+   */
+  static completeVideoUpload = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const { publicUrl, filename } = req.body as { publicUrl?: string; filename?: string };
+
+    if (!publicUrl) {
+      res.status(400).json({ error: "publicUrl es requerido" });
+      return;
+    }
+
+    const match = await Match.findByPk(Number(matchId), { attributes: ["id", "leagueId"] });
+    if (!match) {
+      res.status(404).json({ error: "Partido no encontrado" });
+      return;
+    }
+
+    // Doble check: que no exista análisis completado mientras subían
+    const completedJob = await MatchAnalysisJob.findOne({
+      where: { matchId: Number(matchId), status: "completed" },
+    });
+    if (completedJob) {
+      res.status(409).json({ error: "Este partido ya fue analizado." });
+      return;
+    }
+
+    const job = await MatchAnalysisJob.create({
+      matchId: Number(matchId),
+      leagueId: match.leagueId,
+      status: "uploaded",
+      videoPath: null,                              // subida directa → no hay archivo local
+      videoSupabaseUrl: publicUrl,
+      videoFilename: filename ?? null,
+      createdBy: req.user!.id,
+    });
+
+    console.log(`[complete-upload] match ${matchId} — job ${job.id} created from direct upload`);
+
+    // Respondemos al frontend INMEDIATAMENTE — el re-encoding corre en background.
+    // El admin puede marcar esquinas mientras tanto. Cuando llegue al submit,
+    // el video ya estará fast-start (re-encoding tarda 10-30s típicamente).
+    res.status(201).json({
+      message: "Video registrado. Anota los keypoints para iniciar el análisis.",
+      matchId: Number(matchId),
+      jobId: job.id,
+      videoSupabaseUrl: publicUrl,
+    });
+
+    // Background task: re-encoding fast-start
+    ensureFastStartInSupabase(job.id, publicUrl).catch((err) => {
+      console.error(`[fast-start-bg] job ${job.id} falló:`, err.message);
     });
   };
 
@@ -249,6 +474,7 @@ export class MatchDetailController {
     const { matchId } = req.params;
     const srcPts: Array<{ x: number; y: number }> = req.body.srcPts;
     const playerTags: Array<{ x: number; y: number; label: "home" | "away" | "ball" }> | undefined = req.body.playerTags;
+    const identityMap: Record<string, number> | undefined = req.body.identityMap;
 
     // Find a pending job
     const job = await MatchAnalysisJob.findOne({
@@ -269,15 +495,47 @@ export class MatchDetailController {
       return;
     }
 
-    // Save keypoints, player tags and set status to queued
+    // Save keypoints, player tags, identity map and set status to queued
     await job.update({
       srcPts,
       playerTags: playerTags ?? null,
+      identityMap: identityMap ?? null,
       status: "queued",
       error: null,
     });
 
-    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints + ${playerTags?.length ?? 0} player tags saved, status: queued`);
+    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints + ${playerTags?.length ?? 0} player tags + ${Object.keys(identityMap ?? {}).length} identity entries saved, status: queued`);
+
+    // PUSH TRIGGER: avisa al AI service inmediatamente para evitar polling delay (0-60s).
+    // Si el AI service está caído, no es crítico: su loop de polling actuará como fallback.
+    // Por eso es fire-and-forget (no await, no rompe la respuesta al frontend).
+    const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+    const userToken = req.headers.authorization;
+    if (userToken) {
+      fetch(`${aiUrl}/jobs/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": userToken,
+        },
+        body: JSON.stringify({
+          match_id: job.matchId,
+          job_id: job.id,
+          video_url: job.videoSupabaseUrl,
+          src_pts: srcPts,
+        }),
+      })
+        .then((r) => {
+          if (r.ok) {
+            console.log(`[push-trigger] AI service aceptó job ${job.id} inmediatamente`);
+          } else {
+            console.warn(`[push-trigger] AI service respondió ${r.status} — fallback a polling`);
+          }
+        })
+        .catch((err) => {
+          console.warn(`[push-trigger] AI service inaccesible (${err.message}) — fallback a polling`);
+        });
+    }
 
     res.status(202).json({
       message: "Keypoints y etiquetas recibidos. El análisis será procesado por el servicio de IA.",
@@ -372,18 +630,81 @@ export class MatchDetailController {
     const jobs = await MatchAnalysisJob.findAll({
       where: { status: "queued" },
       order: [["createdAt", "ASC"]],
-      attributes: ["id", "matchId", "leagueId", "videoSupabaseUrl", "srcPts", "playerTags", "createdAt"],
+      attributes: [
+        "id", "matchId", "leagueId",
+        "videoPath",          // ← expone path local para que el worker evite descargar
+        "videoSupabaseUrl",   // se mantiene como fallback (otra máquina)
+        "srcPts", "playerTags", "identityMap", "createdAt",
+      ],
     });
 
     res.json(jobs.map((j) => ({
       jobId: j.id,
       matchId: j.matchId,
       leagueId: j.leagueId,
+      videoPath: j.videoPath,
       videoSupabaseUrl: j.videoSupabaseUrl,
       srcPts: j.srcPts,
       playerTags: j.playerTags,
+      identityMap: j.identityMap,
       createdAt: j.createdAt,
     })));
+  };
+
+  static analysisPreview = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const { frameBase64, srcPts, detectPitch } = req.body;
+
+    if (!frameBase64 || typeof frameBase64 !== "string") {
+      res.status(400).json({ error: "frameBase64 es requerido" });
+      return;
+    }
+    if (!Array.isArray(srcPts) || srcPts.length !== 4) {
+      res.status(400).json({ error: "srcPts debe ser un arreglo de 4 puntos" });
+      return;
+    }
+
+    // Verificar que existe un job para este match
+    const job = await MatchAnalysisJob.findOne({
+      where: { matchId: Number(matchId) },
+      order: [["createdAt", "DESC"]],
+      attributes: ["id", "status"],
+    });
+    if (!job) {
+      res.status(404).json({ error: "Sube un video primero" });
+      return;
+    }
+
+    const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+    const userToken = req.headers.authorization; // reutilizamos el token admin del usuario
+
+    try {
+      const response = await fetch(`${aiUrl}/analysis/preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(userToken ? { Authorization: userToken } : {}),
+        },
+        body: JSON.stringify({
+          frame_base64: frameBase64,
+          src_pts: srcPts,
+          detect_pitch: !!detectPitch,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`[preview] AI service ${response.status}: ${text}`);
+        res.status(502).json({ error: "AI service rechazó la petición", detail: text.slice(0, 200) });
+        return;
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      console.error("[preview] AI service unreachable:", err.message);
+      res.status(503).json({ error: "AI service no disponible" });
+    }
   };
 
   static claimAnalysisJob = async (req: Request, res: Response): Promise<void> => {
@@ -410,9 +731,11 @@ export class MatchDetailController {
       jobId: job.id,
       matchId: job.matchId,
       leagueId: job.leagueId,
-      videoSupabaseUrl: job.videoSupabaseUrl,
+      videoPath: job.videoPath,                  // ← path local compartido con AI service
+      videoSupabaseUrl: job.videoSupabaseUrl,    // fallback si AI corre en otra máquina
       srcPts: job.srcPts,
       playerTags: job.playerTags,
+      identityMap: job.identityMap,
       status: "processing",
     });
   };

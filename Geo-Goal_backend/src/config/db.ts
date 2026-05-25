@@ -8,6 +8,30 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true })
 const db = new Sequelize(process.env.DATABASE_URL!, {
     models: [__dirname + '/../models/**/*.ts'],
     logging: process.env.SQL_LOG === 'true' ? console.log : false,   // bonus: silenciar logs
+    // Pool y timeouts robustos para Supabase Postgres (corta conexiones idle agresivamente)
+    pool: {
+        max: 10,                  // conexiones concurrentes
+        min: 0,                   // sin mantener conexiones idle
+        acquire: 60000,           // 60s para obtener conexión del pool (default: 30s)
+        idle: 10000,              // 10s antes de soltar una conexión idle
+    },
+    dialectOptions: {
+        statement_timeout: 120000,           // 2 min máx por statement (default ilimitado)
+        idle_in_transaction_session_timeout: 60000,  // 1 min idle dentro de tx
+        keepAlive: true,                     // TCP keepalive: evita que NAT/firewall corte
+    },
+    retry: {
+        max: 3,
+        match: [
+            /SequelizeConnectionError/,
+            /SequelizeConnectionRefusedError/,
+            /SequelizeHostNotFoundError/,
+            /SequelizeHostNotReachableError/,
+            /SequelizeInvalidConnectionError/,
+            /SequelizeConnectionTimedOutError/,
+            /Connection terminated unexpectedly/,
+        ],
+    },
 })
 
 export const connectDB = async () => {

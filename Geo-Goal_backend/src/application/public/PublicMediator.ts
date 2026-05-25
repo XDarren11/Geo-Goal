@@ -1,6 +1,7 @@
 import { Mediator } from "../mediator/Mediator";
 import type { IPublicService } from "../../services/contracts/IPublicService";
 import {
+  ExportPublicFramesHandler,
   GetLeagueDetailHandler,
   GetLeaguesHandler,
   GetNewsHandler,
@@ -24,5 +25,6 @@ export function buildPublicMediator(publicService: IPublicService): Mediator {
   );
   m.register("public.getTeamProfile", new GetTeamProfileHandler(publicService));
   m.register("public.getMatchAnalytics", new GetPublicMatchAnalyticsHandler(publicService));
+  m.register("public.exportFrames", new ExportPublicFramesHandler(publicService));
   return m;
 }

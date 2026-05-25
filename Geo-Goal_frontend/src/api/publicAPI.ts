@@ -81,6 +81,25 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   return data;
 }
 
+export interface ExportFramesResult {
+  frames: unknown[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getPublicMatchFramesExport(
+  matchId: number,
+  page = 1,
+  pageSize = 1000
+): Promise<ExportFramesResult> {
+  const { data } = await api.get<ExportFramesResult>(
+    `${BASE}/matches/${matchId}/frames/export`,
+    { params: { page, pageSize } }
+  );
+  return data;
+}
+
 export interface AnalysisStatusResponse {
   status: "none" | "uploaded" | "annotating" | "queued" | "processing" | "completed" | "failed";
   jobId?: number;
@@ -111,11 +130,70 @@ export async function getAIServiceHealth(): Promise<AIServiceHealth> {
   return data;
 }
 
+/**
+ * Sube un video en 3 pasos (subida directa a Supabase):
+ *   1. Pide al backend una URL firmada PUT.
+ *   2. Sube el video DIRECTO a Supabase con esa URL (no pasa por el backend).
+ *   3. Notifica al backend → backend crea el MatchAnalysisJob.
+ *
+ * En producción: el video viaja una sola vez por el wifi del admin (a Supabase),
+ * en lugar de dos (admin→backend→Supabase). Backend queda libre.
+ *
+ * Si la primera petición falla (config Supabase incompleta), cae al upload
+ * clásico multipart contra el backend (compatibilidad hacia atrás).
+ */
 export async function uploadMatchVideo(
   matchId: number,
   videoFile: File,
   onProgress?: (pct: number) => void
 ): Promise<{ message: string; jobId: number; filename: string }> {
+  // --- Paso 1: pedir URL firmada ---
+  let signed: { uploadUrl: string; publicUrl: string; mimetype: string } | null = null;
+  try {
+    const { data } = await api.post<{
+      uploadUrl: string;
+      publicUrl: string;
+      key: string;
+      mimetype: string;
+      expiresIn: number;
+    }>(`${BASE}/matches/${matchId}/upload-video/signed-url`, {
+      filename: videoFile.name,
+      mimetype: videoFile.type || "video/mp4",
+      sizeBytes: videoFile.size,
+    });
+    signed = data;
+  } catch (err) {
+    console.warn("[upload] signed-url no disponible, usando fallback al backend:", err);
+  }
+
+  if (signed) {
+    // --- Paso 2: PUT directo a Supabase (no pasa por el backend) ---
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", signed!.uploadUrl, true);
+      xhr.setRequestHeader("Content-Type", signed!.mimetype);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded * 100) / e.total));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Supabase respondió ${xhr.status}: ${xhr.responseText?.slice(0, 200) ?? ""}`));
+      };
+      xhr.onerror = () => reject(new Error("Error de red al subir a Supabase"));
+      xhr.send(videoFile);
+    });
+
+    // --- Paso 3: confirmar al backend ---
+    const { data } = await api.post<{ message: string; jobId: number; videoSupabaseUrl: string }>(
+      `${BASE}/matches/${matchId}/upload-video/complete`,
+      { publicUrl: signed.publicUrl, filename: videoFile.name }
+    );
+    return { message: data.message, jobId: data.jobId, filename: videoFile.name };
+  }
+
+  // --- Fallback: subida clásica multipart contra el backend ---
   const formData = new FormData();
   formData.append("video", videoFile);
   const { data } = await api.post<{ message: string; jobId: number; filename: string }>(
@@ -149,12 +227,57 @@ export interface PlayerTag {
 
 export async function submitAnalysisKeypoints(
   matchId: number,
-  srcPts: Array<{ x: number; y: number }>,
-  playerTags?: PlayerTag[]
+  payload: {
+    srcPts: Array<{ x: number; y: number }>;
+    playerTags?: PlayerTag[];
+    identityMap?: Record<number, number>;
+  }
 ): Promise<{ message: string; jobId: number; status: string }> {
   const { data } = await api.put<{ message: string; jobId: number; status: string }>(
     `${BASE}/matches/${matchId}/analysis/keypoints`,
-    { srcPts, playerTags }
+    payload
+  );
+  return data;
+}
+
+export interface PreviewDetection {
+  tracker_id: number;
+  x_m: number;
+  y_m: number;
+  px: number;
+  py: number;
+  team: "home" | "away" | "referee" | "unknown";
+  bbox: number[];
+}
+
+export interface PreviewBall {
+  x_m: number;
+  y_m: number;
+  px: number;
+  py: number;
+}
+
+export interface PreviewResponse {
+  homography_ok: boolean;
+  src_pts: Array<{ x: number; y: number }>;
+  players: PreviewDetection[];
+  ball: PreviewBall | null;
+  pitch: { length_m: number; width_m: number };
+  frame_dims: { width: number; height: number };
+  error?: string | null;
+}
+
+export async function postAnalysisPreview(
+  matchId: number,
+  payload: {
+    frameBase64: string;
+    srcPts: Array<{ x: number; y: number }>;
+    detectPitch?: boolean;
+  }
+): Promise<PreviewResponse> {
+  const { data } = await api.post<PreviewResponse>(
+    `${BASE}/matches/${matchId}/analysis/preview`,
+    payload
   );
   return data;
 }
