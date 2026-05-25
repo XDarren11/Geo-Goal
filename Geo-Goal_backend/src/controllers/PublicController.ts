@@ -68,6 +68,13 @@ export class PublicController {
     res.json(data);
   };
 
+  static getAdvancedAnalytics = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { TrackingAnalyticsService } = await import("../services/TrackingAnalyticsService.js");
+    const data = await TrackingAnalyticsService.getOrCompute(matchId);
+    res.json(data);
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;

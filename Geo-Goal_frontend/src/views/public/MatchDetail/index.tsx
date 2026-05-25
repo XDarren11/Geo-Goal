@@ -8,9 +8,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
 import { useAuth } from "@/hooks/useAuth";
 import { getPlayersTeam, updateCoachLineup } from "@/api/teamAPI";
+import { AdvancedAnalyticsPanel } from "@/components/AdvancedAnalytics/AdvancedAnalyticsPanel";
 
 type Side = "home" | "away";
-type MatchViewMode = "normal" | "pro";
+type MatchViewMode = "normal" | "pro" | "advanced";
 
 type Incident = {
   yellow: number;
@@ -1895,12 +1896,42 @@ export default function PublicMatchDetailView() {
             >
               Modo pro
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("advanced")}
+              className={`rounded-md px-3 py-1 font-semibold transition ${
+                viewMode === "advanced"
+                  ? "bg-geo-green text-geo-black"
+                  : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
+              }`}
+            >
+              📊 Análisis avanzado
+            </button>
           </div>
           {isLive ? (
             <p className="mt-2 text-xs text-emerald-300">
               Actualizando eventos y tracking automaticamente cada 8s.
             </p>
           ) : null}
+
+          {/* ── Panel de análisis avanzado (Fase 2) ───────────────────────── */}
+          {viewMode === "advanced" && (
+            <div className="mt-4">
+              <AdvancedAnalyticsPanel
+                matchId={id}
+                homeName={match.homeTeam?.name ?? "Local"}
+                awayName={match.awayTeam?.name ?? "Visitante"}
+                playerNames={
+                  Object.fromEntries(
+                    (analytics?.playerStats ?? []).map((ps: any) => [
+                      ps.userId ?? ps.playerId,
+                      ps.playerName ?? ps.name ?? `#${ps.userId ?? ps.playerId}`,
+                    ])
+                  )
+                }
+              />
+            </div>
+          )}
 
           <div className="bg-[var(--geo-bg-card)] rounded-2xl overflow-hidden border border-[var(--geo-border)]">
             <div className="p-4 border-b border-[var(--geo-border)]">

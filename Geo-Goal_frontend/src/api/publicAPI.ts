@@ -300,3 +300,45 @@ export const getTopScorers = async (leagueId: number) => {
   const { data } = await api.get(`${BASE}/${leagueId}/top-scorers`);
   return data;
 };
+
+// ── Análisis avanzado de tracking (Fase 2) ────────────────────────────────
+
+export interface SpeedMetrics {
+  avgSpeed: number;
+  maxSpeed: number;
+  sprintCount: number;
+  accelerationCount: number;
+  distanceM: number;
+}
+
+export interface ZoneMetrics { def: number; mid: number; att: number }
+
+export interface PassNetworkNode {
+  playerId: number;
+  teamId: number;
+  degree: number;
+  pageRank: number;
+  avgX: number;
+  avgY: number;
+}
+
+export interface PassNetworkEdge { from: number; to: number; count: number }
+
+export interface TrackingAnalytics {
+  speeds: Record<string, SpeedMetrics>;
+  zones: Record<string, ZoneMetrics>;
+  heatmaps: Record<string, number[][]>;
+  passNetwork: { nodes: PassNetworkNode[]; edges: PassNetworkEdge[] };
+  possession: { home: number; away: number; homeTeamId: number; awayTeamId: number };
+  convexHull: { home: number; away: number };
+  defensiveLine: { home: number; away: number };
+  observedFormation: { home: string; away: string };
+  meta: { framesProcessed: number; homeTeamId: number; awayTeamId: number; computedAt: string };
+}
+
+export async function getAdvancedAnalytics(matchId: number): Promise<TrackingAnalytics> {
+  const { data } = await api.get<TrackingAnalytics>(
+    `${BASE}/matches/${matchId}/analytics/advanced`
+  );
+  return data;
+}

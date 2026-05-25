@@ -59,9 +59,16 @@ router.get(
 
 router.get(
   "/matches/:matchId/analytics",
-  param("matchId").isInt().withMessage("ID de partido no válido"),
+  param("matchId").isInt().withMessage("ID de partido no vlido"),
   handleInputError,
   asyncHandler(PublicController.getMatchAnalytics)
+);
+
+router.get(
+  "/matches/:matchId/analytics/advanced",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getAdvancedAnalytics)
 );
 
 router.get(
