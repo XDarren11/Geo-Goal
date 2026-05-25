@@ -1051,23 +1051,29 @@ export class RefereeService {
 
     // Chunking obligatorio: un bulkCreate con 30k filas genera un INSERT de
     // ~9 MB en una sola query que Supabase Postgres corta por timeout/keep-alive
-    // ("Connection terminated unexpectedly"). Procesamos de 500 en 500.
+    // ("Connection terminated unexpectedly"). Procesamos en chunks pequeños.
+    //
+    // CHUNK_SIZE=250 (era 500) + delay 30ms entre chunks:
+    //   - Reduce la presión sobre Supabase
+    //   - Evita que entre en "recovery mode" (código 57P03) tras inserciones masivas
+    //   - El throughput total casi no cambia (overhead del setTimeout es trivial)
     //
     // Cada chunk es una query independiente — si alguno falla, lo logueamos
     // pero seguimos con los demás para no perder lo que ya entró.
-    const CHUNK_SIZE = 500;
+    const CHUNK_SIZE = 250;
+    const CHUNK_DELAY_MS = 30;
     const totalFrames = transformedFrames.length;
     let totalCreated = 0;
     const startedAt = Date.now();
 
-    console.log(`[tracking/batch] match ${matchId}: insertando ${totalFrames} frames en chunks de ${CHUNK_SIZE}`);
+    console.log(`[tracking/batch] match ${matchId}: insertando ${totalFrames} frames en chunks de ${CHUNK_SIZE} (delay ${CHUNK_DELAY_MS}ms)`);
 
     for (let offset = 0; offset < totalFrames; offset += CHUNK_SIZE) {
       const chunk = transformedFrames.slice(offset, offset + CHUNK_SIZE);
       try {
         const created = await MatchTrackingFrame.bulkCreate(chunk);
         totalCreated += created.length;
-        if (offset % (CHUNK_SIZE * 10) === 0 || offset + CHUNK_SIZE >= totalFrames) {
+        if (offset % (CHUNK_SIZE * 20) === 0 || offset + CHUNK_SIZE >= totalFrames) {
           console.log(
             `[tracking/batch] match ${matchId}: ${totalCreated}/${totalFrames} insertados (${Date.now() - startedAt}ms)`
           );
@@ -1080,17 +1086,40 @@ export class RefereeService {
         // los chunks anteriores ya están commiteados.
         throw err;
       }
+
+      // Pequeña pausa para no saturar Supabase entre chunks
+      if (offset + CHUNK_SIZE < totalFrames) {
+        await new Promise((resolve) => setTimeout(resolve, CHUNK_DELAY_MS));
+      }
     }
 
     console.log(
       `[tracking/batch] match ${matchId}: COMPLETO ${totalCreated}/${totalFrames} frames en ${Date.now() - startedAt}ms`
     );
 
-    // Recalcular stats en background — no bloquear al worker AI mientras procesa frames
+    // Recalcular stats en background con reintentos.
+    // Por qué reintentos:
+    //   - Tras insertar 29k rows, Supabase Postgres puede entrar en "recovery mode"
+    //     (código 57P03) por unos segundos. El recalc inmediato falla, pero un
+    //     reintento 5-30s después funciona.
+    //   - Backoff exponencial: 3s, 10s, 30s, 90s.
     setImmediate(() => {
-      MatchAnalyticsService.recalculateForMatch(Number(matchId))
-        .then((r) => console.log(`[recalc] match ${matchId}: ${r.rows} rows`))
-        .catch((e) => console.error(`[recalc] match ${matchId} failed:`, e));
+      const recalcWithRetry = async (attempt = 1, maxAttempts = 4): Promise<void> => {
+        try {
+          const r = await MatchAnalyticsService.recalculateForMatch(Number(matchId));
+          console.log(`[recalc] match ${matchId}: ${r.rows} rows (intento ${attempt})`);
+        } catch (e: any) {
+          const isRecoverable = /recovery mode|Connection terminated|ConnectionError/i.test(e?.message ?? "");
+          if (isRecoverable && attempt < maxAttempts) {
+            const delaySec = Math.pow(3, attempt);   // 3s, 9s, 27s, 81s
+            console.warn(`[recalc] match ${matchId} intento ${attempt}/${maxAttempts} falló (${e.message?.slice(0, 100)}). Reintentando en ${delaySec}s...`);
+            setTimeout(() => recalcWithRetry(attempt + 1, maxAttempts), delaySec * 1000);
+          } else {
+            console.error(`[recalc] match ${matchId} FAILED tras ${attempt} intentos:`, e?.message ?? e);
+          }
+        }
+      };
+      recalcWithRetry();
     });
 
     return {

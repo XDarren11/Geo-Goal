@@ -845,9 +845,15 @@ export default function PublicMatchDetailView() {
   // Step 3: Poll progress
   useEffect(() => {
     if (uploadStep !== "progress") return;
-    const interval = setInterval(async () => {
+    // Polling de STATUS cada 10s — necesitamos saber rápido cuando termina/falla
+    let cancelled = false;
+    let healthTick = 0;    // contador para hacer health cada N ticks
+
+    const statusInterval = setInterval(async () => {
+      if (cancelled) return;
       try {
         const status = await getAnalysisStatus(id);
+        if (cancelled) return;
         setAnalysisStatus(status);
         if (status.status === "completed" || status.status === "failed") {
           setUploadResult(
@@ -859,14 +865,24 @@ export default function PublicMatchDetailView() {
       } catch {
         // ignore polling errors
       }
-      try {
-        const health = await getAIServiceHealth();
-        setAiHealth(health);
-      } catch {
-        setAiHealth(null);
+
+      // Health solo cada 6 ticks (60s) en lugar de cada 10s.
+      // Antes generaba spam masivo en logs del AI service cuando había varias pestañas/StrictMode.
+      healthTick += 1;
+      if (healthTick % 6 === 0) {
+        try {
+          const health = await getAIServiceHealth();
+          if (!cancelled) setAiHealth(health);
+        } catch {
+          if (!cancelled) setAiHealth(null);
+        }
       }
     }, 10000);
-    return () => clearInterval(interval);
+
+    return () => {
+      cancelled = true;
+      clearInterval(statusInterval);
+    };
   }, [uploadStep, id]);
 
   const resetUpload = () => {

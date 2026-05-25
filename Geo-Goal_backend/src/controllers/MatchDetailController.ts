@@ -710,28 +710,44 @@ export class MatchDetailController {
   static claimAnalysisJob = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
 
+    // Buscar el último job (sin importar status). Esto hace el endpoint idempotente:
+    //   - Si está "queued" → claim y devolver datos
+    //   - Si está "processing" → devolver datos (el worker puede haber sido reiniciado)
+    //   - Si está "completed"/"failed" → 410 Gone (no hay nada que procesar)
+    //   - Si no existe → 404
     const job = await MatchAnalysisJob.findOne({
-      where: {
-        matchId: Number(matchId),
-        status: "queued",
-      },
+      where: { matchId: Number(matchId) },
       order: [["createdAt", "DESC"]],
     });
 
     if (!job) {
-      res.status(409).json({ error: "No hay un job queued para este partido, o ya fue reclamado" });
+      res.status(404).json({ error: "No existe ningún análisis para este partido" });
       return;
     }
 
-    await job.update({ status: "processing", error: null });
+    if (job.status === "completed") {
+      res.status(410).json({ error: "Este análisis ya fue completado", jobId: job.id });
+      return;
+    }
 
-    console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
+    if (job.status === "failed") {
+      // Permitimos reintentar: lo movemos a processing
+      await job.update({ status: "processing", error: null });
+      console.log(`[claim-job] match ${matchId} job ${job.id} — re-claimed (previously failed)`);
+    } else if (job.status === "processing") {
+      // Ya está en processing — el worker probablemente se reinició. Devolvemos los datos.
+      console.log(`[claim-job] match ${matchId} job ${job.id} — already processing, returning data idempotently`);
+    } else {
+      // queued / uploaded / annotating → claim normal
+      await job.update({ status: "processing", error: null });
+      console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
+    }
 
     res.json({
       jobId: job.id,
       matchId: job.matchId,
       leagueId: job.leagueId,
-      videoPath: job.videoPath,                  // ← path local compartido con AI service
+      videoPath: job.videoPath,                  // path local compartido con AI service
       videoSupabaseUrl: job.videoSupabaseUrl,    // fallback si AI corre en otra máquina
       srcPts: job.srcPts,
       playerTags: job.playerTags,
