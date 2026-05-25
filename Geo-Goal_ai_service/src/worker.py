@@ -11,6 +11,7 @@ import numpy as np
 from api_client import APIClient
 from m2m_client import M2MClient
 from video_processor import VideoProcessor
+from event_detector import detect_all_events, FrameSnapshot, PlayerPos
 
 
 class AnalysisWorker:
@@ -155,7 +156,7 @@ class AnalysisWorker:
             vp.set_homography(src_pts=src_pts, method="cv2")
 
             # Override progress reporting to go through our API client
-            self._instrument_progress(vp, match_id)
+            self._instrument_progress(vp, match_id, job_id, effective_fps)
 
             await asyncio.to_thread(
                 vp.process,
@@ -257,7 +258,7 @@ class AnalysisWorker:
         print(f"[worker] Job {job_id}: probe HTTP OK en {result['elapsed']:.2f}s → streaming viable")
         return True
 
-    def _instrument_progress(self, vp: VideoProcessor, match_id: int) -> None:
+    def _instrument_progress(self, vp: VideoProcessor, match_id: int, job_id: int, effective_fps: float) -> None:
         """Wrap the exporter to use our API client for progress reporting."""
 
         def _report(
@@ -286,9 +287,50 @@ class AnalysisWorker:
         vp.exporter.report_progress = _report  # type: ignore
 
         def _push(_match_id: int, _m2m_token: str) -> Any:
+            # Construir FrameSnapshots para el detector de eventos (Fase 7)
+            raw_frames = vp.exporter._frames
+            snapshots = []
+            for f in raw_frames:
+                ball = None
+                if f.get("ballX") is not None and f.get("ballY") is not None:
+                    # coordenadas del exporter están en 0-100 (normalizadas) → convertir a metros
+                    ball = (f["ballX"] * 105.0 / 100.0, f["ballY"] * 68.0 / 100.0)
+                players = []
+                for p in f.get("players", []):
+                    players.append(PlayerPos(
+                        player_id=p.get("trackerId", p.get("id", 0)),
+                        team=p.get("team", "unknown"),
+                        x=p.get("x", 0.0) * 105.0 / 100.0,
+                        y=p.get("y", 0.0) * 68.0 / 100.0,
+                    ))
+                snapshots.append(FrameSnapshot(
+                    frame_idx=f.get("frameIdx", 0),
+                    timestamp_ms=f.get("timestampMs", 0),
+                    ball=ball,
+                    players=players,
+                ))
+
+            # Detectar eventos automáticos
+            inferred_events = []
+            try:
+                inferred_events = detect_all_events(
+                    snapshots,
+                    fps=effective_fps,
+                    detect_out=True,
+                    detect_goals=True,
+                    detect_passes=True,
+                )
+                print(f"[worker] Job {job_id}: {len(inferred_events)} eventos inferidos detectados "
+                      f"({sum(1 for e in inferred_events if e['event_type']=='goal')} goles, "
+                      f"{sum(1 for e in inferred_events if e['event_type']=='pass')} pases, "
+                      f"{sum(1 for e in inferred_events if e['event_type']=='ball_out')} fueras)")
+            except Exception as detect_err:
+                print(f"[worker] Job {job_id}: error en detección de eventos: {detect_err}")
+
             payload = {
                 "pitch": {"length_m": 105.0, "width_m": 68.0},
-                "frames": vp.exporter._frames,
+                "frames": raw_frames,
+                "inferredEvents": inferred_events,
             }
             return self.api.push_tracking_batch(match_id, payload)
 

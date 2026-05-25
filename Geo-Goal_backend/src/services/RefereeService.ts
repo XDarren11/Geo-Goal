@@ -78,6 +78,26 @@ type RegisterTrackingInput = {
 type RegisterTrackingBatchInput = {
   frames: RegisterTrackingInput[];
   pitch?: { length_m: number; width_m: number };
+  inferredEvents?: Array<{
+    frame_idx: number;
+    timestamp_ms: number;
+    event_type: string;
+    subtype?: string;
+    ball_x?: number;
+    ball_y?: number;
+    x_start?: number;
+    y_start?: number;
+    x_end?: number;
+    y_end?: number;
+    from_player_id?: number;
+    to_player_id?: number;
+    from_team?: string;
+    to_team?: string;
+    outcome?: string;
+    confidence: number;
+    requires_review?: boolean;
+    signals?: number;
+  }>;
 };
 
 function normalizeCoordinate(value: unknown): number | null {
@@ -1125,6 +1145,61 @@ export class RefereeService {
       };
       recalcWithRetry();
     });
+
+    // ── Fase 7: persistir eventos inferidos ──────────────────────────────────
+    const inferredEvents = Array.isArray(input.inferredEvents) ? input.inferredEvents : [];
+    if (inferredEvents.length > 0) {
+      setImmediate(async () => {
+        try {
+          let created = 0;
+          for (const ev of inferredEvents) {
+            const teamIdForEvent =
+              ev.subtype === "home_goal" || ev.from_team === "home"
+                ? match.homeTeamId
+                : ev.subtype === "away_goal" || ev.from_team === "away"
+                ? match.awayTeamId
+                : null;
+
+            // Mapear player IDs de AI (tracking IDs) a userId reales si es posible
+            // Para pases: from_player_id / to_player_id son tracker IDs, no userId.
+            // Los guardamos en metadata para cruce posterior.
+            const minute = ev.timestamp_ms != null ? Math.floor(ev.timestamp_ms / 60000) : 0;
+
+            await MatchEvent.create({
+              matchId: Number(matchId),
+              leagueId: match.leagueId,
+              teamId: teamIdForEvent,
+              playerId: null,
+              relatedPlayerId: null,
+              eventType: ev.event_type,
+              outcome: ev.outcome ?? null,
+              minute,
+              matchTimestampSec: Math.floor((ev.timestamp_ms ?? 0) / 1000),
+              xStart: ev.x_start ?? ev.ball_x ?? null,
+              yStart: ev.y_start ?? ev.ball_y ?? null,
+              xEnd: ev.x_end ?? null,
+              yEnd: ev.y_end ?? null,
+              source: "inferred",
+              confidence: Math.max(0, Math.min(1, ev.confidence ?? 0)),
+              metadata: {
+                requiresReview: ev.requires_review ?? true,
+                subtype: ev.subtype ?? null,
+                signals: ev.signals ?? null,
+                fromTrackerId: ev.from_player_id ?? null,
+                toTrackerId: ev.to_player_id ?? null,
+                fromTeam: ev.from_team ?? null,
+                toTeam: ev.to_team ?? null,
+              },
+              recordedBy: null,
+            });
+            created++;
+          }
+          console.log(`[tracking/batch] match ${matchId}: ${created} eventos inferidos persistidos`);
+        } catch (evErr: any) {
+          console.error(`[tracking/batch] match ${matchId}: error al persistir eventos inferidos:`, evErr?.message);
+        }
+      });
+    }
 
     return {
       created: totalCreated,

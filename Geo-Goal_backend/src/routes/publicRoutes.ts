@@ -140,6 +140,40 @@ router.get(
   asyncHandler(PublicController.getSimilarPlayers)
 );
 
+// ── Fase 7: Revisión de eventos inferidos ────────────────────────────────────
+
+router.get(
+  "/matches/:matchId/events/inferred",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getInferredEvents)
+);
+
+router.post(
+  "/events/:id/confirm",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.confirmInferredEvent)
+);
+
+router.delete(
+  "/events/:id/reject",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.rejectInferredEvent)
+);
+
+router.patch(
+  "/events/:id",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.updateInferredEvent)
+);
+
 router.get(
   "/matches/:matchId/frames/export",
   param("matchId").isInt().withMessage("ID de partido no válido"),

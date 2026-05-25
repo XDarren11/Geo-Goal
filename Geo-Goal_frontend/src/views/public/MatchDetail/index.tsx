@@ -12,6 +12,7 @@ import { AdvancedAnalyticsPanel } from "@/components/AdvancedAnalytics/AdvancedA
 import { MatchPrediction } from "@/components/MatchPrediction";
 import { H2HCard } from "@/components/Comparativas/H2HCard";
 import { TeamFormBadges } from "@/components/Comparativas/TeamFormBadges";
+import { InferredEventsPanel } from "@/components/InferredEvents/InferredEventsPanel";
 
 type Side = "home" | "away";
 type MatchViewMode = "normal" | "pro" | "advanced";
@@ -2032,6 +2033,18 @@ export default function PublicMatchDetailView() {
                 </p>
                 <TeamFormBadges teamId={match.awayTeamId} last={5} />
               </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Fase 7: Revisión de eventos inferidos (solo admin) ─────────── */}
+        {isAdmin && (
+          <section className="mt-4">
+            <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-amber-400">
+                🤖 Detección automática — Eventos por revisar
+              </p>
+              <InferredEventsPanel matchId={id} />
             </div>
           </section>
         )}

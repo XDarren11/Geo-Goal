@@ -302,6 +302,71 @@ export class PublicController {
     res.json(similar);
   };
 
+  // ── Fase 7: Eventos inferidos (revisión) ─────────────────────────────────
+
+  static getInferredEvents = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { MatchEvent } = await import("../models/MatchEvent.js");
+
+    const events = await MatchEvent.findAll({
+      where: {
+        matchId,
+        source: "inferred",
+        metadata: { requiresReview: true } as any,
+      },
+      order: [["minute", "ASC"]],
+    });
+    res.json(events);
+  };
+
+  static confirmInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+
+    const meta = (ev.metadata as Record<string, unknown>) ?? {};
+    await ev.update({
+      source: "manual",
+      confidence: 1.0,
+      metadata: { ...meta, requiresReview: false, confirmedBy: (req as any).user?.id ?? null },
+      recordedBy: (req as any).user?.id ?? null,
+    });
+    res.json({ confirmed: true });
+  };
+
+  static rejectInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+    await ev.destroy();
+    res.json({ rejected: true });
+  };
+
+  static updateInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+
+    const { eventType, minute, teamId, playerId, xStart, yStart, xEnd, yEnd, outcome } = req.body;
+    const meta = (ev.metadata as Record<string, unknown>) ?? {};
+    await ev.update({
+      ...(eventType != null && { eventType }),
+      ...(minute != null && { minute }),
+      ...(teamId !== undefined && { teamId }),
+      ...(playerId !== undefined && { playerId }),
+      ...(xStart !== undefined && { xStart }),
+      ...(yStart !== undefined && { yStart }),
+      ...(xEnd !== undefined && { xEnd }),
+      ...(yEnd !== undefined && { yEnd }),
+      ...(outcome !== undefined && { outcome }),
+      source: "manual",
+      confidence: 1.0,
+      metadata: { ...meta, requiresReview: false, editedBy: (req as any).user?.id ?? null },
+      recordedBy: (req as any).user?.id ?? null,
+    });
+    res.json(ev);
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;
