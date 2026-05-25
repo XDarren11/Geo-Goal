@@ -16,10 +16,10 @@
  * frames nuevos (compara framesAtComputeTime con COUNT actual).
  */
 
-import { MatchTrackingFrame } from "../models/MatchTrackingFrame.js";
-import { MatchEvent } from "../models/MatchEvent.js";
-import { MatchAnalyticsCache } from "../models/MatchAnalyticsCache.js";
-import { Match } from "../models/Match.js";
+import { MatchTrackingFrame } from "../models/MatchTrackingFrame";
+import { MatchEvent } from "../models/MatchEvent";
+import { MatchAnalyticsCache } from "../models/MatchAnalyticsCache";
+import { Match } from "../models/Match";
 
 // Incrementar cuando cambie el algoritmo para forzar re-cómputo.
 const ANALYTICS_VERSION = 1;

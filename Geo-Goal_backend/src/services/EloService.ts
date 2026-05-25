@@ -9,8 +9,8 @@
  *   K = 30, M = log(|goalDiff|+1)+1
  */
 
-import { TeamEloRating } from "../models/TeamEloRating.js";
-import { Match } from "../models/Match.js";
+import { TeamEloRating } from "../models/TeamEloRating";
+import { Match } from "../models/Match";
 
 const K = 30;
 const HOME_ADVANTAGE = 100;

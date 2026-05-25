@@ -70,15 +70,15 @@ export class PublicController {
 
   static getAdvancedAnalytics = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
-    const { TrackingAnalyticsService } = await import("../services/TrackingAnalyticsService.js");
+    const { TrackingAnalyticsService } = await import("../services/TrackingAnalyticsService");
     const data = await TrackingAnalyticsService.getOrCompute(matchId);
     res.json(data);
   };
 
   static getMatchPrediction = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
-    const { EloService } = await import("../services/EloService.js");
-    const { DixonColesService } = await import("../services/DixonColesService.js");
+    const { EloService } = await import("../services/EloService");
+    const { DixonColesService } = await import("../services/DixonColesService");
 
     const [elo, poisson] = await Promise.all([
       EloService.predictMatch(matchId).catch(() => null),
@@ -91,15 +91,15 @@ export class PublicController {
   static getPlayerForm = async (req: Request, res: Response): Promise<void> => {
     const playerId = Number(req.params.userId);
     const last = Math.min(Number(req.query.last) || 5, 20);
-    const { MatchAnalyticsService } = await import("../services/MatchAnalyticsService.js");
+    const { MatchAnalyticsService } = await import("../services/MatchAnalyticsService");
     const form = await MatchAnalyticsService.getPlayerForm(playerId, last);
     res.json(form);
   };
 
   static getWeeklyAward = async (req: Request, res: Response): Promise<void> => {
-    const { WeeklyAward } = await import("../models/WeeklyAward.js");
-    const { User } = await import("../models/User.js");
-    const { Team } = await import("../models/Team.js");
+    const { WeeklyAward } = await import("../models/WeeklyAward");
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
     const leagueId = Number(req.params.leagueId);
 
     const award = await WeeklyAward.findOne({
@@ -122,7 +122,7 @@ export class PublicController {
 
   static getMatchXG = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
-    const { XGService } = await import("../services/XGService.js");
+    const { XGService } = await import("../services/XGService");
     const [shots, perPlayer] = await Promise.all([
       XGService.shotsForMatch(matchId),
       XGService.playerXGForMatch(matchId),
@@ -139,7 +139,7 @@ export class PublicController {
 
   static getMatchXT = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
-    const { XTService } = await import("../services/XTService.js");
+    const { XTService } = await import("../services/XTService");
     const result = await XTService.computeForMatch(matchId);
     res.json(result);
   };
@@ -149,8 +149,8 @@ export class PublicController {
   static getH2H = async (req: Request, res: Response): Promise<void> => {
     const teamA = Number(req.params.teamA);
     const teamB = Number(req.params.teamB);
-    const { Match } = await import("../models/Match.js");
-    const { Team } = await import("../models/Team.js");
+    const { Match } = await import("../models/Match");
+    const { Team } = await import("../models/Team");
     const { Op } = await import("sequelize");
 
     const matches = await Match.findAll({
@@ -205,7 +205,7 @@ export class PublicController {
   static getTeamForm = async (req: Request, res: Response): Promise<void> => {
     const teamId = Number(req.params.teamId);
     const last = Math.min(Number(req.query.last) || 5, 20);
-    const { Match } = await import("../models/Match.js");
+    const { Match } = await import("../models/Match");
     const { Op } = await import("sequelize");
 
     const matches = await Match.findAll({
@@ -246,7 +246,7 @@ export class PublicController {
   static comparePlayers = async (req: Request, res: Response): Promise<void> => {
     const idA = Number(req.params.id1);
     const idB = Number(req.params.id2);
-    const { PlayerMatchStat } = await import("../models/PlayerMatchStat.js");
+    const { PlayerMatchStat } = await import("../models/PlayerMatchStat");
     const { Sequelize } = await import("sequelize");
 
     const buildAgg = async (pid: number) =>
@@ -297,7 +297,7 @@ export class PublicController {
   static getSimilarPlayers = async (req: Request, res: Response): Promise<void> => {
     const playerId = Number(req.params.id);
     const n = Math.min(Number(req.query.n) || 5, 20);
-    const { PlayerSimilarityService } = await import("../services/PlayerSimilarityService.js");
+    const { PlayerSimilarityService } = await import("../services/PlayerSimilarityService");
     const similar = await PlayerSimilarityService.findSimilar(playerId, n);
     res.json(similar);
   };
@@ -306,7 +306,7 @@ export class PublicController {
 
   static getInferredEvents = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
-    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const { MatchEvent } = await import("../models/MatchEvent");
 
     const events = await MatchEvent.findAll({
       where: {
@@ -320,7 +320,7 @@ export class PublicController {
   };
 
   static confirmInferredEvent = async (req: Request, res: Response): Promise<void> => {
-    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const { MatchEvent } = await import("../models/MatchEvent");
     const ev = await MatchEvent.findByPk(req.params.id);
     if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
 
@@ -335,7 +335,7 @@ export class PublicController {
   };
 
   static rejectInferredEvent = async (req: Request, res: Response): Promise<void> => {
-    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const { MatchEvent } = await import("../models/MatchEvent");
     const ev = await MatchEvent.findByPk(req.params.id);
     if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
     await ev.destroy();
@@ -343,7 +343,7 @@ export class PublicController {
   };
 
   static updateInferredEvent = async (req: Request, res: Response): Promise<void> => {
-    const { MatchEvent } = await import("../models/MatchEvent.js");
+    const { MatchEvent } = await import("../models/MatchEvent");
     const ev = await MatchEvent.findByPk(req.params.id);
     if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
 

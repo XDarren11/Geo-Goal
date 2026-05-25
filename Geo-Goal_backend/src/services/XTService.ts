@@ -5,7 +5,7 @@
  */
 
 import { Op } from "sequelize";
-import { MatchEvent } from "../models/MatchEvent.js";
+import { MatchEvent } from "../models/MatchEvent";
 
 // Matriz xT 8 filas × 12 columnas (fila 0 = banda inferior, col 0 = zona de portería propia)
 // Fuente: Karun Singh, adaptada a orientación x izq→der (equipo ataca hacia col 11)

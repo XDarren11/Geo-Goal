@@ -5,7 +5,7 @@
  */
 
 import { Op } from "sequelize";
-import { MatchEvent } from "../models/MatchEvent.js";
+import { MatchEvent } from "../models/MatchEvent";
 
 const GOAL_X = 100;          // coords normalizadas: portería derecha en x=100
 const GOAL_Y_CENTER = 50;    // centro vertical
