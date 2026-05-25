@@ -870,6 +870,27 @@ export default function PublicMatchDetailView() {
   const [playerTags, setPlayerTags] = useState<Array<PlayerTag>>([]);
   const [pendingPlayerLabel, setPendingPlayerLabel] = useState<{ x: number; y: number } | null>(null);
 
+  // ---- Background analysis state (survives modal close) ----
+  type BgAnalysisState =
+    | { status: "idle" }
+    | { status: "uploading"; fileName: string; progress: number }
+    | { status: "uploaded" }
+    | { status: "processing"; progress: number; currentStep: string; framesProcessed?: number; totalFrames?: number }
+    | { status: "completed" }
+    | { status: "failed"; error: string };
+
+  const [bgAnalysis, setBgAnalysis] = useState<BgAnalysisState>({ status: "idle" });
+  const [bgBarDismissed, setBgBarDismissed] = useState(false);
+  const manualSubmitRef = useRef(false);
+  const srcPtsRef = useRef(srcPts);
+  srcPtsRef.current = srcPts;
+  const uploadStepRef = useRef(uploadStep);
+  uploadStepRef.current = uploadStep;
+  const playerTagsRef = useRef(playerTags);
+  playerTagsRef.current = playerTags;
+  const identityMapRef = useRef(identityMap);
+  identityMapRef.current = identityMap;
+
   // Extract frame from local file (browser-side, instant)
   const extractFrameLocal = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -942,14 +963,27 @@ export default function PublicMatchDetailView() {
       setFrameExtracting(false);
     });
 
-    // 2. Upload in background
+    // 2. Upload in background — track in persistent state
+    setBgAnalysis({ status: "uploading", fileName: file.name, progress: 0 });
+    setBgBarDismissed(false);
     setUploadingVideo(true);
     try {
-      await uploadMatchVideo(id, file, (pct) => setUploadProgress(pct));
+      await uploadMatchVideo(id, file, (pct) => {
+        setUploadProgress(pct);
+        setBgAnalysis((prev) => prev.status === "uploading" ? { ...prev, progress: pct } : prev);
+      });
+      // Upload succeeded — schedule auto-submit if user doesn't annotate within 5s
+      setTimeout(() => {
+        const hasAnnotation = srcPtsRef.current.length > 0 || playerTagsRef.current.length > 0;
+        if (!manualSubmitRef.current && !hasAnnotation && uploadStepRef.current !== "progress" && uploadStepRef.current !== "preview") {
+          autoSubmitAnalysis();
+        }
+      }, 5000);
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al subir el video";
       setUploadError(msg);
       setUploadStep("select");
+      setBgAnalysis({ status: "failed", error: msg });
     } finally {
       setUploadingVideo(false);
     }
@@ -972,33 +1006,52 @@ export default function PublicMatchDetailView() {
     img.src = frameDataUrl;
   }, [uploadStep, frameDataUrl]);
 
-  // Submit keypoints (video already uploaded)
+  // Submit keypoints (video already uploaded) — manual path
   const handleSubmitKeypoints = async () => {
     if (srcPts.length !== 4) return;
+    manualSubmitRef.current = true;
+    await doSubmitAnalysis(srcPts, playerTags, identityMap);
+  };
+
+  // Auto-submit: upload completed but user didn't annotate → submit with whatever we have
+  const autoSubmitAnalysis = async () => {
+    if (manualSubmitRef.current) return;
+    manualSubmitRef.current = true;
+    await doSubmitAnalysis(srcPtsRef.current, playerTagsRef.current, identityMapRef.current);
+  };
+
+  const doSubmitAnalysis = async (
+    pts: Array<{ x: number; y: number }>,
+    tags: Array<PlayerTag>,
+    idMap: Record<number, number>,
+  ) => {
     setSubmittingKeypoints(true);
     setUploadError(null);
+    setBgAnalysis({ status: "processing", progress: 0, currentStep: "starting" });
     try {
       await submitAnalysisKeypoints(id, {
-        srcPts,
-        playerTags: playerTags.length > 0 ? playerTags : undefined,
-        identityMap: Object.keys(identityMap).length > 0 ? identityMap : undefined,
+        srcPts: pts.length === 4 ? pts : [],
+        playerTags: tags.length > 0 ? tags : undefined,
+        identityMap: Object.keys(idMap).length > 0 ? idMap : undefined,
       });
       setUploadStep("progress");
       setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al iniciar el análisis";
       setUploadError(msg);
+      setBgAnalysis({ status: "failed", error: msg });
     } finally {
       setSubmittingKeypoints(false);
     }
   };
 
-  // Step 3: Poll progress
+  // Step 3: Poll progress — runs based on uploadStep (modal open) OR bgAnalysis (background)
   useEffect(() => {
-    if (uploadStep !== "progress") return;
-    // Polling de STATUS cada 10s — necesitamos saber rápido cuando termina/falla
+    const isProcessing = uploadStep === "progress" || bgAnalysis.status === "processing";
+    if (!isProcessing) return;
+
     let cancelled = false;
-    let healthTick = 0;    // contador para hacer health cada N ticks
+    let healthTick = 0;
 
     const statusInterval = setInterval(async () => {
       if (cancelled) return;
@@ -1006,19 +1059,32 @@ export default function PublicMatchDetailView() {
         const status = await getAnalysisStatus(id);
         if (cancelled) return;
         setAnalysisStatus(status);
-        if (status.status === "completed" || status.status === "failed") {
-          setUploadResult(
-            status.status === "completed"
-              ? `Análisis completado. ${status.videoSupabaseUrl ? "Video disponible en Supabase. " : ""}Refresca la página para ver los resultados.`
-              : `Error: ${status.error ?? "Falló el análisis"}`
+
+        // Update background state
+        if (status.status === "processing") {
+          setBgAnalysis((prev) =>
+            prev.status === "processing"
+              ? { ...prev, progress: status.progress ?? prev.progress, currentStep: status.currentStep ?? prev.currentStep, framesProcessed: status.framesProcessed, totalFrames: status.totalFrames }
+              : prev,
           );
+        } else if (status.status === "completed") {
+          setBgAnalysis({ status: "completed" });
+          setBgBarDismissed(false);
+          queryClient.invalidateQueries({ queryKey: ["public-match-analytics", id] });
+          queryClient.invalidateQueries({ queryKey: ["frames-export", id] });
+          queryClient.invalidateQueries({ queryKey: ["frames-tactical", id] });
+          setUploadResult(
+            `Análisis completado. ${status.videoSupabaseUrl ? "Video disponible en Supabase. " : ""}Refresca la página para ver los resultados.`,
+          );
+        } else if (status.status === "failed") {
+          setBgAnalysis({ status: "failed", error: status.error ?? "Falló el análisis" });
+          setBgBarDismissed(false);
+          setUploadResult(`Error: ${status.error ?? "Falló el análisis"}`);
         }
       } catch {
         // ignore polling errors
       }
 
-      // Health solo cada 6 ticks (60s) en lugar de cada 10s.
-      // Antes generaba spam masivo en logs del AI service cuando había varias pestañas/StrictMode.
       healthTick += 1;
       if (healthTick % 6 === 0) {
         try {
@@ -1034,9 +1100,10 @@ export default function PublicMatchDetailView() {
       cancelled = true;
       clearInterval(statusInterval);
     };
-  }, [uploadStep, id]);
+  }, [uploadStep, bgAnalysis.status, id, queryClient]);
 
-  const resetUpload = () => {
+  // Close modal — preserve bgAnalysis so status bar remains visible
+  const closeUploadModal = () => {
     setUploadOpen(false);
     setUploadFile(null);
     setUploadResult(null);
@@ -1056,6 +1123,14 @@ export default function PublicMatchDetailView() {
     setIdentityMap({});
     setSelectedTrackerId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Full reset including background state (used by "Entendido" / final dismiss)
+  const resetUpload = () => {
+    closeUploadModal();
+    setBgAnalysis({ status: "idle" });
+    setBgBarDismissed(false);
+    manualSubmitRef.current = false;
   };
 
   // ---- canvas annotation ----
@@ -1274,6 +1349,38 @@ export default function PublicMatchDetailView() {
       return (query.state.data?.timelineEvents?.length ?? 0) >= 0 ? 8000 : 8000;
     },
   });
+
+  // On mount: fetch existing analysis job status from DB so state survives refresh
+  const { data: dbAnalysisStatus } = useQuery({
+    queryKey: ["analysis-status", id],
+    queryFn: () => getAnalysisStatus(id),
+    enabled: isAdmin && Number.isInteger(id) && id > 0,
+    staleTime: 10_000,
+  });
+
+  // Sync DB status → bgAnalysis on first load (only if nothing is already in progress)
+  useEffect(() => {
+    if (!dbAnalysisStatus || dbAnalysisStatus.status === "none") return;
+    setBgAnalysis((prev) => {
+      if (prev.status !== "idle") return prev; // don't override active upload/analysis
+      const s = dbAnalysisStatus;
+      if (s.status === "completed") return { status: "completed" };
+      if (s.status === "failed") return { status: "failed", error: s.error ?? "Error desconocido" };
+      if (s.status === "processing" || s.status === "queued") {
+        return {
+          status: "processing",
+          progress: s.progress ?? 0,
+          currentStep: s.currentStep ?? "procesando",
+          framesProcessed: s.framesProcessed,
+          totalFrames: s.totalFrames,
+        };
+      }
+      if (s.status === "uploaded" || s.status === "annotating") {
+        return { status: "uploaded" };
+      }
+      return prev;
+    });
+  }, [dbAnalysisStatus]);
 
   const coachSide = isCoach && user?.id && data?.match
     ? data.match.homeTeam?.trainerId === user.id
@@ -1586,11 +1693,50 @@ export default function PublicMatchDetailView() {
             <div className="flex items-center gap-3">
               {isAdmin && (
                 <button
-                  onClick={() => setUploadOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-geo-green px-4 py-2 text-sm font-semibold text-black hover:bg-geo-green/80 transition-colors"
+                  onClick={() => { setUploadOpen(true); setBgBarDismissed(true); }}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                    bgAnalysis.status === "processing"
+                      ? "bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
+                      : bgAnalysis.status === "completed"
+                        ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+                        : bgAnalysis.status === "failed"
+                          ? "bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30"
+                          : bgAnalysis.status === "uploaded"
+                            ? "bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30"
+                            : "bg-geo-green text-black hover:bg-geo-green/80"
+                  }`}
                 >
-                  <VideoCameraIcon className="h-5 w-5" />
-                  Analizar video
+                  {bgAnalysis.status === "uploading" ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Subiendo…
+                    </>
+                  ) : bgAnalysis.status === "uploaded" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Video subido — anotar
+                    </>
+                  ) : bgAnalysis.status === "processing" ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Analizando… {bgAnalysis.progress}%
+                    </>
+                  ) : bgAnalysis.status === "completed" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Análisis completado
+                    </>
+                  ) : bgAnalysis.status === "failed" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Error en análisis
+                    </>
+                  ) : (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Analizar video
+                    </>
+                  )}
                 </button>
               )}
               <span
@@ -2103,7 +2249,7 @@ export default function PublicMatchDetailView() {
             <div className="w-full max-w-md rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold">Subir video para análisis</h2>
-                <button onClick={resetUpload} className="text-[var(--geo-text-muted)] hover:text-white">
+                <button onClick={closeUploadModal} className="text-[var(--geo-text-muted)] hover:text-white">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
@@ -2599,6 +2745,109 @@ export default function PublicMatchDetailView() {
           </div>
         )}
       </main>
+
+      {/* ---- Floating background analysis status bar ---- */}
+      {bgAnalysis.status !== "idle" && !bgBarDismissed && (
+        <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-right">
+          <div
+            className={`rounded-xl border shadow-2xl p-4 max-w-sm ${
+              bgAnalysis.status === "uploading"
+                ? "border-blue-500/40 bg-blue-950/90 text-blue-100"
+                : bgAnalysis.status === "uploaded"
+                  ? "border-blue-400/40 bg-blue-950/90 text-blue-100"
+                  : bgAnalysis.status === "processing"
+                    ? "border-amber-500/40 bg-amber-950/90 text-amber-100"
+                    : bgAnalysis.status === "completed"
+                      ? "border-emerald-500/40 bg-emerald-950/90 text-emerald-100"
+                      : "border-red-500/40 bg-red-950/90 text-red-100"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {bgAnalysis.status === "uploading" || bgAnalysis.status === "processing" ? (
+                  <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                ) : bgAnalysis.status === "completed" ? (
+                  <span className="text-lg shrink-0">✓</span>
+                ) : bgAnalysis.status === "uploaded" ? (
+                  <span className="text-lg shrink-0">↑</span>
+                ) : (
+                  <span className="text-lg shrink-0">✗</span>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">
+                    {bgAnalysis.status === "uploading"
+                      ? `Subiendo ${bgAnalysis.fileName}`
+                      : bgAnalysis.status === "uploaded"
+                        ? "Video subido — anota o procesa"
+                        : bgAnalysis.status === "processing"
+                          ? "Analizando video"
+                          : bgAnalysis.status === "completed"
+                            ? "Análisis completado"
+                            : "Error en el análisis"}
+                  </p>
+                  {bgAnalysis.status === "uploading" && (
+                    <>
+                      <div className="mt-1 flex justify-between text-xs opacity-70">
+                        <span>Progreso</span>
+                        <span>{bgAnalysis.progress}%</span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-400 transition-all duration-300"
+                          style={{ width: `${bgAnalysis.progress}%` }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {bgAnalysis.status === "uploaded" && (
+                    <p className="text-xs opacity-70 mt-0.5">
+                      Abre el panel para anotar esquinas o inicia el análisis directamente.
+                    </p>
+                  )}
+                  {bgAnalysis.status === "processing" && (
+                    <>
+                      <p className="text-xs opacity-70 mt-0.5">
+                        {bgAnalysis.currentStep} · {bgAnalysis.progress}%
+                        {bgAnalysis.framesProcessed != null && bgAnalysis.totalFrames != null
+                          ? ` · ${bgAnalysis.framesProcessed.toLocaleString()}/${bgAnalysis.totalFrames.toLocaleString()} frames`
+                          : ""}
+                      </p>
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-amber-400 transition-all duration-700"
+                          style={{ width: `${bgAnalysis.progress}%` }}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {bgAnalysis.status === "failed" && (
+                    <p className="text-xs opacity-70 mt-0.5 truncate">{bgAnalysis.error}</p>
+                  )}
+                  {bgAnalysis.status === "completed" && (
+                    <p className="text-xs opacity-70 mt-0.5">Refresca la página para ver los resultados.</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setBgBarDismissed(true)}
+                className="text-current opacity-50 hover:opacity-100 shrink-0"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Open modal button */}
+            {(bgAnalysis.status === "uploading" || bgAnalysis.status === "uploaded" || bgAnalysis.status === "processing") && (
+              <button
+                onClick={() => { setUploadOpen(true); setBgBarDismissed(true); }}
+                className="mt-2 w-full rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold transition-colors"
+              >
+                {bgAnalysis.status === "uploaded" ? "Abrir panel para anotar" : "Abrir panel de análisis"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
