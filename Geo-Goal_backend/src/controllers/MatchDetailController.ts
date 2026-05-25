@@ -25,6 +25,9 @@ import {
   RegisterTrackingFrameRequest,
 } from "../application/matchDetail/requests/MatchDetailRequests";
 import { Match } from "../models/Match";
+import { Team } from "../models/Team";
+import { League } from "../models/League";
+import { LeagueAdmin } from "../models/LeagueAdmin";
 import { MatchAnalysisJob } from "../models/MatchAnalysisJob";
 import { MatchDetailService } from "../services/MatchDetailService";
 import {
@@ -753,6 +756,310 @@ export class MatchDetailController {
       playerTags: job.playerTags,
       identityMap: job.identityMap,
       status: "processing",
+    });
+  };
+
+  static getUserAnalysisHistory = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const jobs = await MatchAnalysisJob.findAll({
+      where: { createdBy: userId },
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    res.json({
+      jobs: jobs.map((j) => ({
+        jobId: j.id,
+        matchId: j.matchId,
+        leagueId: j.leagueId,
+        status: j.status,
+        progress: j.progress,
+        currentStep: j.currentStep,
+        framesProcessed: j.framesProcessed,
+        totalFrames: j.totalFrames,
+        error: j.error,
+        videoSupabaseUrl: j.videoSupabaseUrl,
+        videoFilename: j.videoFilename,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        match: j.match ? {
+          id: j.match.id,
+          date: j.match.date,
+          roundName: j.match.roundName,
+          homeTeam: j.match.homeTeam ? { id: j.match.homeTeam.id, name: j.match.homeTeam.name } : null,
+          awayTeam: j.match.awayTeam ? { id: j.match.awayTeam.id, name: j.match.awayTeam.name } : null,
+          league: j.match.league ? { id: j.match.league.id, name: j.match.league.name } : null,
+        } : null,
+      })),
+    });
+  };
+
+  static getUserAnalysisDetail = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    const { jobId } = req.params;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const job = await MatchAnalysisJob.findOne({
+      where: { id: Number(jobId), createdBy: userId },
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "srcPts",
+        "playerTags",
+        "identityMap",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    if (!job) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    res.json({
+      job: {
+        jobId: job.id,
+        matchId: job.matchId,
+        leagueId: job.leagueId,
+        status: job.status,
+        progress: job.progress,
+        currentStep: job.currentStep,
+        framesProcessed: job.framesProcessed,
+        totalFrames: job.totalFrames,
+        error: job.error,
+        videoSupabaseUrl: job.videoSupabaseUrl,
+        videoFilename: job.videoFilename,
+        srcPts: job.srcPts,
+        playerTags: job.playerTags,
+        identityMap: job.identityMap,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        match: job.match ? {
+          id: job.match.id,
+          date: job.match.date,
+          roundName: job.match.roundName,
+          homeTeam: job.match.homeTeam ? { id: job.match.homeTeam.id, name: job.match.homeTeam.name } : null,
+          awayTeam: job.match.awayTeam ? { id: job.match.awayTeam.id, name: job.match.awayTeam.name } : null,
+          league: job.match.league ? { id: job.match.league.id, name: job.match.league.name } : null,
+        } : null,
+      },
+    });
+  };
+
+  static getAdminAnalysisHistory = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const adminLeagues = await LeagueAdmin.findAll({
+      where: { userId },
+      attributes: ["leagueId"],
+    });
+    const leagueIds = adminLeagues.map((l) => l.leagueId);
+
+    if (!leagueIds.length) {
+      res.json({ jobs: [] });
+      return;
+    }
+
+    const jobs = await MatchAnalysisJob.findAll({
+      where: { leagueId: leagueIds },
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    res.json({
+      jobs: jobs.map((j) => ({
+        jobId: j.id,
+        matchId: j.matchId,
+        leagueId: j.leagueId,
+        status: j.status,
+        progress: j.progress,
+        currentStep: j.currentStep,
+        framesProcessed: j.framesProcessed,
+        totalFrames: j.totalFrames,
+        error: j.error,
+        videoSupabaseUrl: j.videoSupabaseUrl,
+        videoFilename: j.videoFilename,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        match: j.match ? {
+          id: j.match.id,
+          date: j.match.date,
+          roundName: j.match.roundName,
+          homeTeam: j.match.homeTeam ? { id: j.match.homeTeam.id, name: j.match.homeTeam.name } : null,
+          awayTeam: j.match.awayTeam ? { id: j.match.awayTeam.id, name: j.match.awayTeam.name } : null,
+          league: j.match.league ? { id: j.match.league.id, name: j.match.league.name } : null,
+        } : null,
+      })),
+    });
+  };
+
+  static getAdminAnalysisDetail = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    const { jobId } = req.params;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const adminLeagues = await LeagueAdmin.findAll({
+      where: { userId },
+      attributes: ["leagueId"],
+    });
+    const leagueIds = adminLeagues.map((l) => l.leagueId);
+
+    if (!leagueIds.length) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    const job = await MatchAnalysisJob.findOne({
+      where: { id: Number(jobId), leagueId: leagueIds },
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "srcPts",
+        "playerTags",
+        "identityMap",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    if (!job) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    res.json({
+      job: {
+        jobId: job.id,
+        matchId: job.matchId,
+        leagueId: job.leagueId,
+        status: job.status,
+        progress: job.progress,
+        currentStep: job.currentStep,
+        framesProcessed: job.framesProcessed,
+        totalFrames: job.totalFrames,
+        error: job.error,
+        videoSupabaseUrl: job.videoSupabaseUrl,
+        videoFilename: job.videoFilename,
+        srcPts: job.srcPts,
+        playerTags: job.playerTags,
+        identityMap: job.identityMap,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        match: job.match ? {
+          id: job.match.id,
+          date: job.match.date,
+          roundName: job.match.roundName,
+          homeTeam: job.match.homeTeam ? { id: job.match.homeTeam.id, name: job.match.homeTeam.name } : null,
+          awayTeam: job.match.awayTeam ? { id: job.match.awayTeam.id, name: job.match.awayTeam.name } : null,
+          league: job.match.league ? { id: job.match.league.id, name: job.match.league.name } : null,
+        } : null,
+      },
     });
   };
 }

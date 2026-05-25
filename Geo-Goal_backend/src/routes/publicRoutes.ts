@@ -190,7 +190,6 @@ router.put(
   asyncHandler(MatchDetailController.claimAnalysisJob)
 );
 
-
 router.get("/:leagueId/top-scorers", LeagueController.getTopScorers);
 
 export default router;

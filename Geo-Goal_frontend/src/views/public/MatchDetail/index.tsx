@@ -356,6 +356,8 @@ function TacticalPitch({
   analytics,
   homeFormation,
   awayFormation,
+  homeTeamId,
+  awayTeamId,
 }: {
   matchId: number;
   homeStarters?: MatchDetailLineupEntry[];
@@ -365,6 +367,8 @@ function TacticalPitch({
   analytics: Awaited<ReturnType<typeof getPublicMatchAnalytics>> | undefined;
   homeFormation?: string | null;
   awayFormation?: string | null;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
 }) {
   const PAGE_SIZE = 500;
   const totalFrames = analytics?.summary?.totalFrames ?? 0;
@@ -460,8 +464,10 @@ function TacticalPitch({
   const homeIds = useMemo(() => new Set(home.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [home]);
   const awayIds = useMemo(() => new Set(away.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [away]);
 
+  type TrackedPlayer = { userId: number | null; x: number; y: number; side: Side | "neutral"; trackerId: number | null; teamId: number | null };
+
   const trackedPlayers = useMemo(() => {
-    if (!currentFrame || !Array.isArray(currentFrame.players)) return [] as Array<{ userId: number | null; x: number; y: number; side: Side | "neutral" }>;
+    if (!currentFrame || !Array.isArray(currentFrame.players)) return [] as TrackedPlayer[];
 
     const toNumber = (value: unknown) => {
       const n = Number(value);
@@ -471,33 +477,78 @@ function TacticalPitch({
     return (currentFrame.players as Array<Record<string, unknown>>)
       .map((row) => {
         const userId = toNumber(row.userId ?? row.playerId);
+        const trackerId = toNumber(row.playerId ?? row.tracker_id);
+        const teamId = toNumber(row.teamId ?? row.teamID ?? row.team_id);
         const x = toNumber(row.x);
         const y = toNumber(row.y);
         if (x == null || y == null) return null;
 
         let side: Side | "neutral" = "neutral";
+        // Try userId match first (manual/legacy frames)
         if (userId != null && homeIds.has(userId)) side = "home";
         else if (userId != null && awayIds.has(userId)) side = "away";
+        // Fallback: use teamId (AI-processed frames have teamId = real DB team ID)
+        else if (teamId != null && homeTeamId != null && teamId === homeTeamId) side = "home";
+        else if (teamId != null && awayTeamId != null && teamId === awayTeamId) side = "away";
 
         return {
           userId,
+          trackerId,
+          teamId,
           x: Math.max(0, Math.min(100, x)),
           y: Math.max(0, Math.min(100, y)),
           side,
         };
       })
-      .filter((v): v is { userId: number | null; x: number; y: number; side: Side | "neutral" } => v != null);
-  }, [currentFrame, homeIds, awayIds]);
+      .filter((v): v is TrackedPlayer => v != null);
+  }, [currentFrame, homeIds, awayIds, homeTeamId, awayTeamId]);
 
   const trackedPositionByPlayerId = useMemo(() => {
     const map = new Map<number, { x: number; y: number }>();
+    // Direct userId matches (manual frames or identity-resolved AI frames)
     trackedPlayers.forEach((tp) => {
       if (typeof tp.userId === "number" && !map.has(tp.userId)) {
         map.set(tp.userId, { x: tp.x, y: tp.y });
       }
     });
+
+    // Auto-match by side for AI frames where userId is a tracker_id, not a real user
+    // Assign lineup players (in order) to side-matched tracked positions not yet claimed
+    const homeOpen = trackedPlayers.filter((tp) => tp.side === "home" && !(typeof tp.userId === "number" && homeIds.has(tp.userId)));
+    const awayOpen = trackedPlayers.filter((tp) => tp.side === "away" && !(typeof tp.userId === "number" && awayIds.has(tp.userId)));
+
+    let hi = 0;
+    home.forEach((p) => {
+      if (typeof p.userId !== "number") return;
+      if (map.has(p.userId)) return;
+      if (hi < homeOpen.length) { map.set(p.userId, homeOpen[hi]); hi++; }
+    });
+
+    let ai = 0;
+    away.forEach((p) => {
+      if (typeof p.userId !== "number") return;
+      if (map.has(p.userId)) return;
+      if (ai < awayOpen.length) { map.set(p.userId, awayOpen[ai]); ai++; }
+    });
+
     return map;
-  }, [trackedPlayers]);
+  }, [trackedPlayers, home, away, homeIds, awayIds]);
+
+  // Tracked positions NOT matched to any lineup player — render as extra dots
+  const usedTracked = useMemo(() => {
+    const used = new Set<number>();
+    trackedPositionByPlayerId.forEach((pos) => {
+      trackedPlayers.forEach((tp, i) => {
+        if (tp.x === pos.x && tp.y === pos.y) used.add(i);
+      });
+    });
+    return used;
+  }, [trackedPlayers, trackedPositionByPlayerId]);
+
+  const unmatchedTracked = useMemo(
+    () => trackedPlayers.filter((_, i) => !usedTracked.has(i)),
+    [trackedPlayers, usedTracked],
+  );
 
   const toSpot = (idx: number, side: Side) => {
     const formation = side === "home" ? homeFormation : awayFormation;
@@ -705,6 +756,28 @@ function TacticalPitch({
                 <p className="mt-1 max-w-[88px] truncate text-center text-[10px] font-semibold text-white drop-shadow">
                   {p.name}
                 </p>
+              </div>
+            );
+          })}
+
+          {/* Unmatched tracked positions (AI detections without identity mapping) */}
+          {unmatchedTracked.map((tp, i) => {
+            const colorClass = tp.side === "home"
+              ? "bg-emerald-400/60 border-emerald-300/60"
+              : tp.side === "away"
+                ? "bg-sky-400/60 border-sky-300/60"
+                : "bg-gray-400/40 border-gray-300/40";
+            return (
+              <div
+                key={`trk-${i}-${tp.trackerId ?? tp.userId ?? i}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${tp.x}%`, top: `${tp.y}%` }}
+              >
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border text-[9px] font-bold shadow-lg shadow-black/40 ${colorClass} text-white/80`}
+                >
+                  {tp.trackerId ?? "?"}
+                </div>
               </div>
             );
           })}
@@ -2157,6 +2230,8 @@ export default function PublicMatchDetailView() {
           analytics={analytics}
           homeFormation={detail.homeFormation}
           awayFormation={detail.awayFormation}
+          homeTeamId={match.homeTeam?.id}
+          awayTeamId={match.awayTeam?.id}
         />
 
         <section className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
