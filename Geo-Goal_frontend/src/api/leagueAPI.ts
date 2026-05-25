@@ -217,3 +217,8 @@ export const updatePlayerMatchGoals = async (
   });
   return data;
 };
+
+export const generateSecondRound = async (leagueId: number) => {
+  const { data } = await api.post(`/league/${leagueId}/second-round`);
+  return data;
+};

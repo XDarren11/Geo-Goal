@@ -96,4 +96,8 @@ export class LeagueServiceAdapter implements ILeagueService {
   updateLeagueLogo(leagueId: string, logoFile: UploadedImageFile): Promise<{ logoUrl: string }> {
     return LeagueService.updateLeagueLogo(leagueId, logoFile);
   }
+
+  async generateSecondRound(leagueId: number): Promise<{ message: string, count: number }> {
+    return LeagueService.generateSecondRound(leagueId);
+  }
 }

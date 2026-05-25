@@ -10,6 +10,7 @@ import {
   restructureFixture,
   updateLeagueLogo,
   leagueLogoFullUrl,
+  generateSecondRound,
 } from "@/api/leagueAPI";
 import { useMemo, useState } from "react";
 import { toast } from "react-toastify";
@@ -37,6 +38,7 @@ export default function LeagueDetailView() {
   const isValidLeagueId = Number.isInteger(id) && id > 0;
   const queryClient = useQueryClient();
   const { data: currentUser } = useAuth();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const [trainerEmail, setTrainerEmail] = useState("");
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -61,6 +63,17 @@ export default function LeagueDetailView() {
     queryKey: ["fixture", id],
     queryFn: () => getFixture(id),
     enabled: isValidLeagueId,
+  });
+
+  const secondRoundMutation = useMutation({
+    mutationFn: (leagueId: number) => generateSecondRound(leagueId),
+    onSuccess: (data) => {
+      toast.success(`¡Segunda vuelta creada! (${data.count} partidos nuevos)`);
+      queryClient.invalidateQueries({ queryKey: ["fixture", leagueId] }); 
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Error al generar la segunda vuelta");
+    }
   });
 
 
@@ -744,7 +757,49 @@ export default function LeagueDetailView() {
               >
                 Generar eliminatorias
               </button>
-            </div>
+              <button
+                  onClick={() => setShowConfirmModal(true)}
+                  disabled={secondRoundMutation.isPending}
+                  className="rounded-lg bg-geo-green px-4 py-2 text-sm font-bold text-black hover:brightness-110 disabled:opacity-50 transition-colors"
+                >
+                  {secondRoundMutation.isPending ? "Generando..." : "Generar Segunda Vuelta"}
+                </button>
+
+                {/* MODAL DE CONFIRMACIÓN ESTILO GEO-GOAL */}
+                {showConfirmModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="w-full max-w-md rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 shadow-2xl">
+                      
+                      <h3 className="font-geo text-2xl tracking-wide text-geo-green mb-3">
+                        ¿Generar segunda vuelta?
+                      </h3>
+                      
+                      <p className="text-[var(--geo-text-muted)] mb-6 text-sm leading-relaxed">
+                        Esto clonará el fixture actual invirtiendo locales y visitantes. Los nuevos partidos se agregarán al calendario. ¿Estás seguro de continuar?
+                      </p>
+                      
+                      <div className="flex flex-col-reverse sm:flex-row justify-end gap-3">
+                        <button
+                          onClick={() => setShowConfirmModal(false)}
+                          className="rounded-xl border border-[var(--geo-border)] bg-transparent px-5 py-2.5 text-sm font-semibold text-[var(--geo-text)] hover:bg-[var(--geo-bg)] transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowConfirmModal(false);
+                            secondRoundMutation.mutate(Number(leagueId)); // O la variable que uses para el ID
+                          }}
+                          className="rounded-xl bg-geo-green px-5 py-2.5 text-sm font-bold text-black hover:brightness-110 shadow-[0_0_15px_rgba(57,255,20,0.3)] transition-all"
+                        >
+                          Sí, clonar partidos
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+              </div>
             {loadingFixture ? (
               <p className="mt-4 text-[var(--geo-text-muted)]">Cargando fixture…</p>
             ) : roundEntries.length > 0 ? (

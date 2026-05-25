@@ -986,4 +986,49 @@ static async deleteLeague(leagueId: string, managerId: number): Promise<string> 
     await league.save();
     return { logoUrl: uploadedLogo.url };
   }
+
+  static async generateSecondRound(leagueId: number): Promise<{ message: string, count: number }> {
+    const firstRoundMatches = await Match.findAll({ where: { leagueId } });
+
+    if (firstRoundMatches.length === 0) {
+      throw new Error("No hay partidos en la primera vuelta para clonar.");
+    }
+
+    const roundNumbers = firstRoundMatches.map(m => {
+      const matchNumber = m.roundName ? m.roundName.match(/\d+/) : null;
+      return matchNumber ? parseInt(matchNumber[0], 10) : 0;
+    });
+    const maxRound = Math.max(...roundNumbers, 0);
+
+    const secondRoundMatches = firstRoundMatches.map(match => {
+      
+      const currentMatchNumber = match.roundName ? match.roundName.match(/\d+/) : null;
+      const currentNum = currentMatchNumber ? parseInt(currentMatchNumber[0], 10) : 1;
+      
+      const textPrefix = match.roundName ? match.roundName.replace(/\d+/g, '').trim() : "Jornada";
+
+      const newRoundName = `${textPrefix} ${currentNum + maxRound}`;
+
+      return {
+        leagueId: match.leagueId,
+        seasonId: match.seasonId,
+        homeTeamId: match.awayTeamId, // Se invierte la localía
+        awayTeamId: match.homeTeamId,
+        roundName: newRoundName,      // 👈 AQUÍ GUARDAMOS EL NUEVO NOMBRE NUMERADO
+        played: false,
+        homeScore: null,
+        awayScore: null,
+        homePenaltiesScore: null,
+        awayPenaltiesScore: null,
+        date: null 
+      };
+    });
+
+    await Match.bulkCreate(secondRoundMatches);
+
+    return { 
+      message: "Segunda vuelta generada con éxito", 
+      count: secondRoundMatches.length 
+    };
+  }
 }

@@ -41,4 +41,5 @@ export interface ILeagueService {
     audit: RestructureFixtureAuditDTO
   ): Promise<{ message: string; newMatchesGenerated: number }>;
   updateLeagueLogo(leagueId: string, logoFile: UploadedImageFile): Promise<{ logoUrl: string }>;
+  generateSecondRound(leagueId: number): Promise<{ message: string; count: number }>;
 }

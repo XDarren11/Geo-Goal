@@ -6,6 +6,7 @@ import {
   CreateLeagueRequest,
   DeleteLeagueRequest,
   GenerateFixtureRequest,
+  GenerateSecondRoundRequest,
   GetAllLeaguesRequest,
   GetFixtureWithLocationsRequest,
   GetLeagueByIdRequest,
@@ -194,9 +195,20 @@ export class LeagueController {
       const data = await matchStatMediator.send(new GetMatchPlayersRequest(Number(matchId)));
       res.json(data);
     } catch (error: any) {
-      // 👇 ESTO ES LO QUE NECESITAMOS VER
       console.error("🚨🚨🚨 ERROR EN EL BACKEND:", error);
       res.status(500).json({ message: "Error interno", detail: error.message });
+    }
+  };
+  
+  static generateSecondRound = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      
+      const data = await leagueMediator.send(new GenerateSecondRoundRequest(Number(id)));
+      
+      res.json(data);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   };
 }

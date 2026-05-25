@@ -179,3 +179,10 @@ export class UpdateLeagueLogoRequest extends LeagueRequest<{ logoUrl: string }> 
   }
 }
 
+export class GenerateSecondRoundRequest extends LeagueRequest<{ message: string, count: number }> {
+  readonly requestName = "league.generateSecondRound";
+  
+  constructor(public readonly leagueId: number) { 
+    super(); 
+  }
+}
