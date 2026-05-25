@@ -79,6 +79,20 @@ router.get(
 );
 
 router.get(
+  "/players/:userId/form",
+  param("userId").isInt().withMessage("ID de usuario no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getPlayerForm)
+);
+
+router.get(
+  "/leagues/:leagueId/weekly-award",
+  param("leagueId").isInt().withMessage("ID de liga no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getWeeklyAward)
+);
+
+router.get(
   "/matches/:matchId/frames/export",
   param("matchId").isInt().withMessage("ID de partido no válido"),
   handleInputError,

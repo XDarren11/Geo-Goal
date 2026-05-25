@@ -720,6 +720,7 @@ function TacticalPitch({
             const pos = trackedPos ?? toSpot(p.idx, "home");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
             const isInterpolated = trackedPos?.interpolated === true;
+            const isMvp = p.userId != null && (analytics as any)?.match?.mvpPlayerId === p.userId;
             return (
               <div
                 key={`h-${p.idx}-${p.userId ?? p.name}`}
@@ -729,6 +730,7 @@ function TacticalPitch({
               >
                 <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-emerald-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-emerald-400/60" : "border-white/80 bg-emerald-400"}`}>
                   {p.number ?? p.idx + 1}
+                  {isMvp && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-sm leading-none" title="MVP del partido">🏆</span>}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
                   {incident?.subOut ? <span className="absolute -left-2 -top-2 rounded bg-zinc-800 px-1 text-[10px] font-black text-white">⇣</span> : null}
@@ -746,6 +748,7 @@ function TacticalPitch({
             const pos = trackedPos ?? toSpot(p.idx, "away");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
             const isInterpolated = trackedPos?.interpolated === true;
+            const isMvp = p.userId != null && (analytics as any)?.match?.mvpPlayerId === p.userId;
             return (
               <div
                 key={`a-${p.idx}-${p.userId ?? p.name}`}
@@ -755,6 +758,7 @@ function TacticalPitch({
               >
                 <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-sky-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-sky-400/60" : "border-white/80 bg-sky-400"}`}>
                   {p.number ?? p.idx + 1}
+                  {isMvp && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-sm leading-none" title="MVP del partido">🏆</span>}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
                   {incident?.subOut ? <span className="absolute -left-2 -top-2 rounded bg-zinc-800 px-1 text-[10px] font-black text-white">⇣</span> : null}

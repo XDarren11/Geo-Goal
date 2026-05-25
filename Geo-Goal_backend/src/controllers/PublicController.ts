@@ -88,6 +88,36 @@ export class PublicController {
     res.json({ elo, poisson });
   };
 
+  static getPlayerForm = async (req: Request, res: Response): Promise<void> => {
+    const playerId = Number(req.params.userId);
+    const last = Math.min(Number(req.query.last) || 5, 20);
+    const { MatchAnalyticsService } = await import("../services/MatchAnalyticsService.js");
+    const form = await MatchAnalyticsService.getPlayerForm(playerId, last);
+    res.json(form);
+  };
+
+  static getWeeklyAward = async (req: Request, res: Response): Promise<void> => {
+    const { WeeklyAward } = await import("../models/WeeklyAward.js");
+    const { User } = await import("../models/User.js");
+    const { Team } = await import("../models/Team.js");
+    const leagueId = Number(req.params.leagueId);
+
+    const award = await WeeklyAward.findOne({
+      where: { leagueId },
+      include: [
+        { model: User, as: "player", attributes: ["id", "name", "avatarUrl"] },
+        { model: Team, attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["weekStart", "DESC"]],
+    });
+
+    if (!award) {
+      res.status(404).json({ error: "No hay premio disponible aún" });
+      return;
+    }
+    res.json(award);
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;

@@ -67,6 +67,9 @@ export class Match extends Model {
     @Column({ type: DataType.BOOLEAN, defaultValue: false })
     declare played: boolean;
 
+    @Column({ type: DataType.INTEGER, allowNull: true })
+    declare mvpPlayerId: number | null;
+
     @HasOne(() => MatchDetail)
     declare detail: MatchDetail;
 

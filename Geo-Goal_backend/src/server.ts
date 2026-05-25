@@ -10,12 +10,14 @@ import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middleware/errorHandler";
 import { startDailyReminderCron } from "./jobs/dailyMatchReminders";
 import { startPredictionRefitCron } from "./jobs/refitPredictionModels";
+import { startWeeklyAwardsCron } from "./jobs/weeklyAwards";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
 
 connectDB();
 startDailyReminderCron();
 startPredictionRefitCron();
+startWeeklyAwardsCron();
 
 const app = express();
 

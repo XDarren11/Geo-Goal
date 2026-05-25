@@ -239,11 +239,17 @@ function MatchCard({ match }: { match: any }) {
                 <div className="lg:col-span-1">
                   <p className="mb-1 text-xs font-bold uppercase tracking-widest text-zinc-400">Top jugadores</p>
                   <ul className="space-y-1 text-xs">
-                    {(analytics.topPlayers || []).slice(0, 5).map((p) => (
-                      <li key={p.id} className="rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-200">
-                        {p.player?.name || `Jugador ${p.playerId}`} · ⭐ {p.rating.toFixed(2)} · G/A {p.goals}/{p.assists}
-                      </li>
-                    ))}
+                    {(analytics.topPlayers || []).slice(0, 5).map((p) => {
+                      const isMvp = (analytics?.match as any)?.mvpPlayerId != null && (analytics!.match as any).mvpPlayerId === p.playerId;
+                      return (
+                        <li key={p.id} className="flex items-center gap-1 rounded-md bg-zinc-900/50 px-2 py-1 text-zinc-200">
+                          {isMvp && (
+                            <span className="shrink-0 rounded bg-yellow-500 px-1 text-[9px] font-black text-black">MVP</span>
+                          )}
+                          {p.player?.name || `Jugador ${p.playerId}`} &nbsp;⭐ {p.rating.toFixed(2)} &nbsp;G/A {p.goals}/{p.assists}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 
