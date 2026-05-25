@@ -640,6 +640,33 @@ export class MatchDetailService {
 
     await NotificationService.notifyLineupUpdated(match.id, teamId);
 
+    // ── Notificación: lineup publicada → followers del equipo ──────────────
+    setImmediate(async () => {
+      try {
+        const fullMatch = await Match.findByPk(match.id, {
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+          ],
+        });
+        if (!fullMatch) return;
+        const teamName = side === "home"
+          ? ((fullMatch as any).homeTeam?.name ?? "Local")
+          : ((fullMatch as any).awayTeam?.name ?? "Visitante");
+        const rivalName = side === "home"
+          ? ((fullMatch as any).awayTeam?.name ?? "Visitante")
+          : ((fullMatch as any).homeTeam?.name ?? "Local");
+        await NotificationService.broadcastToTeamFollowers(teamId, {
+          type: "lineup_published",
+          title: `Alineación lista: ${teamName}`,
+          message: `Para el partido vs ${rivalName}`,
+          payload: { matchId: fullMatch.id, teamId, side },
+        });
+      } catch (err) {
+        console.error("[notif] lineup_published broadcast failed:", err);
+      }
+    });
+
     const reloaded = await this.getByMatchId(matchId);
     return {
       message: "Alineación inicial registrada correctamente",

@@ -571,6 +571,23 @@ export class MatchDetailController {
 
     await job.update(updates);
 
+    // ── Notificación: análisis listo → participantes del partido ──────────
+    if (status === "completed") {
+      const { NotificationService } = await import("../services/NotificationService.js");
+      setImmediate(async () => {
+        try {
+          await NotificationService.notifyMatchParticipants(Number(matchId), {
+            type: "analysis_ready",
+            title: "Análisis de tu partido disponible",
+            message: "Ya puedes ver heatmaps, estadísticas y rating de jugadores",
+            payload: { matchId: Number(matchId) },
+          });
+        } catch (err) {
+          console.error("[notif] analysis_ready failed:", err);
+        }
+      });
+    }
+
     res.json({ jobId: job.id, ...updates });
   };
 

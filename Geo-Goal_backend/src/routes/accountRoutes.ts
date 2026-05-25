@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { body } from "express-validator";
+import { body, param } from "express-validator";
 import { authenticate } from "../middleware/auth";
 import { handleInputError } from "../middleware/validation";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { AccountController } from "../controllers/AccountController";
+import { TeamFollowerController } from "../controllers/TeamFollowerController";
+import { DeviceTokenController } from "../controllers/DeviceTokenController";
 
 const router = Router();
 
@@ -33,5 +35,27 @@ router.patch(
 );
 
 router.post("/resend-confirmation", asyncHandler(AccountController.resendConfirmationEmail));
+
+// ── Equipos seguidos ──────────────────────────────────────────────────────────
+router.get("/followed-teams", asyncHandler(TeamFollowerController.listFollowed));
+router.get("/followed-team-ids", asyncHandler(TeamFollowerController.getFollowedTeamIds));
+
+// ── Device tokens (push móvil) ────────────────────────────────────────────────
+router.post(
+  "/device-tokens",
+  body("token").isString().notEmpty().withMessage("token es requerido"),
+  body("platform")
+    .isIn(["ios", "android", "web"])
+    .withMessage("platform debe ser ios, android o web"),
+  handleInputError,
+  asyncHandler(DeviceTokenController.register)
+);
+
+router.delete(
+  "/device-tokens/:token",
+  param("token").isString().notEmpty(),
+  handleInputError,
+  asyncHandler(DeviceTokenController.unregister)
+);
 
 export default router;

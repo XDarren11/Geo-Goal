@@ -8,10 +8,12 @@ import { connectDB } from "./config/db";
 import { registerRoutes } from "./routes";
 import { setupSwagger } from "./config/swagger";
 import { errorHandler } from "./middleware/errorHandler";
+import {startDailyReminderCron} from "./jobs/dailyMatchReminders";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true });
 
 connectDB();
+startDailyReminderCron();
 
 const app = express();
 
