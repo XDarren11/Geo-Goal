@@ -33,4 +33,8 @@ export class PublicServiceAdapter implements IPublicService {
   getMatchAnalytics(matchId: string): Promise<unknown> {
     return PublicService.getMatchAnalytics(matchId);
   }
+
+  exportFrames(matchId: string, page = 1, pageSize = 1000): Promise<unknown> {
+    return PublicService.exportFrames(matchId, page, pageSize);
+  }
 }

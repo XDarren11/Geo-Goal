@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, getPublicMatchFramesExport, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
 import { PitchPreview2D } from "@/components/Pitch/PitchPreview2D";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -1879,7 +1879,12 @@ export default function PublicMatchDetailView() {
                 </div>
                 <div className="rounded-lg bg-[var(--geo-bg)] p-3 text-center">
                   <p className="text-xs uppercase tracking-[0.15em] text-[var(--geo-text-muted)]">Frames tracking</p>
-                  <p className="mt-1 text-2xl font-black text-geo-green">{analytics.trackingFrames?.length ?? 0}</p>
+                  <p className="mt-1 text-2xl font-black text-geo-green">
+                    {analytics.trackingFrames?.length ?? 0}
+                    {(analytics.summary?.totalFrames ?? 0) > (analytics.trackingFrames?.length ?? 0) ? (
+                      <span className="text-xs text-[var(--geo-text-muted)]"> / {analytics.summary.totalFrames}</span>
+                    ) : null}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-[var(--geo-bg)] p-3 text-center">
                   <p className="text-xs uppercase tracking-[0.15em] text-[var(--geo-text-muted)]">Red de pases</p>
@@ -1912,6 +1917,12 @@ export default function PublicMatchDetailView() {
                   </ul>
                 </div>
               </div>
+
+              {(analytics.summary?.totalFrames ?? 0) > 0 ? (
+                <div className="mt-4 rounded-lg border border-white/10 bg-zinc-900/30 p-3">
+                  <FramesExportViewer matchId={id} totalFrames={analytics.summary.totalFrames} />
+                </div>
+              ) : null}
             </>
           ) : (
             <p className="text-sm text-[var(--geo-text-muted)]">Sin analytics disponibles para este partido.</p>
@@ -2420,6 +2431,87 @@ export default function PublicMatchDetailView() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function FramesExportViewer({ matchId, totalFrames }: { matchId: number; totalFrames: number }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 500;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["frames-export", matchId, page],
+    queryFn: () => getPublicMatchFramesExport(matchId, page, pageSize),
+    enabled: !!matchId,
+    staleTime: 30_000,
+  });
+
+  const totalPages = data ? Math.ceil(data.total / pageSize) : Math.ceil(totalFrames / pageSize);
+  const frames = data?.frames ?? [];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+          Todos los frames ({totalFrames.toLocaleString()} en DB)
+        </p>
+        {totalPages > 1 ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || isLoading}
+              className="rounded bg-white/10 px-2 py-1 text-xs text-[var(--geo-text)] disabled:opacity-30 hover:bg-white/20"
+            >
+              ←
+            </button>
+            <span className="text-xs text-[var(--geo-text-muted)]">
+              Pág {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || isLoading}
+              className="rounded bg-white/10 px-2 py-1 text-xs text-[var(--geo-text)] disabled:opacity-30 hover:bg-white/20"
+            >
+              →
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <p className="text-xs text-[var(--geo-text-muted)]">Cargando frames...</p>
+      ) : isError ? (
+        <p className="text-xs text-red-400">Error al cargar frames.</p>
+      ) : frames.length > 0 ? (
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-white/5">
+          <table className="w-full text-left text-xs">
+            <thead className="sticky top-0 bg-zinc-800">
+              <tr className="text-zinc-400">
+                <th className="px-2 py-1">t (s)</th>
+                <th className="px-2 py-1">Periodo</th>
+                <th className="px-2 py-1">Balón X/Y/Z</th>
+                <th className="px-2 py-1">Jugadores</th>
+              </tr>
+            </thead>
+            <tbody>
+              {frames.map((frame: any) => (
+                <tr key={frame.id} className="border-t border-white/5 text-zinc-300">
+                  <td className="px-2 py-1 font-mono">{(frame.timestampMs / 1000).toFixed(1)}</td>
+                  <td className="px-2 py-1">{frame.period || "—"}</td>
+                  <td className="px-2 py-1 font-mono">
+                    {(frame.ballX ?? 0).toFixed(1)}, {(frame.ballY ?? 0).toFixed(1)}, {(frame.ballZ ?? 0).toFixed(1)}
+                  </td>
+                  <td className="px-2 py-1">{Array.isArray(frame.players) ? frame.players.length : 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--geo-text-muted)]">Sin frames en esta página.</p>
+      )}
     </div>
   );
 }

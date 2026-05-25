@@ -11,6 +11,7 @@ import { MatchFlowServiceAdapter } from "../services/MatchFlowServiceAdapter";
 import {
   AssignRefereeRequest,
   AutoAssignRefereesRequest,
+  ExportFlowFramesRequest,
   GetFlowMatchAnalyticsRequest,
   GetLeagueRefereesRequest,
   GetRefereeDashboardRequest,
@@ -206,6 +207,16 @@ export class MatchDetailController {
     const { matchId } = req.params;
     const data = await matchDetailMediator.send(
       new GetFlowMatchAnalyticsRequest(Number(matchId))
+    );
+    res.json(data);
+  };
+
+  static exportFrames = async (req: Request, res: Response): Promise<void> => {
+    const { matchId } = req.params;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 1000;
+    const data = await matchDetailMediator.send(
+      new ExportFlowFramesRequest(Number(matchId), page, pageSize)
     );
     res.json(data);
   };

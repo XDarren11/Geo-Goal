@@ -39,4 +39,5 @@ export interface IMatchFlowService {
   getLeagueReferees(leagueId: number, actorUserId: number): Promise<unknown>;
   getUpcomingLeagueMatches(leagueId: number, actorUserId: number, page?: number, pageSize?: number): Promise<unknown>;
   getMatchAnalytics(matchId: number): Promise<unknown>;
+  exportFrames(matchId: number, page?: number, pageSize?: number): Promise<unknown>;
 }

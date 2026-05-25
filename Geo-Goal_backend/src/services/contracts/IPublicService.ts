@@ -7,4 +7,5 @@ export interface IPublicService {
   getFixtureWithLocations(leagueId: string): Promise<unknown>;
   getTeamProfile(leagueId: string, teamId: string): Promise<unknown>;
   getMatchAnalytics(matchId: string): Promise<unknown>;
+  exportFrames(matchId: string, page?: number, pageSize?: number): Promise<unknown>;
 }

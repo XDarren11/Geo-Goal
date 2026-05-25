@@ -565,6 +565,13 @@ router.get('/matches/:matchId/analytics',
     asyncHandler(MatchDetailController.getMatchAnalytics)
 );
 
+router.get('/matches/:matchId/frames/export',
+    hasRole('admin', 'coach', 'player', 'referee'),
+    param('matchId').isInt().withMessage('ID de partido no válido'),
+    handleInputError,
+    asyncHandler(MatchDetailController.exportFrames)
+);
+
 // 2. Ver Tabla de Posiciones (P?blico o Autenticado)
 router.get('/:id/standings',
     param('id').isInt(),

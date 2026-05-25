@@ -3,6 +3,7 @@ import type { IMatchFlowService } from "../../services/contracts/IMatchFlowServi
 import {
   AssignRefereeHandler,
   AutoAssignRefereesHandler,
+  ExportFlowFramesHandler,
   GetFlowMatchAnalyticsHandler,
   GetLeagueRefereesHandler,
   GetRefereeDashboardHandler,
@@ -31,5 +32,6 @@ export function buildMatchDetailMediator(svc: IMatchFlowService): Mediator {
   m.register("matchDetail.getLeagueReferees", new GetLeagueRefereesHandler(svc));
   m.register("matchDetail.getUpcomingLeagueMatches", new GetUpcomingLeagueMatchesHandler(svc));
   m.register("matchDetail.getMatchAnalytics", new GetFlowMatchAnalyticsHandler(svc));
+  m.register("matchDetail.exportFrames", new ExportFlowFramesHandler(svc));
   return m;
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, getAIServiceHealth, type AnalysisStatusResponse, type AIServiceHealth } from '@/Api/publicAPI';
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, getAIServiceHealth, getPublicMatchFramesExport, type AnalysisStatusResponse, type AIServiceHealth } from '@/Api/publicAPI';
 import { getPlayersTeam, updateCoachLineup } from '@/Api/teamAPI';
 import type { MatchAnalyticsResponse, MatchDetailLineupEntry, TrackingFramePlayer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -625,7 +625,7 @@ export default function MatchDetailMobileScreen() {
             <MetaPill label="Jugadores" value={String(analytics.summary.totalPlayersWithStats)} />
             <MetaPill label="Pases" value={String(analytics.summary.totalPassEdges)} />
             <MetaPill label="Eventos espaciales" value={String(analytics.summary.totalSpatialEvents)} />
-            <MetaPill label="Frames" value={String(analytics.trackingFrames.length)} />
+            <MetaPill label="Frames" value={analytics.summary.totalFrames > analytics.trackingFrames.length ? `${analytics.trackingFrames.length} / ${analytics.summary.totalFrames}` : String(analytics.trackingFrames.length)} />
           </View>
         </View>
       ) : null}
@@ -982,6 +982,10 @@ export default function MatchDetailMobileScreen() {
           </View>
         ))}
       </View>
+
+      {(analytics?.summary?.totalFrames ?? 0) > 0 ? (
+        <MobileFramesExport matchId={matchId} totalFrames={analytics!.summary.totalFrames} />
+      ) : null}
     </ScrollView>
 
     {/* ── Video Analysis Modal (admin) ── */}
@@ -1224,6 +1228,90 @@ function MiniTag({ label }: { label: string }) {
   return (
     <View className="rounded-full border border-gray-700 bg-gray-800 px-3 py-2">
       <Text className="text-[10px] text-gray-300" numberOfLines={1}>{label}</Text>
+    </View>
+  );
+}
+
+function MobileFramesExport({ matchId, totalFrames }: { matchId: number; totalFrames: number }) {
+  const [page, setPage] = React.useState(1);
+  const [expanded, setExpanded] = React.useState(false);
+  const pageSize = 200;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['mobile-frames-export', matchId, page],
+    queryFn: () => getPublicMatchFramesExport(matchId, page, pageSize),
+    enabled: expanded && !!matchId,
+    staleTime: 30_000,
+  });
+
+  const totalPages = data ? Math.ceil(data.total / pageSize) : Math.ceil(totalFrames / pageSize);
+  const frames = data?.frames ?? [];
+
+  return (
+    <View className="rounded-xl border border-geo-green/20 bg-gray-900 p-4 mb-8">
+      <TouchableOpacity
+        onPress={() => setExpanded((prev) => !prev)}
+        className="flex-row items-center justify-between"
+      >
+        <Text className="text-geo-green font-bold">
+          Todos los frames ({totalFrames.toLocaleString()} en DB)
+        </Text>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#22c55e" />
+      </TouchableOpacity>
+
+      {expanded ? (
+        <View className="mt-3">
+          {totalPages > 1 ? (
+            <View className="flex-row items-center justify-center gap-3 mb-3">
+              <TouchableOpacity
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || isLoading}
+                className="rounded bg-white/10 px-3 py-1"
+              >
+                <Text className="text-xs text-white">←</Text>
+              </TouchableOpacity>
+              <Text className="text-xs text-gray-400">
+                Pág {page} / {totalPages}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isLoading}
+                className="rounded bg-white/10 px-3 py-1"
+              >
+                <Text className="text-xs text-white">→</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {isLoading ? (
+            <ActivityIndicator color="#22c55e" />
+          ) : isError ? (
+            <Text className="text-red-400 text-xs">Error al cargar frames.</Text>
+          ) : frames.length > 0 ? (
+            <View className="max-h-64">
+              <ScrollView>
+                {(frames as any[]).map((frame: any) => (
+                  <View key={`f-${frame.id}`} className="rounded-lg bg-gray-800 p-2 mb-1">
+                    <View className="flex-row justify-between">
+                      <Text className="text-white font-mono text-xs">
+                        t={(frame.timestampMs / 1000).toFixed(1)}s · {frame.period || '—'}
+                      </Text>
+                      <Text className="text-gray-400 text-xs">
+                        Jug: {Array.isArray(frame.players) ? frame.players.length : 0}
+                      </Text>
+                    </View>
+                    <Text className="text-gray-400 font-mono text-xs mt-1">
+                      Balón ({((frame.ballX ?? 0) as number).toFixed(1)}, {((frame.ballY ?? 0) as number).toFixed(1)}, {((frame.ballZ ?? 0) as number).toFixed(1)})
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : (
+            <Text className="text-gray-500 text-xs">Sin frames en esta página.</Text>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }

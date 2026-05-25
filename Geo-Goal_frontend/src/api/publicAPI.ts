@@ -81,6 +81,25 @@ export async function getPublicMatchAnalytics(matchId: number): Promise<MatchAna
   return data;
 }
 
+export interface ExportFramesResult {
+  frames: unknown[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getPublicMatchFramesExport(
+  matchId: number,
+  page = 1,
+  pageSize = 1000
+): Promise<ExportFramesResult> {
+  const { data } = await api.get<ExportFramesResult>(
+    `${BASE}/matches/${matchId}/frames/export`,
+    { params: { page, pageSize } }
+  );
+  return data;
+}
+
 export interface AnalysisStatusResponse {
   status: "none" | "uploaded" | "annotating" | "queued" | "processing" | "completed" | "failed";
   jobId?: number;

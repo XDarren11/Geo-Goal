@@ -64,6 +64,13 @@ router.get(
   asyncHandler(PublicController.getMatchAnalytics)
 );
 
+router.get(
+  "/matches/:matchId/frames/export",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.exportFrames)
+);
+
 router.post(
   "/matches/:matchId/tracking/batch",
   authenticate,

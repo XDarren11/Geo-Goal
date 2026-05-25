@@ -78,4 +78,8 @@ export class MatchFlowServiceAdapter implements IMatchFlowService {
   getMatchAnalytics(matchId: number): Promise<unknown> {
     return RefereeService.getMatchAnalytics(matchId);
   }
+
+  exportFrames(matchId: number, page = 1, pageSize = 1000): Promise<unknown> {
+    return RefereeService.exportFrames(matchId, page, pageSize);
+  }
 }
