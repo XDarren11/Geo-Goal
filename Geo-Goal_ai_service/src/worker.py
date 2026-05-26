@@ -11,7 +11,7 @@ import numpy as np
 from api_client import APIClient
 from m2m_client import M2MClient
 from video_processor import VideoProcessor
-from event_detector import detect_all_events, FrameSnapshot, PlayerPos
+from event_detector import detect_all_events, detect_all_exhaustive, FrameSnapshot, PlayerPos
 
 
 class AnalysisWorker:
@@ -310,22 +310,30 @@ class AnalysisWorker:
                     players=players,
                 ))
 
-            # Detectar eventos automáticos
+            # Detectar eventos automáticos.
+            # Cambiamos al modo EXHAUSTIVO: además de ball_out/goal/pass detecta
+            # shot, key_pass, cross, clearance, dribble, foul, yellow_card,
+            # red_card, substitution, own_goal, penalty_scored.
+            #
+            # Para volver al modo legacy (solo 3 detectores), usar la env var:
+            #   EVENTS_MODE=legacy
             inferred_events = []
             try:
-                inferred_events = detect_all_events(
-                    snapshots,
-                    fps=effective_fps,
-                    detect_out=True,
-                    detect_goals=True,
-                    detect_passes=True,
-                )
-                print(f"[worker] Job {job_id}: {len(inferred_events)} eventos inferidos detectados "
-                      f"({sum(1 for e in inferred_events if e['event_type']=='goal')} goles, "
-                      f"{sum(1 for e in inferred_events if e['event_type']=='pass')} pases, "
-                      f"{sum(1 for e in inferred_events if e['event_type']=='ball_out')} fueras)")
+                events_mode = os.environ.get("EVENTS_MODE", "exhaustive").lower()
+                if events_mode == "exhaustive":
+                    inferred_events = detect_all_exhaustive(snapshots, fps=effective_fps)
+                else:
+                    inferred_events = detect_all_events(
+                        snapshots,
+                        fps=effective_fps,
+                        detect_out=True,
+                        detect_goals=True,
+                        detect_passes=True,
+                    )
+                print(f"[worker] Job {job_id}: {len(inferred_events)} eventos inferidos detectados (mode={events_mode})")
             except Exception as detect_err:
                 print(f"[worker] Job {job_id}: error en detección de eventos: {detect_err}")
+                import traceback; traceback.print_exc()
 
             payload = {
                 "pitch": {"length_m": 105.0, "width_m": 68.0},

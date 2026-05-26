@@ -958,6 +958,7 @@ export default function PublicMatchDetailView() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
   const [aiHealth, setAiHealth] = useState<AIServiceHealth | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoMissing, setVideoMissing] = useState(false);
   // Preview state (Fase 1 + 2)
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -1483,6 +1484,33 @@ export default function PublicMatchDetailView() {
     });
   }, [dbAnalysisStatus]);
 
+  const lastCheckedVideoUrl = useRef<string | null>(null);
+  useEffect(() => {
+    const url = analysisStatus?.videoSupabaseUrl ?? dbAnalysisStatus?.videoSupabaseUrl ?? null;
+    if (!url) {
+      setVideoMissing(false);
+      lastCheckedVideoUrl.current = null;
+      return;
+    }
+    if (lastCheckedVideoUrl.current === url) return;
+    lastCheckedVideoUrl.current = url;
+
+    let cancelled = false;
+    fetch(url, { method: "HEAD" })
+      .then((res) => {
+        if (cancelled) return;
+        setVideoMissing(!res.ok);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVideoMissing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisStatus?.videoSupabaseUrl, dbAnalysisStatus?.videoSupabaseUrl]);
+
   const analysisSnapshot = analysisStatus ?? dbAnalysisStatus ?? null;
   const analysisStatusLabel = (status?: AnalysisStatusResponse["status"]) => {
     switch (status) {
@@ -1494,6 +1522,16 @@ export default function PublicMatchDetailView() {
       case "failed": return "Fallido";
       default: return "Sin análisis";
     }
+  };
+
+  const formatAnalysisError = (err?: string | null) => {
+    if (!err) return null;
+    const lower = err.toLowerCase();
+    if (lower.includes("client error") || lower.includes("bad request") || lower.includes("not found") || lower.includes("404")) {
+      return "El video no está disponible en el almacenamiento.";
+    }
+    if (err.length > 180) return `${err.slice(0, 180)}…`;
+    return err;
   };
 
   const coachSide = isCoach && user?.id && data?.match
@@ -2494,12 +2532,16 @@ export default function PublicMatchDetailView() {
                   <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--geo-text-muted)]">
                     <span>Actualizado: {formatDateTime(analysisSnapshot.updatedAt)}</span>
                     {analysisSnapshot.videoSupabaseUrl ? (
-                      <a className="text-geo-green hover:underline" href={analysisSnapshot.videoSupabaseUrl} target="_blank" rel="noreferrer">Ver video</a>
+                      videoMissing ? (
+                        <span className="text-amber-300">Video no disponible</span>
+                      ) : (
+                        <a className="text-geo-green hover:underline" href={analysisSnapshot.videoSupabaseUrl} target="_blank" rel="noreferrer">Abrir video</a>
+                      )
                     ) : null}
                   </div>
-                  {analysisSnapshot.error ? (
+                  {formatAnalysisError(analysisSnapshot.error) ? (
                     <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-300">
-                      {analysisSnapshot.error}
+                      {formatAnalysisError(analysisSnapshot.error)}
                     </div>
                   ) : null}
                 </div>
@@ -2966,6 +3008,11 @@ export default function PublicMatchDetailView() {
                           <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-300">
                             Análisis completado con éxito.
                           </div>
+                          {videoMissing && (
+                            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+                              El video fue eliminado del almacenamiento y ya no está disponible.
+                            </div>
+                          )}
                           <button
                             onClick={resetUpload}
                             className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80"
@@ -2998,85 +3045,15 @@ export default function PublicMatchDetailView() {
       </main>
 
       {/* ---- Floating background analysis status bar ---- */}
-      {bgAnalysis.status !== "idle" && !bgBarDismissed && (
+      {bgAnalysis.status === "completed" && !bgBarDismissed && (
         <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-right">
-          <div
-            className={`rounded-xl border shadow-2xl p-4 max-w-sm ${
-              bgAnalysis.status === "uploading"
-                ? "border-blue-500/40 bg-blue-950/90 text-blue-100"
-                : bgAnalysis.status === "uploaded"
-                  ? "border-blue-400/40 bg-blue-950/90 text-blue-100"
-                  : bgAnalysis.status === "processing"
-                    ? "border-amber-500/40 bg-amber-950/90 text-amber-100"
-                    : bgAnalysis.status === "completed"
-                      ? "border-emerald-500/40 bg-emerald-950/90 text-emerald-100"
-                      : "border-red-500/40 bg-red-950/90 text-red-100"
-            }`}
-          >
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/90 text-emerald-100 shadow-2xl p-4 max-w-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                {bgAnalysis.status === "uploading" || bgAnalysis.status === "processing" ? (
-                  <div className="h-5 w-5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
-                ) : bgAnalysis.status === "completed" ? (
-                  <span className="text-lg shrink-0">✓</span>
-                ) : bgAnalysis.status === "uploaded" ? (
-                  <span className="text-lg shrink-0">↑</span>
-                ) : (
-                  <span className="text-lg shrink-0">✗</span>
-                )}
+                <span className="text-lg shrink-0">✓</span>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold truncate">
-                    {bgAnalysis.status === "uploading"
-                      ? `Subiendo ${bgAnalysis.fileName}`
-                      : bgAnalysis.status === "uploaded"
-                        ? "Video subido — anota o procesa"
-                        : bgAnalysis.status === "processing"
-                          ? "Analizando video"
-                          : bgAnalysis.status === "completed"
-                            ? "Análisis completado"
-                            : "Error en el análisis"}
-                  </p>
-                  {bgAnalysis.status === "uploading" && (
-                    <>
-                      <div className="mt-1 flex justify-between text-xs opacity-70">
-                        <span>Progreso</span>
-                        <span>{bgAnalysis.progress}%</span>
-                      </div>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-blue-400 transition-all duration-300"
-                          style={{ width: `${bgAnalysis.progress}%` }}
-                        />
-                      </div>
-                    </>
-                  )}
-                  {bgAnalysis.status === "uploaded" && (
-                    <p className="text-xs opacity-70 mt-0.5">
-                      Abre el panel para anotar esquinas o inicia el análisis directamente.
-                    </p>
-                  )}
-                  {bgAnalysis.status === "processing" && (
-                    <>
-                      <p className="text-xs opacity-70 mt-0.5">
-                        {bgAnalysis.currentStep} · {bgAnalysis.progress}%
-                        {bgAnalysis.framesProcessed != null && bgAnalysis.totalFrames != null
-                          ? ` · ${bgAnalysis.framesProcessed.toLocaleString()}/${bgAnalysis.totalFrames.toLocaleString()} frames`
-                          : ""}
-                      </p>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-amber-400 transition-all duration-700"
-                          style={{ width: `${bgAnalysis.progress}%` }}
-                        />
-                      </div>
-                    </>
-                  )}
-                  {bgAnalysis.status === "failed" && (
-                    <p className="text-xs opacity-70 mt-0.5 truncate">{bgAnalysis.error}</p>
-                  )}
-                  {bgAnalysis.status === "completed" && (
-                    <p className="text-xs opacity-70 mt-0.5">Refresca la página para ver los resultados.</p>
-                  )}
+                  <p className="text-sm font-bold truncate">Análisis completado</p>
+                  <p className="text-xs opacity-70 mt-0.5">Refresca la página para ver los resultados.</p>
                 </div>
               </div>
               <button
@@ -3086,16 +3063,12 @@ export default function PublicMatchDetailView() {
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-
-            {/* Open modal button */}
-            {(bgAnalysis.status === "uploading" || bgAnalysis.status === "uploaded" || bgAnalysis.status === "processing") && (
-              <button
-                onClick={openAnalysisPanel}
-                className="mt-2 w-full rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold transition-colors"
-              >
-                {bgAnalysis.status === "uploaded" ? "Abrir panel para anotar" : "Abrir panel de análisis"}
-              </button>
-            )}
+            <button
+              onClick={openAnalysisPanel}
+              className="mt-2 w-full rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold transition-colors"
+            >
+              Ver detalle del análisis
+            </button>
           </div>
         </div>
       )}

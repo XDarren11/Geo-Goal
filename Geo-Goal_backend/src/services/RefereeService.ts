@@ -7,6 +7,7 @@ import {MatchRefereeAssignment} from "../models/MatchRefereeAssignment";
 import {MatchDetail} from "../models/MatchDetail";
 import {MatchEvent} from "../models/MatchEvent";
 import {MatchTrackingFrame} from "../models/MatchTrackingFrame";
+import {MatchAnalysisJob} from "../models/MatchAnalysisJob";
 import {Season} from "../models/Season";
 import {Team} from "../models/Team";
 import {User} from "../models/User";
@@ -89,10 +90,20 @@ type RegisterTrackingBatchInput = {
     y_start?: number;
     x_end?: number;
     y_end?: number;
+    // Legacy fields (detector v1)
     from_player_id?: number;
     to_player_id?: number;
     from_team?: string;
     to_team?: string;
+    // Exhaustive detector fields (v2)
+    team_side?: string;                            // "home" | "away"
+    player_id_candidate?: number;                  // tracker_id del shooter / carrier
+    related_player_id_candidate?: number;          // tracker_id del receptor / víctima
+    ball_speed_ms?: number;
+    duration_s?: number;
+    pause_duration_s?: number;
+    rivals_close_count?: number;
+    distance_m?: number;
     outcome?: string;
     confidence: number;
     requires_review?: boolean;
@@ -1149,28 +1160,52 @@ export class RefereeService {
     // ── Fase 7: persistir eventos inferidos ──────────────────────────────────
     const inferredEvents = Array.isArray(input.inferredEvents) ? input.inferredEvents : [];
     if (inferredEvents.length > 0) {
+      // Cargar identityMap del job activo para mapear tracker_ids → userIds reales
+      const job = await MatchAnalysisJob.findOne({
+        where: { matchId: Number(matchId) },
+        order: [["createdAt", "DESC"]],
+        attributes: ["identityMap"],
+      });
+      const identityMap: Record<string, number> = (job?.identityMap ?? {}) as Record<string, number>;
+      const mapPlayer = (trackerId: number | undefined | null): number | null => {
+        if (trackerId == null) return null;
+        const real = identityMap[String(trackerId)];
+        return typeof real === "number" ? real : null;
+      };
+
       setImmediate(async () => {
         try {
           let created = 0;
-          for (const ev of inferredEvents) {
-            const teamIdForEvent =
-              ev.subtype === "home_goal" || ev.from_team === "home"
-                ? match.homeTeamId
-                : ev.subtype === "away_goal" || ev.from_team === "away"
-                ? match.awayTeamId
-                : null;
+          const eventsToCreate: any[] = [];
 
-            // Mapear player IDs de AI (tracking IDs) a userId reales si es posible
-            // Para pases: from_player_id / to_player_id son tracker IDs, no userId.
-            // Los guardamos en metadata para cruce posterior.
+          for (const ev of inferredEvents) {
+            // Resolver teamId real desde "team_side" (v2) o "from_team"/"subtype" (v1)
+            const sideForTeam =
+              (ev as any).team_side ??
+              ev.from_team ??
+              (ev.subtype === "home_goal" || ev.subtype === "home_goal_scored" ? "home" :
+               ev.subtype === "away_goal" || ev.subtype === "away_goal_scored" ? "away" : null);
+
+            const teamIdForEvent =
+              sideForTeam === "home" ? match.homeTeamId :
+              sideForTeam === "away" ? match.awayTeamId : null;
+
+            // Resolver playerId real si tenemos identityMap.
+            // En v2 los campos son player_id_candidate / related_player_id_candidate (tracker_ids).
+            // En v1 son from_player_id / to_player_id.
+            const carrierTracker = (ev as any).player_id_candidate ?? ev.from_player_id;
+            const relatedTracker = (ev as any).related_player_id_candidate ?? ev.to_player_id;
+            const playerId = mapPlayer(carrierTracker);
+            const relatedPlayerId = mapPlayer(relatedTracker);
+
             const minute = ev.timestamp_ms != null ? Math.floor(ev.timestamp_ms / 60000) : 0;
 
-            await MatchEvent.create({
+            eventsToCreate.push({
               matchId: Number(matchId),
               leagueId: match.leagueId,
               teamId: teamIdForEvent,
-              playerId: null,
-              relatedPlayerId: null,
+              playerId,
+              relatedPlayerId,
               eventType: ev.event_type,
               outcome: ev.outcome ?? null,
               minute,
@@ -1185,14 +1220,24 @@ export class RefereeService {
                 requiresReview: ev.requires_review ?? true,
                 subtype: ev.subtype ?? null,
                 signals: ev.signals ?? null,
-                fromTrackerId: ev.from_player_id ?? null,
-                toTrackerId: ev.to_player_id ?? null,
-                fromTeam: ev.from_team ?? null,
-                toTeam: ev.to_team ?? null,
+                teamSide: sideForTeam,
+                carrierTrackerId: carrierTracker ?? null,
+                relatedTrackerId: relatedTracker ?? null,
+                ballSpeedMs: (ev as any).ball_speed_ms ?? null,
+                durationS: (ev as any).duration_s ?? null,
+                pauseDurationS: (ev as any).pause_duration_s ?? null,
+                distanceM: (ev as any).distance_m ?? null,
+                detectionMethod: "heuristic_v2",
               },
               recordedBy: null,
             });
             created++;
+          }
+
+          // Bulk insert en chunks de 200 para no saturar la DB
+          const CHUNK = 200;
+          for (let i = 0; i < eventsToCreate.length; i += CHUNK) {
+            await MatchEvent.bulkCreate(eventsToCreate.slice(i, i + CHUNK));
           }
           console.log(`[tracking/batch] match ${matchId}: ${created} eventos inferidos persistidos`);
         } catch (evErr: any) {

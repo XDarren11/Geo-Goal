@@ -307,16 +307,48 @@ export class PublicController {
   static getInferredEvents = async (req: Request, res: Response): Promise<void> => {
     const matchId = Number(req.params.matchId);
     const { MatchEvent } = await import("../models/MatchEvent");
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
 
+    // Traer TODOS los inferred y filtrar el flag de revisión en JS.
+    // Hacer la query JSONB-aware en Sequelize es engorroso y los volúmenes
+    // por partido son <500 eventos típicamente.
     const events = await MatchEvent.findAll({
-      where: {
-        matchId,
-        source: "inferred",
-        metadata: { requiresReview: true } as any,
-      },
-      order: [["minute", "ASC"]],
+      where: { matchId, source: "inferred" },
+      include: [
+        { model: User, as: "player", attributes: ["id", "name"], required: false },
+        { model: User, as: "relatedPlayer", attributes: ["id", "name"], required: false },
+        { model: Team, attributes: ["id", "name"], required: false },
+      ],
+      order: [["minute", "ASC"], ["matchTimestampSec", "ASC"]],
     });
-    res.json(events);
+
+    const pending = [];
+    const autoApplied = [];
+    for (const ev of events) {
+      const meta: any = ev.metadata ?? {};
+      if (meta.requiresReview === true) {
+        pending.push(ev);
+      } else {
+        autoApplied.push(ev);
+      }
+    }
+
+    // Separar también por confianza para que la UI agrupe por urgencia
+    const highConf = pending.filter((e: any) => Number(e.confidence ?? 0) >= 0.6);
+    const lowConf = pending.filter((e: any) => Number(e.confidence ?? 0) < 0.6);
+
+    res.json({
+      totalInferred: events.length,
+      pendingCount: pending.length,
+      autoAppliedCount: autoApplied.length,
+      pending: pending,                // todos los pendientes
+      pendingByConfidence: {
+        high: highConf,                // ≥60% confianza
+        low: lowConf,                  // <60% — revisar primero
+      },
+      autoApplied: autoApplied,        // ya aplicados, mostrar solo para referencia
+    });
   };
 
   static confirmInferredEvent = async (req: Request, res: Response): Promise<void> => {

@@ -69,6 +69,8 @@ export function AdvancedAnalyticsPanel({ matchId, homeName, awayName, playerName
 
   const pHome = Math.round(data.possession.home * 100);
   const pAway = Math.round(data.possession.away * 100);
+  const meta = data.meta ?? null;
+  const resolvedHomeTeamId = meta?.homeTeamId ?? data.possession?.homeTeamId ?? null;
 
   return (
     <div className="space-y-5">
@@ -184,12 +186,12 @@ export function AdvancedAnalyticsPanel({ matchId, homeName, awayName, playerName
         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
           Red de pases
         </p>
-        {data.passNetwork.nodes.length > 0 ? (
+        {data.passNetwork.nodes.length > 0 && resolvedHomeTeamId != null ? (
           <PassNetworkSvg
             nodes={data.passNetwork.nodes}
             edges={data.passNetwork.edges}
             playerNames={playerNames}
-            homeTeamId={data.meta.homeTeamId}
+            homeTeamId={resolvedHomeTeamId}
           />
         ) : (
           <p className="py-6 text-center text-xs text-[var(--geo-text-muted)]">
@@ -199,26 +201,30 @@ export function AdvancedAnalyticsPanel({ matchId, homeName, awayName, playerName
       </div>
 
       <p className="text-right text-[10px] text-[var(--geo-text-muted)]">
-        {data.meta.framesProcessed.toLocaleString()} frames procesados ·
-        calculado {new Date(data.meta.computedAt).toLocaleString("es-MX")}
+        {(meta?.framesProcessed ?? 0).toLocaleString()} frames procesados ·
+        calculado {new Date(meta?.computedAt ?? Date.now()).toLocaleString("es-MX")}
       </p>
 
       {/* ── Fase 5: xG Shot Map ───────────────────────────────────────────── */}
-      <XGSection
-        matchId={matchId}
-        homeName={homeName}
-        awayName={awayName}
-        homeTeamId={data.meta.homeTeamId}
-      />
+      {resolvedHomeTeamId != null && (
+        <XGSection
+          matchId={matchId}
+          homeName={homeName}
+          awayName={awayName}
+          homeTeamId={resolvedHomeTeamId}
+        />
+      )}
 
       {/* ── Fase 5: xT Ranking ────────────────────────────────────────────── */}
-      <XTSection
-        matchId={matchId}
-        homeName={homeName}
-        awayName={awayName}
-        homeTeamId={data.meta.homeTeamId}
-        playerNames={playerNames}
-      />
+      {resolvedHomeTeamId != null && (
+        <XTSection
+          matchId={matchId}
+          homeName={homeName}
+          awayName={awayName}
+          homeTeamId={resolvedHomeTeamId}
+          playerNames={playerNames}
+        />
+      )}
     </div>
   );
 }

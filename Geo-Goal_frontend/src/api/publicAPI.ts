@@ -496,3 +496,73 @@ export async function getSimilarPlayers(id: number, n = 5): Promise<SimilarPlaye
   const { data } = await api.get<SimilarPlayer[]>(`${BASE}/players/${id}/similar`, { params: { n } });
   return data;
 }
+
+// ─── Fase 7: Eventos inferidos por la IA ─────────────────────────────────────
+
+export interface InferredEvent {
+  id: number;
+  matchId: number;
+  eventType: string;
+  minute: number;
+  matchTimestampSec: number | null;
+  teamId: number | null;
+  playerId: number | null;
+  relatedPlayerId: number | null;
+  xStart: number | null;
+  yStart: number | null;
+  xEnd: number | null;
+  yEnd: number | null;
+  outcome: string | null;
+  source: string;
+  confidence: number;
+  metadata: Record<string, unknown>;
+  player?: { id: number; name: string } | null;
+  relatedPlayer?: { id: number; name: string } | null;
+  team?: { id: number; name: string } | null;
+}
+
+export interface InferredEventsResponse {
+  totalInferred: number;
+  pendingCount: number;
+  autoAppliedCount: number;
+  pending: InferredEvent[];
+  pendingByConfidence: {
+    high: InferredEvent[];
+    low: InferredEvent[];
+  };
+  autoApplied: InferredEvent[];
+}
+
+export async function getInferredEvents(matchId: number): Promise<InferredEventsResponse> {
+  const { data } = await api.get<InferredEventsResponse>(
+    `${BASE}/matches/${matchId}/events/inferred`
+  );
+  return data;
+}
+
+export async function confirmInferredEvent(eventId: number): Promise<void> {
+  await api.post(`${BASE}/events/${eventId}/confirm`);
+}
+
+export async function rejectInferredEvent(eventId: number): Promise<void> {
+  await api.delete(`${BASE}/events/${eventId}/reject`);
+}
+
+export async function updateInferredEvent(
+  eventId: number,
+  changes: Partial<{
+    eventType: string;
+    minute: number;
+    teamId: number | null;
+    playerId: number | null;
+    relatedPlayerId: number | null;
+    outcome: string | null;
+    xStart: number | null;
+    yStart: number | null;
+    xEnd: number | null;
+    yEnd: number | null;
+  }>
+): Promise<InferredEvent> {
+  const { data } = await api.patch<InferredEvent>(`${BASE}/events/${eventId}`, changes);
+  return data;
+}
