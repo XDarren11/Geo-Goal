@@ -64,7 +64,7 @@ export function MatchPrediction({ matchId, homeName, awayName }: Props) {
 
   return (
     <div className="rounded-xl border border-geo-green/20 bg-geo-green/5 p-4 space-y-4">
-      <h3 className="font-bold text-geo-green text-sm tracking-wide">📊 Predicción del partido</h3>
+      <h3 className="font-bold text-geo-green text-sm tracking-wide">Predicción del partido</h3>
 
       {data.elo && <EloBlock elo={data.elo} homeName={homeName} awayName={awayName} />}
 

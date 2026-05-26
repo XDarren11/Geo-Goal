@@ -1913,7 +1913,7 @@ export default function PublicMatchDetailView() {
                   : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
               }`}
             >
-              📊 Análisis avanzado
+            Análisis avanzado
             </button>
           </div>
           {isLive ? (
@@ -2010,7 +2010,7 @@ export default function PublicMatchDetailView() {
             {/* H2H */}
             <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
-                ⚔️ Historial H2H
+                Historial H2H
               </p>
               <H2HCard
                 teamAId={match.homeTeamId}
@@ -2023,13 +2023,13 @@ export default function PublicMatchDetailView() {
             <div className="grid gap-4">
               <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
                 <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
-                  📈 Forma — {match.homeTeam?.name ?? "Local"}
+                  Forma — {match.homeTeam?.name ?? "Local"}
                 </p>
                 <TeamFormBadges teamId={match.homeTeamId} last={5} />
               </div>
               <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
                 <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
-                  📈 Forma — {match.awayTeam?.name ?? "Visitante"}
+                  Forma — {match.awayTeam?.name ?? "Visitante"}
                 </p>
                 <TeamFormBadges teamId={match.awayTeamId} last={5} />
               </div>
@@ -2042,7 +2042,7 @@ export default function PublicMatchDetailView() {
           <section className="mt-4">
             <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wide text-amber-400">
-                🤖 Detección automática — Eventos por revisar
+                Detección automática — Eventos por revisar
               </p>
               <InferredEventsPanel matchId={id} />
             </div>

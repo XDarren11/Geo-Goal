@@ -79,7 +79,7 @@ export function InferredEventsPanel({ matchId }: Props) {
   if (!events.length) {
     return (
       <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4 text-center">
-        <p className="text-sm text-[var(--geo-text-muted)]">✅ No hay eventos pendientes de revisión.</p>
+        <p className="text-sm text-[var(--geo-text-muted)]">No hay eventos pendientes de revisión.</p>
       </div>
     );
   }
@@ -87,7 +87,7 @@ export function InferredEventsPanel({ matchId }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-amber-400 font-semibold">
-        🤖 {events.length} evento{events.length !== 1 ? "s" : ""} detectado{events.length !== 1 ? "s" : ""} automáticamente — pendiente{events.length !== 1 ? "s" : ""} de revisión
+        {events.length} evento{events.length !== 1 ? "s" : ""} detectado{events.length !== 1 ? "s" : ""} automáticamente — pendiente{events.length !== 1 ? "s" : ""} de revisión
       </p>
 
       {events.map((ev) => (
@@ -162,7 +162,7 @@ export function InferredEventsPanel({ matchId }: Props) {
                   disabled={editMut.isPending}
                   className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
                 >
-                  💾 Guardar
+                  Guardar
                 </button>
                 <button
                   onClick={() => setEditingId(null)}
