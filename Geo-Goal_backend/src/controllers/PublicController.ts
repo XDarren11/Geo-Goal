@@ -492,4 +492,86 @@ export class PublicController {
     );
     res.json(data);
   };
+
+  // ── Public teams list with optional search ────────────────────────────────
+  static getTeamsList = async (req: Request, res: Response): Promise<void> => {
+    const { Team } = await import("../models/Team");
+    const { League } = await import("../models/League");
+    const { Op } = await import("sequelize");
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: Record<string, unknown> = {};
+    if (search) where["name"] = { [Op.iLike]: `%${search}%` };
+
+    const result = await Team.findAndCountAll({
+      where,
+      attributes: ["id", "name", "logoUrl"],
+      include: [{ model: League, as: "league", attributes: ["id", "name"] }],
+      order: [["name", "ASC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    res.json({
+      page,
+      pageSize,
+      total: result.count,
+      items: result.rows.map((t: any) => ({
+        teamId: t.id,
+        name: t.name,
+        logoUrl: t.logoUrl ?? null,
+        league: t.league ? { id: t.league.id, name: t.league.name } : null,
+      })),
+    });
+  };
+
+  // ── Public coaches list with optional search ──────────────────────────────
+  static getCoachesList = async (req: Request, res: Response): Promise<void> => {
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
+    const { Op } = await import("sequelize");
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: Record<string, unknown> = { role: "coach" };
+    if (search) {
+      where[Op.or as any] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { username: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const result = await User.findAndCountAll({
+      where,
+      attributes: ["id", "name", "username"],
+      include: [{
+        model: Team,
+        as: "teamsManaged",
+        attributes: ["id", "name"],
+        required: false,
+      }],
+      order: [["name", "ASC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    res.json({
+      page,
+      pageSize,
+      total: result.count,
+      items: result.rows.map((u: any) => ({
+        coachId: u.id,
+        name: u.name,
+        username: u.username ?? null,
+        teams: (u.teamsManaged ?? []).map((t: any) => ({ id: t.id, name: t.name })),
+      })),
+    });
+  };
 }

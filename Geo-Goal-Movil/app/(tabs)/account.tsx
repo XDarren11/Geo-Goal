@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  coach: 'Entrenador',
+  player: 'Jugador',
+  referee: 'Árbitro',
+};
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
@@ -100,7 +107,7 @@ export default function AccountScreen() {
         <Text className="text-white font-bold text-lg">{user.name}</Text>
         <Text className="text-gray-400 mt-1">{user.email}</Text>
         <Text className="text-gray-400 mt-1">{user.username ? `@${user.username}` : 'Sin username'}</Text>
-        <Text className="text-geo-green mt-1 uppercase text-xs">Rol: {user.role}</Text>
+        <Text className="text-geo-green mt-1 uppercase text-xs">Rol: {ROLE_LABEL[user.role] ?? user.role}</Text>
         <Text className={`mt-2 text-xs font-bold ${user.confirmed ? 'text-emerald-400' : 'text-amber-400'}`}>
           {user.confirmed ? 'Correo confirmado' : 'Correo pendiente de confirmación'}
         </Text>

@@ -46,10 +46,12 @@ export default function LeagueDetailScreen() {
     enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'fixture' && isAdmin,
   });
 
+  // Pre-carga el fixture al entrar (no esperar al tab) para evitar spinner tardío.
   const { data: publicFixture, isLoading: publicFixtureLoading } = useQuery({
     queryKey: ['public-fixture', leagueId],
     queryFn: () => getPublicFixture(leagueId),
-    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'fixture' && !isAdmin,
+    enabled: !!leagueId && !isNaN(leagueId) && !isAdmin,
+    staleTime: 60_000,
   });
 
   const { data: standings, isLoading: standingsLoading } = useQuery({
@@ -58,10 +60,13 @@ export default function LeagueDetailScreen() {
     enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'standings' && isAdmin,
   });
 
+  // Carga los standings en cuanto se conoce el leagueId (no esperar al tab)
+  // así están listos cuando el usuario cambia de tab sin volver a esperar.
   const { data: publicStandings, isLoading: publicStandingsLoading } = useQuery({
     queryKey: ['public-standings', leagueId],
     queryFn: () => getPublicStandings(leagueId),
-    enabled: !!leagueId && !isNaN(leagueId) && activeTab === 'standings' && !isAdmin,
+    enabled: !!leagueId && !isNaN(leagueId) && !isAdmin,
+    staleTime: 60_000,
   });
 
   const scheduleMutation = useMutation({
@@ -136,13 +141,16 @@ export default function LeagueDetailScreen() {
     );
   }
 
+  // Para no-admin: los equipos pueden venir en league.teams O en el array
+  // top-level teams de PublicLeagueDetail — probamos los dos.
   const effectiveLeague = isAdmin
     ? league!
-    : publicLeague?.league ?? {
-        id: leagueId,
-        name: leagueName,
-        description: undefined,
-        teams: [],
+    : {
+        ...(publicLeague?.league ?? { id: leagueId, name: leagueName, description: undefined }),
+        teams:
+          (publicLeague?.league?.teams?.length
+            ? publicLeague.league.teams
+            : publicLeague?.teams) ?? [],
       };
 
   const fixtureSource = isAdmin ? matchesData : publicFixture ?? publicLeague?.fixture;
@@ -266,10 +274,24 @@ export default function LeagueDetailScreen() {
               data={effectiveLeague.teams || []}
               keyExtractor={(item) => `team-${item.id}`}
               renderItem={({ item }) => (
-                <View className="bg-gray-800/80 rounded-xl p-3 mb-2 flex-row justify-between items-center border border-gray-700/60">
-                  <Text className="text-white flex-1 font-semibold">{item.name}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#6b7280" />
-                </View>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/teamCareerDashboard' as any,
+                      params: { teamId: String(item.id), name: item.name },
+                    })
+                  }
+                  activeOpacity={0.7}
+                  className="bg-gray-800/80 rounded-xl p-3 mb-2 flex-row justify-between items-center border border-gray-700/60"
+                >
+                  <View className="flex-row items-center gap-2 flex-1">
+                    <View className="w-7 h-7 rounded-lg bg-geo-green/10 border border-geo-green/20 items-center justify-center">
+                      <Ionicons name="shield-outline" size={13} color="#39FF14" />
+                    </View>
+                    <Text className="text-white flex-1 font-semibold">{item.name}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#39FF14" />
+                </TouchableOpacity>
               )}
             />
           </View>
@@ -405,7 +427,7 @@ export default function LeagueDetailScreen() {
           <Loader fullScreen label="Cargando clasificación..." />
         ) : (
           <ScrollView className="flex-1 px-4 py-4">
-            {standings ? (
+            {standingsList && standingsList.length > 0 ? (
               <FlatList
                 scrollEnabled={false}
                 data={standingsList}

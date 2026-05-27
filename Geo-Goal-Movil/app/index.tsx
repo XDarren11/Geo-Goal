@@ -97,7 +97,7 @@ export default function index() {
             onPress={() => router.push('/(tabs)/public')}
           >
             <Text className="text-geo-green font-bold">
-              Modo Invitado
+              Ver resultados
             </Text>
           </TouchableOpacity>
 

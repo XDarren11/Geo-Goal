@@ -23,6 +23,11 @@ import { TrackingAnalyticsService } from "./TrackingAnalyticsService";
 
 const HEATMAP_W = 21;
 const HEATMAP_H = 14;
+/** Límite de partidos para el heatmap acumulado.
+ *  Calcular el heatmap de toda la carrera (100+ partidos) es O(N)
+ *  y no aporta información adicional relevante (la normalización aplana todo).
+ */
+const HEATMAP_MATCH_LIMIT = 30;
 
 export interface PlayerCareerScope {
   seasonId?: number;
@@ -91,36 +96,35 @@ export class PlayerCareerService {
     scope: PlayerCareerScope = {},
     recentLimit: number = 10
   ): Promise<PlayerCareerStats> {
-    // 1. Cargar jugador
-    const user = await User.findByPk(playerId, { attributes: ["id", "name"] });
-
-    // 2. Construir filtros para Match
+    // ── Paso 1: user + stats principales en paralelo ─────────────────────────
     const matchWhere: any = {};
     if (scope.seasonId) matchWhere.seasonId = scope.seasonId;
     if (scope.leagueId) matchWhere.leagueId = scope.leagueId;
 
-    // 3. Stats por partido del jugador
-    const stats: any[] = await PlayerMatchStat.findAll({
-      where: {
-        playerId,
-        ...(scope.teamId ? { teamId: scope.teamId } : {}),
-      },
-      include: [
-        {
-          model: Match,
-          where: Object.keys(matchWhere).length ? matchWhere : undefined,
-          required: true,
-          include: [
-            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
-            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
-          ],
+    const [user, stats] = await Promise.all([
+      User.findByPk(playerId, { attributes: ["id", "name"] }),
+      PlayerMatchStat.findAll({
+        where: {
+          playerId,
+          ...(scope.teamId ? { teamId: scope.teamId } : {}),
         },
-      ],
-      order: [[{ model: Match, as: "match" } as any, "date", "DESC"]],
-    });
+        include: [
+          {
+            model: Match,
+            where: Object.keys(matchWhere).length ? matchWhere : undefined,
+            required: true,
+            include: [
+              { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+              { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            ],
+          },
+        ],
+        order: [[{ model: Match, as: "match" } as any, "date", "DESC"]],
+      }),
+    ]);
 
-    // 4. Agregar KPIs
-    const agg = stats.reduce(
+    // ── Paso 2: agregar KPIs en memoria ──────────────────────────────────────
+    const agg = (stats as any[]).reduce(
       (acc, s) => ({
         matches: acc.matches + 1,
         minutes: acc.minutes + (s.minutesPlayed || 0),
@@ -146,45 +150,67 @@ export class PlayerCareerService {
       }
     );
 
-    // 5. Faltas (vienen de MatchEvent, no de PlayerMatchStat)
-    const matchIds = stats.map((s) => s.matchId);
-    const fouls = matchIds.length
-      ? await MatchEvent.count({
-          where: { playerId, eventType: "foul", matchId: { [Op.in]: matchIds } },
-        })
-      : 0;
+    const matchIds = (stats as any[]).map((s) => s.matchId);
 
-    // 6. xG acumulado desde MatchEvent.metadata.xg
-    let totalXG = 0;
-    if (matchIds.length) {
-      const shotEvents = await MatchEvent.findAll({
-        where: {
-          playerId,
-          eventType: { [Op.in]: ["shot", "goal", "penalty_scored"] },
-          matchId: { [Op.in]: matchIds },
-        },
-        attributes: ["metadata"],
-      });
-      for (const e of shotEvents) {
-        const meta = (e.metadata ?? {}) as Record<string, unknown>;
-        const xg = Number((meta as any).xg);
-        if (Number.isFinite(xg)) totalXG += xg;
-      }
-    }
-
-    // 7. MVP count (Match.mvpPlayerId)
+    // ── Paso 3: todas las queries independientes en paralelo ──────────────────
     const mvpWhere: any = { mvpPlayerId: playerId };
     if (scope.seasonId) mvpWhere.seasonId = scope.seasonId;
     if (scope.leagueId) mvpWhere.leagueId = scope.leagueId;
-    const mvpCount = await Match.count({ where: mvpWhere });
 
-    // 8. Weekly awards
     const weeklyAwardsWhere: any = { playerId };
     if (scope.leagueId) weeklyAwardsWhere.leagueId = scope.leagueId;
-    const weeklyAwards = await WeeklyAward.count({ where: weeklyAwardsWhere });
 
-    // 9. Forma reciente (últimos N partidos)
-    const recentForm = stats.slice(0, recentLimit).map((s) => {
+    const hasMatches = matchIds.length > 0;
+
+    const [fouls, shotEvents, mvpCount, weeklyAwards, aggregatedHeatmap, rankTuple] =
+      await Promise.all([
+        // 3a. Faltas
+        hasMatches
+          ? MatchEvent.count({
+              where: { playerId, eventType: "foul", matchId: { [Op.in]: matchIds } },
+            })
+          : Promise.resolve(0),
+
+        // 3b. Eventos de disparo para xG
+        hasMatches
+          ? MatchEvent.findAll({
+              where: {
+                playerId,
+                eventType: { [Op.in]: ["shot", "goal", "penalty_scored"] },
+                matchId: { [Op.in]: matchIds },
+              },
+              attributes: ["metadata"],
+            })
+          : Promise.resolve([]),
+
+        // 3c. MVPs
+        Match.count({ where: mvpWhere }),
+
+        // 3d. Premios semanales
+        WeeklyAward.count({ where: weeklyAwardsWhere }),
+
+        // 3e. Heatmap acumulado (paralelo internamente + cap por partidos)
+        this.aggregateHeatmap(playerId, matchIds),
+
+        // 3f. Ranking en equipo (3 queries en paralelo entre sí)
+        scope.teamId
+          ? Promise.all([
+              this.computeRankInTeam(playerId, scope.teamId, "rating", "AVG"),
+              this.computeRankInTeam(playerId, scope.teamId, "goals", "SUM"),
+              this.computeRankInTeam(playerId, scope.teamId, "assists", "SUM"),
+            ])
+          : Promise.resolve([null, null, null] as [null, null, null]),
+      ]);
+
+    // ── Paso 4: calcular xG total ─────────────────────────────────────────────
+    let totalXG = 0;
+    for (const e of shotEvents as any[]) {
+      const xg = Number(((e.metadata ?? {}) as any).xg);
+      if (Number.isFinite(xg)) totalXG += xg;
+    }
+
+    // ── Paso 5: forma reciente (en memoria, sin queries adicionales) ───────────
+    const recentForm = (stats as any[]).slice(0, recentLimit).map((s) => {
       const m = s.match;
       const home = m.homeTeam;
       const away = m.awayTeam;
@@ -212,20 +238,11 @@ export class PlayerCareerService {
       };
     });
 
-    // 10. Heatmap acumulado
-    const aggregatedHeatmap = await this.aggregateHeatmap(playerId, matchIds);
-
-    // 11. Ranking en su equipo (si scope.teamId)
-    const teamRank: PlayerCareerStats["teamRank"] = {
-      rating: null,
-      goals: null,
-      assists: null,
-    };
-    if (scope.teamId) {
-      teamRank.rating = await this.computeRankInTeam(playerId, scope.teamId, "rating", "AVG");
-      teamRank.goals = await this.computeRankInTeam(playerId, scope.teamId, "goals", "SUM");
-      teamRank.assists = await this.computeRankInTeam(playerId, scope.teamId, "assists", "SUM");
-    }
+    const [rankRating, rankGoals, rankAssists] = rankTuple as [
+      number | null,
+      number | null,
+      number | null,
+    ];
 
     return {
       player: { id: playerId, name: user?.name ?? "—" },
@@ -239,27 +256,41 @@ export class PlayerCareerService {
       shotsOnTarget: agg.shotsOnTarget,
       passes: agg.passes,
       passesCompleted: agg.passesCompleted,
-      passAccuracy: agg.passes > 0 ? Number((agg.passesCompleted / agg.passes).toFixed(3)) : 0,
+      passAccuracy:
+        agg.passes > 0
+          ? Number((agg.passesCompleted / agg.passes).toFixed(3))
+          : 0,
       yellowCards: agg.yellowCards,
       redCards: agg.redCards,
-      fouls,
+      fouls: fouls as number,
       distanceKm: Number((agg.distance / 1000).toFixed(2)),
-      avgRating: agg.ratingCount > 0 ? Number((agg.ratingSum / agg.ratingCount).toFixed(2)) : 0,
+      avgRating:
+        agg.ratingCount > 0
+          ? Number((agg.ratingSum / agg.ratingCount).toFixed(2))
+          : 0,
       topRating: Number(agg.topRating.toFixed(2)),
-      mvpCount,
-      weeklyAwards,
+      mvpCount: mvpCount as number,
+      weeklyAwards: weeklyAwards as number,
       totalXG: Number(totalXG.toFixed(2)),
       goalsMinusXG: Number((agg.goals - totalXG).toFixed(2)),
       recentForm,
       aggregatedHeatmap,
-      teamRank,
+      teamRank: {
+        rating: rankRating,
+        goals: rankGoals,
+        assists: rankAssists,
+      },
     };
   }
 
   /**
-   * Suma los heatmaps individuales del jugador a través de todos los matchIds
-   * dados y normaliza a 0-1.
-   * Si TrackingAnalyticsService falla para algún partido, se ignora ese partido.
+   * Suma los heatmaps del jugador en paralelo y normaliza a 0-1.
+   *
+   * Optimizaciones vs versión original:
+   *  1. Promise.allSettled — todas las queries de cache van en paralelo
+   *     en lugar de una-a-una (el loop for-await era el principal cuello de botella).
+   *  2. Cap de HEATMAP_MATCH_LIMIT partidos — calcular el heatmap de 200 partidos
+   *     no aporta más información que los últimos 30 (la normalización los aplana).
    */
   private static async aggregateHeatmap(
     playerId: number,
@@ -269,38 +300,40 @@ export class PlayerCareerService {
       Array(HEATMAP_W).fill(0)
     );
 
+    if (!matchIds.length) return sum;
+
+    // Limitar a los últimos N partidos
+    const limitedIds = matchIds.slice(0, HEATMAP_MATCH_LIMIT);
+
+    // Queries en paralelo en lugar del antiguo for...of secuencial
+    const results = await Promise.allSettled(
+      limitedIds.map((mId) => TrackingAnalyticsService.getOrCompute(mId))
+    );
+
     let contributedMatches = 0;
-    for (const mId of matchIds) {
-      try {
-        const analytics = await TrackingAnalyticsService.getOrCompute(mId);
-        const heatmap = (analytics.heatmaps as any)?.[playerId];
-        if (!Array.isArray(heatmap) || heatmap.length !== HEATMAP_H) continue;
-        for (let y = 0; y < HEATMAP_H; y++) {
-          const row = heatmap[y];
-          if (!Array.isArray(row) || row.length !== HEATMAP_W) continue;
-          for (let x = 0; x < HEATMAP_W; x++) {
-            sum[y][x] += Number(row[x]) || 0;
-          }
+    for (const result of results) {
+      if (result.status !== "fulfilled") continue;
+      const heatmap = (result.value.heatmaps as any)?.[playerId];
+      if (!Array.isArray(heatmap) || heatmap.length !== HEATMAP_H) continue;
+      for (let y = 0; y < HEATMAP_H; y++) {
+        const row = heatmap[y];
+        if (!Array.isArray(row) || row.length !== HEATMAP_W) continue;
+        for (let x = 0; x < HEATMAP_W; x++) {
+          sum[y][x] += Number(row[x]) || 0;
         }
-        contributedMatches++;
-      } catch {
-        // ignore — partido sin tracking analytics aún
       }
+      contributedMatches++;
     }
 
     if (contributedMatches === 0) return sum;
 
     // Normalizar 0-1
     let max = 0;
-    for (const row of sum) {
-      for (const v of row) if (v > max) max = v;
-    }
+    for (const row of sum) for (const v of row) if (v > max) max = v;
     if (max > 0) {
-      for (let y = 0; y < HEATMAP_H; y++) {
-        for (let x = 0; x < HEATMAP_W; x++) {
+      for (let y = 0; y < HEATMAP_H; y++)
+        for (let x = 0; x < HEATMAP_W; x++)
           sum[y][x] = Number((sum[y][x] / max).toFixed(3));
-        }
-      }
     }
     return sum;
   }

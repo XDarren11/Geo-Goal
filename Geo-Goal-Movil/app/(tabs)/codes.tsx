@@ -6,6 +6,7 @@ import { getLeagues } from '@/Api/leagueAPI';
 import { getMyTeams } from '@/Api/teamAPI';
 import { generateLeagueInvitation, generateTeamInvitation, joinLeagueByCode, joinTeamByCode } from '@/Api/invitationAPI';
 import Loader from '@/components/Loader';
+import { Ionicons } from '@expo/vector-icons';
 import type { League, Team, Role } from '@/types';
 import { getApiErrorMessage } from '@/lib/getApiErrorMessage';
 
@@ -18,6 +19,9 @@ export default function CodesScreen() {
   const [teamCode, setTeamCode] = useState('');
   const [expiresIn, setExpiresIn] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
+  // Search filters
+  const [leagueSearch, setLeagueSearch] = useState('');
+  const [teamSearch, setTeamSearch] = useState('');
 
   const { data: leagues = [], isLoading: leaguesLoading } = useQuery({
     queryKey: ['codes-leagues'],
@@ -39,6 +43,26 @@ export default function CodesScreen() {
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
     [teams, selectedTeamId]
+  );
+
+  const filteredLeagues = useMemo(
+    () =>
+      leagueSearch.trim()
+        ? leagues.filter((l) =>
+            l.name.toLowerCase().includes(leagueSearch.trim().toLowerCase())
+          )
+        : leagues,
+    [leagues, leagueSearch]
+  );
+
+  const filteredTeams = useMemo(
+    () =>
+      teamSearch.trim()
+        ? teams.filter((t) =>
+            t.name.toLowerCase().includes(teamSearch.trim().toLowerCase())
+          )
+        : teams,
+    [teams, teamSearch]
   );
 
   const generateLeagueMutation = useMutation({
@@ -88,19 +112,54 @@ export default function CodesScreen() {
       {role === 'admin' && (
         <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">Generar código de liga</Text>
+
+          {/* Search filter */}
+          <View className="flex-row items-center gap-2 rounded-xl border border-gray-700/60 bg-gray-800/60 px-3 py-2 mb-3">
+            <Ionicons name="search" size={14} color="#6b7280" />
+            <TextInput
+              value={leagueSearch}
+              onChangeText={setLeagueSearch}
+              placeholder="Filtrar ligas…"
+              placeholderTextColor="#6b7280"
+              className="flex-1 text-white text-sm"
+            />
+            {leagueSearch ? (
+              <TouchableOpacity onPress={() => setLeagueSearch('')}>
+                <Ionicons name="close-circle" size={16} color="#6b7280" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
           {leaguesLoading ? (
             <Loader label="Cargando ligas..." />
           ) : (
             <FlatList
               scrollEnabled={false}
-              data={leagues}
+              data={filteredLeagues}
               keyExtractor={(item) => String(item.id)}
+              ListEmptyComponent={
+                <Text className="text-gray-500 text-sm text-center py-2">
+                  No se encontraron ligas
+                </Text>
+              }
               renderItem={({ item }: { item: League }) => (
                 <TouchableOpacity
                   onPress={() => setSelectedLeagueId(item.id)}
                   className={`mb-2 rounded-xl border px-4 py-3 ${selectedLeagueId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700/80 bg-gray-800/80'}`}
                 >
-                  <Text className="text-white font-semibold">{item.name}</Text>
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons
+                      name="trophy-outline"
+                      size={14}
+                      color={selectedLeagueId === item.id ? '#39FF14' : '#6b7280'}
+                    />
+                    <Text className={`font-semibold flex-1 ${selectedLeagueId === item.id ? 'text-geo-green' : 'text-white'}`}>
+                      {item.name}
+                    </Text>
+                    {selectedLeagueId === item.id && (
+                      <Ionicons name="checkmark-circle" size={16} color="#39FF14" />
+                    )}
+                  </View>
                 </TouchableOpacity>
               )}
             />
@@ -130,20 +189,59 @@ export default function CodesScreen() {
       {role === 'coach' && (
         <View className="mt-5 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
           <Text className="text-white text-lg font-bold mb-3">Código para tu equipo</Text>
+
+          {/* Search filter */}
+          <View className="flex-row items-center gap-2 rounded-xl border border-gray-700/60 bg-gray-800/60 px-3 py-2 mb-3">
+            <Ionicons name="search" size={14} color="#6b7280" />
+            <TextInput
+              value={teamSearch}
+              onChangeText={setTeamSearch}
+              placeholder="Filtrar equipos…"
+              placeholderTextColor="#6b7280"
+              className="flex-1 text-white text-sm"
+            />
+            {teamSearch ? (
+              <TouchableOpacity onPress={() => setTeamSearch('')}>
+                <Ionicons name="close-circle" size={16} color="#6b7280" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
           {teamsLoading ? (
             <Loader label="Cargando equipos..." />
           ) : (
             <FlatList
               scrollEnabled={false}
-              data={teams}
+              data={filteredTeams}
               keyExtractor={(item) => String(item.id)}
+              ListEmptyComponent={
+                <Text className="text-gray-500 text-sm text-center py-2">
+                  No se encontraron equipos
+                </Text>
+              }
               renderItem={({ item }: { item: Team }) => (
                 <TouchableOpacity
                   onPress={() => setSelectedTeamId(item.id)}
                   className={`mb-2 rounded-xl border px-4 py-3 ${selectedTeamId === item.id ? 'border-geo-green bg-geo-green/10' : 'border-gray-700/80 bg-gray-800/80'}`}
                 >
-                  <Text className="text-white font-semibold">{item.name}</Text>
-                  <Text className="text-gray-400 text-xs mt-1">{item.league?.name || 'Sin liga'}</Text>
+                  <View className="flex-row items-center gap-2">
+                    <Ionicons
+                      name="shield-outline"
+                      size={14}
+                      color={selectedTeamId === item.id ? '#39FF14' : '#6b7280'}
+                    />
+                    <View className="flex-1">
+                      <Text className={`font-semibold ${selectedTeamId === item.id ? 'text-geo-green' : 'text-white'}`}>
+                        {item.name}
+                      </Text>
+                      <Text className="text-gray-400 text-xs mt-0.5">
+                        {item.league?.name || 'Sin liga'}
+                      </Text>
+                    </View>
+                    {selectedTeamId === item.id && (
+                      <Ionicons name="checkmark-circle" size={16} color="#39FF14" />
+                    )}
+                  </View>
                 </TouchableOpacity>
               )}
             />

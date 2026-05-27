@@ -81,6 +81,8 @@ router.get(
 // ── Listado público de jugadores (descubrir perfiles) ────────────────────────
 
 router.get("/players", asyncHandler(PublicController.getPlayersList));
+router.get("/teams", asyncHandler(PublicController.getTeamsList));
+router.get("/coaches", asyncHandler(PublicController.getCoachesList));
 
 router.get(
   "/players/:userId/form",

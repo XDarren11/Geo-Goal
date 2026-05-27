@@ -3,53 +3,56 @@ import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPlayerDashboard } from '@/Api/publicAPI';
-import {
-  addFavorite,
-  removeFavoriteByEntity,
-  getFavoriteIds,
-} from '@/Api/favoritesAPI';
+import { addFavorite, removeFavoriteByEntity, getFavoriteIds } from '@/Api/favoritesAPI';
 import { useAuth } from '@/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/BackButton';
 import Loader from '@/components/Loader';
+import {
+  DashSection,
+  HexPerformanceGrid,
+  MiniBarChart,
+  StatBar,
+  KpiCard,
+  ratingColor,
+} from '@/components/Charts';
 
-function ratingColor(r: number): string {
-  if (r >= 8) return '#10b981';
-  if (r >= 7) return '#34d399';
-  if (r >= 6) return '#fbbf24';
-  if (r >= 4) return '#f97316';
-  return '#ef4444';
-}
-
-function KpiCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <View className="flex-1 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-3 items-center">
-      <Text className="text-gray-400 text-[10px] uppercase tracking-widest mb-1">{label}</Text>
-      <Text className="text-white text-xl font-black">{value}</Text>
-      {sub ? <Text className="text-gray-500 text-[10px] mt-0.5">{sub}</Text> : null}
-    </View>
-  );
-}
+// ─── Result badge ─────────────────────────────────────────────────────────────
 
 function ResultBadge({ r }: { r: 'W' | 'D' | 'L' | '—' }) {
-  const colors: Record<string, string> = {
-    W: 'bg-emerald-500/20',
-    D: 'bg-gray-500/20',
-    L: 'bg-red-500/20',
-    '—': 'bg-gray-700/20',
-  };
-  const textColors: Record<string, string> = {
-    W: 'text-emerald-300',
-    D: 'text-gray-300',
-    L: 'text-red-300',
-    '—': 'text-gray-500',
-  };
+  const bg =
+    r === 'W'
+      ? '#10b98122'
+      : r === 'D'
+        ? '#6b728022'
+        : r === 'L'
+          ? '#ef444422'
+          : '#37415122';
+  const tc =
+    r === 'W'
+      ? '#34d399'
+      : r === 'D'
+        ? '#9ca3af'
+        : r === 'L'
+          ? '#f87171'
+          : '#6b7280';
   return (
-    <View className={`w-7 h-7 rounded-md items-center justify-center ${colors[r] ?? 'bg-gray-700/20'}`}>
-      <Text className={`text-xs font-black ${textColors[r] ?? 'text-gray-500'}`}>{r}</Text>
+    <View
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 6,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={{ color: tc, fontSize: 11, fontWeight: '900' }}>{r}</Text>
     </View>
   );
 }
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function PlayerCareerDashboardScreen() {
   const router = useRouter();
@@ -78,7 +81,11 @@ export default function PlayerCareerDashboardScreen() {
   const toggleFav = useMutation({
     mutationFn: async () => {
       if (isFav) return removeFavoriteByEntity({ entityType: 'player', entityId: id });
-      return addFavorite({ entityType: 'player', entityId: id, label: data?.player?.name ?? playerName ?? undefined });
+      return addFavorite({
+        entityType: 'player',
+        entityId: id,
+        label: data?.player?.name ?? playerName ?? undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['account', 'favorites', 'ids'] });
@@ -90,127 +97,362 @@ export default function PlayerCareerDashboardScreen() {
   if (isLoading) return <Loader fullScreen label="Cargando estadísticas..." />;
   if (isError || !data) {
     return (
-      <View className="flex-1 bg-geo-black items-center justify-center px-6">
-        <Text className="text-red-400 text-center mb-4">No se pudieron cargar las estadísticas.</Text>
+      <View style={{ flex: 1, backgroundColor: '#0d1117', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+        <Text style={{ color: '#f87171', textAlign: 'center', marginBottom: 16 }}>
+          No se pudieron cargar las estadísticas.
+        </Text>
         <BackButton />
       </View>
     );
   }
 
-  const goalsPerMatch = data.matchesPlayed > 0 ? (data.goals / data.matchesPlayed).toFixed(2) : '0.00';
+  // ── derived ──
+  const avg = data.avgRating ?? 0;
+  const goalsPerMatch = data.matchesPlayed > 0 ? data.goals / data.matchesPlayed : 0;
+  const ratingHistory = (data.ratingHistory ?? []).map((h) => h.rating);
+
+  // Normalised pct values for StatBadges (0–1)
+  const maxGoals = Math.max(data.goals, 1);
+  const maxAssists = Math.max(data.assists, 1);
+  const maxKeyPasses = Math.max(data.keyPasses, 1);
+  const maxXG = Math.max(data.xG ?? 0, 1);
+  const maxMinutes = Math.max(data.minutesPlayed, 1);
+  const maxTackles = Math.max(data.tackles, 1);
+
+  const hexStats = [
+    { label: 'Goles', value: data.goals, pct: Math.min(1, data.goals / Math.max(maxGoals, 10)), color: '#10b981' },
+    { label: 'Asist.', value: data.assists, pct: Math.min(1, data.assists / Math.max(maxAssists, 8)), color: '#38bdf8' },
+    { label: 'Pases', value: data.keyPasses, pct: Math.min(1, data.keyPasses / Math.max(maxKeyPasses, 20)), color: '#a78bfa' },
+    { label: 'xG', value: (data.xG ?? 0).toFixed(1), pct: Math.min(1, (data.xG ?? 0) / Math.max(maxXG, 5)), color: '#fb923c' },
+    { label: 'Tackles', value: data.tackles, pct: Math.min(1, data.tackles / Math.max(maxTackles, 15)), color: '#f472b6' },
+    { label: 'Min', value: data.minutesPlayed, pct: Math.min(1, data.minutesPlayed / Math.max(maxMinutes, 900)), color: '#fbbf24' },
+  ] as const;
 
   return (
-    <ScrollView className="flex-1 bg-geo-black" contentContainerStyle={{ paddingBottom: 32 }}>
-      {/* Header */}
-      <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-6 pb-4">
-        <View className="flex-row items-center justify-between">
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#0d1117' }}
+      contentContainerStyle={{ paddingBottom: 40 }}
+    >
+      {/* ── Header ── */}
+      <View
+        style={{
+          backgroundColor: '#0f172a',
+          borderBottomWidth: 1,
+          borderBottomColor: '#39FF1430',
+          paddingHorizontal: 16,
+          paddingTop: 52,
+          paddingBottom: 16,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <BackButton />
           {user ? (
             <TouchableOpacity
               onPress={() => toggleFav.mutate()}
               disabled={toggleFav.isPending}
-              className={`p-2 rounded-full border-2 ${isFav ? 'border-yellow-400 bg-yellow-400/10' : 'border-geo-green/30 bg-transparent'}`}
+              style={{
+                padding: 8,
+                borderRadius: 20,
+                borderWidth: 2,
+                borderColor: isFav ? '#facc15' : '#39FF1430',
+                backgroundColor: isFav ? '#facc1510' : 'transparent',
+              }}
             >
-              <Ionicons name={isFav ? 'star' : 'star-outline'} size={20} color={isFav ? '#facc15' : '#39FF14'} />
+              <Ionicons
+                name={isFav ? 'star' : 'star-outline'}
+                size={20}
+                color={isFav ? '#facc15' : '#39FF14'}
+              />
             </TouchableOpacity>
           ) : null}
         </View>
-        <Text className="text-gray-400 text-xs mt-3">Estadísticas de carrera</Text>
-        <Text className="text-white text-2xl font-extrabold">{data.player.name}</Text>
+
+        <Text style={{ color: '#9ca3af', fontSize: 11, marginTop: 12 }}>
+          Estadísticas de carrera
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 24, fontWeight: '800', marginTop: 2 }}>
+          {data.player.name}
+        </Text>
         {data.player.username ? (
-          <Text className="text-geo-green text-xs mt-0.5">@{data.player.username}</Text>
+          <Text style={{ color: '#39FF14', fontSize: 12, marginTop: 2 }}>
+            @{data.player.username}
+          </Text>
         ) : null}
-        <Text className="text-gray-500 text-xs mt-1">
+        <Text style={{ color: '#6b7280', fontSize: 12, marginTop: 4 }}>
           {data.matchesPlayed} partidos · {data.minutesPlayed} min jugados
         </Text>
+
+        {/* MVP chip */}
+        {data.mvpCount > 0 && (
+          <View
+            style={{
+              marginTop: 8,
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: '#d97706' + '22',
+              borderWidth: 1,
+              borderColor: '#d9770650',
+              borderRadius: 20,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Ionicons name="trophy" size={12} color="#fbbf24" />
+            <Text style={{ color: '#fbbf24', fontSize: 11, fontWeight: '800' }}>
+              {data.mvpCount} MVP{data.mvpCount > 1 ? 's' : ''}
+            </Text>
+          </View>
+        )}
       </View>
 
-      <View className="px-4 pt-5 space-y-4">
-        {/* Rating y MVP */}
-        {(data.avgRating > 0 || data.mvpCount > 0) && (
-          <View className="flex-row gap-3">
-            {data.avgRating > 0 && (
-              <View className="flex-1 rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 items-center">
-                <Text className="text-gray-400 text-[10px] uppercase tracking-widest">Rating prom.</Text>
-                <Text style={{ color: ratingColor(data.avgRating) }} className="text-3xl font-black mt-1">
-                  {data.avgRating.toFixed(1)}
+      <View style={{ paddingHorizontal: 16, paddingTop: 20, gap: 20 }}>
+
+        {/* ── Hex Performance Grid ── */}
+        {avg > 0 && (
+          <DashSection title="Rendimiento">
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderWidth: 1,
+                borderColor: '#39FF1420',
+                borderRadius: 20,
+                paddingVertical: 16,
+                paddingHorizontal: 8,
+              }}
+            >
+              <HexPerformanceGrid rating={avg} stats={hexStats as any} />
+            </View>
+          </DashSection>
+        )}
+
+        {/* ── Rating history mini chart ── */}
+        {ratingHistory.length >= 2 && (
+          <DashSection title="Evolución de rating">
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderWidth: 1,
+                borderColor: '#39FF1420',
+                borderRadius: 20,
+                padding: 16,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>
+                <Text style={{ color: '#6b7280', fontSize: 11 }}>
+                  Últimos {ratingHistory.length} partidos
+                </Text>
+                <Text style={{ color: ratingColor(avg), fontSize: 13, fontWeight: '800' }}>
+                  prom. {avg.toFixed(1)}
                 </Text>
               </View>
-            )}
-            {data.mvpCount > 0 && (
-              <View className="flex-1 rounded-2xl border border-yellow-500/30 bg-yellow-500/5 p-4 items-center">
-                <Text className="text-yellow-300 text-[10px] uppercase tracking-widest">🏆 MVPs</Text>
-                <Text className="text-yellow-300 text-3xl font-black mt-1">{data.mvpCount}</Text>
+              <MiniBarChart
+                data={ratingHistory}
+                maxVal={10}
+                height={56}
+                barWidth={Math.max(4, Math.floor(280 / ratingHistory.length) - 3)}
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 }}>
+                <Text style={{ color: '#6b7280', fontSize: 9 }}>+antiguo</Text>
+                <Text style={{ color: '#6b7280', fontSize: 9 }}>más reciente →</Text>
+              </View>
+            </View>
+          </DashSection>
+        )}
+
+        {/* ── KPI cards ── */}
+        <DashSection title="Estadísticas globales">
+          <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <KpiCard
+                label="Goles"
+                value={data.goals}
+                sub={`${goalsPerMatch.toFixed(2)}/PJ`}
+                accent="#10b981"
+              />
+              <KpiCard
+                label="Asistencias"
+                value={data.assists}
+                sub={`${data.keyPasses} pases clave`}
+                accent="#38bdf8"
+              />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <KpiCard label="Minutos" value={data.minutesPlayed} accent="#fbbf24" />
+              <KpiCard
+                label="xG"
+                value={(data.xG ?? 0).toFixed(2)}
+                sub="goles esperados"
+                accent="#fb923c"
+              />
+            </View>
+            {(data.yellowCards > 0 || data.redCards > 0) && (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <KpiCard label="Amarillas" value={data.yellowCards} accent="#fbbf24" />
+                <KpiCard label="Rojas" value={data.redCards} accent="#ef4444" />
               </View>
             )}
           </View>
+        </DashSection>
+
+        {/* ── Stat bars ── */}
+        {(data.goals > 0 || data.assists > 0 || data.tackles > 0) && (
+          <DashSection title="Desglose">
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderWidth: 1,
+                borderColor: '#39FF1420',
+                borderRadius: 20,
+                padding: 16,
+              }}
+            >
+              {data.goals > 0 && (
+                <StatBar label="Goles" value={data.goals} max={Math.max(data.goals, 20)} color="#10b981" />
+              )}
+              {data.assists > 0 && (
+                <StatBar label="Asistencias" value={data.assists} max={Math.max(data.assists, 15)} color="#38bdf8" />
+              )}
+              {data.keyPasses > 0 && (
+                <StatBar label="Pases clave" value={data.keyPasses} max={Math.max(data.keyPasses, 30)} color="#a78bfa" />
+              )}
+              {data.tackles > 0 && (
+                <StatBar label="Recuperaciones" value={data.tackles} max={Math.max(data.tackles, 30)} color="#f472b6" />
+              )}
+              {data.fouls > 0 && (
+                <StatBar label="Faltas" value={data.fouls} max={Math.max(data.fouls, 20)} color="#f97316" />
+              )}
+            </View>
+          </DashSection>
         )}
 
-        {/* KPI Grid */}
-        <View className="flex-row gap-2 flex-wrap">
-          <View className="flex-row gap-2 w-full">
-            <KpiCard label="Goles" value={data.goals} sub={`${goalsPerMatch}/PJ`} />
-            <KpiCard label="Asistencias" value={data.assists} sub={`${data.keyPasses} pases clave`} />
-          </View>
-          <View className="flex-row gap-2 w-full">
-            <KpiCard label="Minutos" value={data.minutesPlayed} />
-            <KpiCard label="xG" value={data.xG?.toFixed(2) ?? '0.00'} />
-          </View>
-          {(data.yellowCards > 0 || data.redCards > 0) && (
-            <View className="flex-row gap-2 w-full">
-              <KpiCard label="Amarillas" value={data.yellowCards} />
-              <KpiCard label="Rojas" value={data.redCards} />
-            </View>
-          )}
-        </View>
-
-        {/* Últimos partidos */}
+        {/* ── Últimos partidos ── */}
         {data.recentMatches?.length > 0 && (
-          <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
-            <Text className="text-white font-bold text-base mb-3">Últimos partidos</Text>
-            {data.recentMatches.slice(0, 8).map((m, i) => (
-              <View
-                key={m.matchId}
-                className={`flex-row items-center justify-between py-2 ${i < data.recentMatches.slice(0, 8).length - 1 ? 'border-b border-gray-700/40' : ''}`}
-              >
-                <View className="flex-row items-center gap-2 flex-1">
-                  <ResultBadge r={m.result} />
-                  <View className="flex-1">
-                    <Text className="text-white text-xs font-semibold" numberOfLines={1}>{m.opponent}</Text>
-                    <Text className="text-gray-500 text-[10px]">{new Date(m.date).toLocaleDateString()}</Text>
+          <DashSection title="Últimos partidos">
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderWidth: 1,
+                borderColor: '#39FF1420',
+                borderRadius: 20,
+                overflow: 'hidden',
+              }}
+            >
+              {data.recentMatches.slice(0, 8).map((m, i) => (
+                <View
+                  key={m.matchId}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderBottomWidth: i < Math.min(data.recentMatches.length, 8) - 1 ? 1 : 0,
+                    borderBottomColor: '#1f2937',
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                    <ResultBadge r={m.result} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#f3f4f6', fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
+                        {m.opponent}
+                      </Text>
+                      <Text style={{ color: '#6b7280', fontSize: 10 }}>
+                        {new Date(m.date).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    <Text style={{ color: '#10b981', fontSize: 11, fontWeight: '800' }}>{m.goals}G</Text>
+                    <Text style={{ color: '#38bdf8', fontSize: 11, fontWeight: '800' }}>{m.assists}A</Text>
+                    {m.rating != null && (
+                      <View
+                        style={{
+                          backgroundColor: ratingColor(m.rating) + '22',
+                          borderRadius: 6,
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                        }}
+                      >
+                        <Text
+                          style={{ color: ratingColor(m.rating), fontSize: 11, fontWeight: '900' }}
+                        >
+                          {m.rating.toFixed(1)}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-                <View className="flex-row gap-3 items-center">
-                  <Text className="text-emerald-400 text-xs font-bold">{m.goals}G</Text>
-                  <Text className="text-sky-400 text-xs font-bold">{m.assists}A</Text>
-                  {m.rating != null ? (
-                    <Text style={{ color: ratingColor(m.rating) }} className="text-xs font-black w-8 text-right">
-                      {m.rating.toFixed(1)}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          </DashSection>
         )}
 
-        {/* Equipos */}
+        {/* ── Equipos ── */}
         {data.topTeams?.length > 0 && (
-          <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4">
-            <Text className="text-white font-bold text-base mb-3">Equipos</Text>
-            {data.topTeams.map((t, i) => (
-              <TouchableOpacity
-                key={t.teamId}
-                onPress={() =>
-                  router.push({ pathname: '/(tabs)/teamCareerDashboard', params: { teamId: String(t.teamId), name: t.teamName } } as any)
-                }
-                className={`flex-row items-center justify-between py-2 ${i < data.topTeams.length - 1 ? 'border-b border-gray-700/40' : ''}`}
-              >
-                <Text className="text-geo-green text-sm font-semibold flex-1" numberOfLines={1}>{t.teamName}</Text>
-                <Text className="text-gray-400 text-xs">{t.matches} PJ · {t.goals} G</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <DashSection title="Equipos">
+            <View
+              style={{
+                backgroundColor: '#0f172a',
+                borderWidth: 1,
+                borderColor: '#39FF1420',
+                borderRadius: 20,
+                overflow: 'hidden',
+              }}
+            >
+              {data.topTeams.map((t, i) => (
+                <TouchableOpacity
+                  key={t.teamId}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/teamCareerDashboard',
+                      params: { teamId: String(t.teamId), name: t.teamName },
+                    } as any)
+                  }
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    borderBottomWidth: i < data.topTeams.length - 1 ? 1 : 0,
+                    borderBottomColor: '#1f2937',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 8,
+                        backgroundColor: '#39FF1415',
+                        borderWidth: 1,
+                        borderColor: '#39FF1430',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="shield-outline" size={13} color="#39FF14" />
+                    </View>
+                    <Text
+                      style={{ color: '#39FF14', fontSize: 13, fontWeight: '700', flex: 1 }}
+                      numberOfLines={1}
+                    >
+                      {t.teamName}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={{ color: '#9ca3af', fontSize: 11 }}>
+                      {t.matches} PJ · {t.goals}G
+                    </Text>
+                    <Ionicons name="chevron-forward" size={14} color="#39FF14" />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </DashSection>
         )}
       </View>
     </ScrollView>

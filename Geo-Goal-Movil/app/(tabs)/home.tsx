@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -9,6 +9,13 @@ import { getRefereeDashboardSummary } from '@/Api/refereeAPI';
 import { Ionicons } from '@expo/vector-icons';
 import Loader from '@/components/Loader';
 import { getMyNotifications, markAllNotificationsAsRead } from '@/Api/notificationAPI';
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  coach: 'Entrenador',
+  player: 'Jugador',
+  referee: 'Árbitro',
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -100,7 +107,7 @@ export default function HomeScreen() {
           <View className="flex-1">
             <Text className="text-gray-400 text-xs">Bienvenido</Text>
             <Text className="text-geo-green text-2xl font-extrabold" numberOfLines={1}>{user.name}</Text>
-            <Text className="text-gray-500 text-xs mt-1 capitalize">{user.role}</Text>
+            <Text className="text-gray-500 text-xs mt-1">{ROLE_LABEL[user.role] ?? user.role}</Text>
           </View>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
@@ -131,14 +138,20 @@ export default function HomeScreen() {
           <>
             <Text className="text-white text-lg font-bold mb-2">Administrador</Text>
             <TouchableOpacity
-              onPress={() => router.push('/league/create')}
+              onPress={() =>
+                Alert.alert(
+                  'Solo disponible en web',
+                  'Para crear o gestionar ligas accede a la plataforma web de Geo-Goal.',
+                  [{ text: 'Entendido' }]
+                )
+              }
               className="bg-gradient-to-r from-geo-green/20 to-geo-green/5 border border-geo-green rounded-xl p-4 flex-row items-center justify-between"
             >
               <View className="flex-1">
                 <Text className="text-geo-green font-bold">Crear Liga</Text>
-                <Text className="text-gray-400 text-sm">Organiza torneo</Text>
+                <Text className="text-gray-400 text-sm">Disponible en la plataforma web</Text>
               </View>
-              <Ionicons name="add-circle" size={24} color="#39FF14" />
+              <Ionicons name="globe-outline" size={24} color="#39FF14" />
             </TouchableOpacity>
             <Text className="text-white text-lg font-bold mb-2">Dashboard Admin</Text>
             <View className="flex-row gap-2">

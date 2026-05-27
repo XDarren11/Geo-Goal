@@ -256,6 +256,102 @@ export async function getCoachDashboard(coachId: number): Promise<CoachStats> {
   return data;
 }
 
+// ── Predicción Elo + Dixon-Coles (Fase 3) ────────────────────────────────────
+export interface MatchPredictionResponse {
+  elo: {
+    home: { winProb: number; elo: number };
+    draw: { prob: number };
+    away: { winProb: number; elo: number };
+  } | null;
+  poisson: {
+    expectedGoals: { home: number; away: number };
+    outcomes: { homeWin: number; draw: number; awayWin: number };
+    topScores: Array<{ score: string; prob: number }>;
+  } | null;
+}
+
+export async function getMatchPrediction(matchId: number): Promise<MatchPredictionResponse> {
+  const { data } = await rawApi.get<MatchPredictionResponse>(`${BASE}/matches/${matchId}/prediction`);
+  return data;
+}
+
+// ── H2H (Fase 6) ─────────────────────────────────────────────────────────────
+export interface MatchH2HResponse {
+  summary: {
+    played: number;
+    teamAWins: number;
+    teamBWins: number;
+    draws: number;
+    avgGoalsPerMatch: number;
+    goalsFor: { teamA: number; teamB: number };
+  };
+  recent: Array<{
+    matchId: number;
+    date: string | null;
+    homeTeam: string;
+    awayTeam: string;
+    score: string;
+    winner: string;
+  }>;
+}
+
+export async function getTeamH2H(teamAId: number, teamBId: number): Promise<MatchH2HResponse> {
+  const { data } = await rawApi.get<MatchH2HResponse>(`${BASE}/teams/${teamAId}/h2h/${teamBId}`);
+  return data;
+}
+
+// ── Análisis avanzado de tracking (Fase 2) ───────────────────────────────────
+export interface MatchTrackingAnalytics {
+  speeds: Record<string, {
+    avgSpeed: number; maxSpeed: number; sprintCount: number;
+    accelerationCount: number; distanceM: number;
+  }>;
+  zones: Record<string, { def: number; mid: number; att: number }>;
+  heatmaps: Record<string, number[][]>;
+  passNetwork: {
+    nodes: Array<{ playerId: number; teamId: number; degree: number; pageRank: number; avgX: number; avgY: number }>;
+    edges: Array<{ from: number; to: number; count: number }>;
+  };
+  possession: { home: number; away: number; homeTeamId?: number; awayTeamId?: number };
+  convexHull: { home: number; away: number };
+  defensiveLine: { home: number; away: number };
+  observedFormation: { home: string; away: string };
+  meta?: { framesProcessed: number; homeTeamId: number; awayTeamId: number; computedAt: string };
+}
+
+export async function getMatchAdvancedAnalytics(matchId: number): Promise<MatchTrackingAnalytics> {
+  const { data } = await rawApi.get<MatchTrackingAnalytics>(`${BASE}/matches/${matchId}/analytics/advanced`);
+  return data;
+}
+
+// ── xG — Expected Goals (Fase 5) ─────────────────────────────────────────────
+export interface MatchXGResponse {
+  shots: Array<{
+    playerId: number | null; teamId: number | null;
+    eventType: string; x: number; y: number;
+    xg: number; outcome: string; minute: number;
+  }>;
+  perPlayer: Record<number, number>;
+  teamTotals: Record<number, number>;
+}
+
+export async function getMatchXG(matchId: number): Promise<MatchXGResponse> {
+  const { data } = await rawApi.get<MatchXGResponse>(`${BASE}/matches/${matchId}/xg`);
+  return data;
+}
+
+// ── xT — Expected Threat (Fase 5) ────────────────────────────────────────────
+export interface MatchXTResponse {
+  perPlayer: Record<number, number>;
+  perTeam: Record<number, number>;
+  topPasses: Array<{ playerId: number; teamId: number | null; xtDelta: number }>;
+}
+
+export async function getMatchXT(matchId: number): Promise<MatchXTResponse> {
+  const { data } = await rawApi.get<MatchXTResponse>(`${BASE}/matches/${matchId}/xt`);
+  return data;
+}
+
 // ── Listado público de jugadores ─────────────────────────────────────────────
 
 export interface PublicPlayerListItem {
@@ -287,5 +383,55 @@ export async function getPublicPlayersList(opts: {
   sortBy?: 'rating' | 'goals' | 'assists' | 'matches';
 } = {}): Promise<PublicPlayersListResponse> {
   const { data } = await api.get<PublicPlayersListResponse>(`${BASE}/players`, { params: opts });
+  return data;
+}
+
+// ── Listado público de equipos ────────────────────────────────────────────────
+
+export interface PublicTeamListItem {
+  teamId: number;
+  name: string;
+  logoUrl: string | null;
+  league: { id: number; name: string } | null;
+}
+
+export interface PublicTeamsListResponse {
+  items: PublicTeamListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getPublicTeamsList(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+} = {}): Promise<PublicTeamsListResponse> {
+  const { data } = await rawApi.get<PublicTeamsListResponse>(`${BASE}/teams`, { params: opts });
+  return data;
+}
+
+// ── Listado público de entrenadores ──────────────────────────────────────────
+
+export interface PublicCoachListItem {
+  coachId: number;
+  name: string;
+  username: string | null;
+  teams: Array<{ id: number; name: string }>;
+}
+
+export interface PublicCoachesListResponse {
+  items: PublicCoachListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getPublicCoachesList(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+} = {}): Promise<PublicCoachesListResponse> {
+  const { data } = await rawApi.get<PublicCoachesListResponse>(`${BASE}/coaches`, { params: opts });
   return data;
 }

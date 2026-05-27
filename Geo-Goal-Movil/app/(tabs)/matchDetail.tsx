@@ -2,7 +2,14 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, getAIServiceHealth, getPublicMatchFramesExport, type AnalysisStatusResponse, type AIServiceHealth } from '@/Api/publicAPI';
+import {
+  getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus,
+  submitAnalysisKeypoints, getAIServiceHealth, getPublicMatchFramesExport,
+  getMatchPrediction, getTeamH2H, getMatchAdvancedAnalytics, getMatchXG, getMatchXT,
+  type AnalysisStatusResponse, type AIServiceHealth,
+  type MatchPredictionResponse, type MatchH2HResponse,
+  type MatchTrackingAnalytics, type MatchXGResponse, type MatchXTResponse,
+} from '@/Api/publicAPI';
 import { getPlayersTeam, updateCoachLineup } from '@/Api/teamAPI';
 import type { MatchAnalyticsResponse, MatchDetailLineupEntry, TrackingFramePlayer } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -513,6 +520,17 @@ export default function MatchDetailMobileScreen() {
     }
   }, [enforcedLineupMode, data?.match]);
 
+  const playerNames = React.useMemo<Record<number, string>>(() => {
+    const map: Record<number, string> = {};
+    const detailData = data?.detail;
+    if (!detailData) return map;
+    [...(detailData.homeStartingXI ?? []), ...(detailData.awayStartingXI ?? []),
+     ...(detailData.homeBench ?? []), ...(detailData.awayBench ?? [])].forEach((p) => {
+      if (typeof p.userId === 'number' && p.name) map[p.userId] = p.name;
+    });
+    return map;
+  }, [data?.detail?.homeStartingXI, data?.detail?.awayStartingXI, data?.detail?.homeBench, data?.detail?.awayBench]);
+
   if (isLoading) {
     return (
       <View className="flex-1 bg-geo-black items-center justify-center">
@@ -538,8 +556,8 @@ export default function MatchDetailMobileScreen() {
   const incidents = buildIncidentMap(analytics);
   const currentFrame = frames.length ? frames[Math.min(frameIndex, frames.length - 1)] : null;
 
-  const homeTeamId = analytics?.match?.homeTeamId ?? data?.match?.homeTeamId;
-  const awayTeamId = analytics?.match?.awayTeamId ?? data?.match?.awayTeamId;
+  const homeTeamId = analytics?.match?.homeTeamId ?? data?.match?.homeTeamId ?? null;
+  const awayTeamId = analytics?.match?.awayTeamId ?? data?.match?.awayTeamId ?? null;
 
   const trackedPlayers: TrackingFramePlayer[] = currentFrame?.players?.length
     ? (currentFrame.players as unknown as TrackingFramePlayer[])
@@ -983,6 +1001,33 @@ export default function MatchDetailMobileScreen() {
         ))}
       </View>
 
+      {/* ── Predicción Elo + Dixon-Coles ─────────────────────────── */}
+      <MobilePredictionCard
+        matchId={matchId}
+        homeName={match.homeTeam?.name ?? 'Local'}
+        awayName={match.awayTeam?.name ?? 'Visitante'}
+      />
+
+      {/* ── Historial H2H ────────────────────────────────────────── */}
+      {homeTeamId && awayTeamId && homeTeamId !== awayTeamId ? (
+        <MobileH2HCard
+          teamAId={homeTeamId}
+          teamBId={awayTeamId}
+          teamAName={match.homeTeam?.name ?? 'Local'}
+          teamBName={match.awayTeam?.name ?? 'Visitante'}
+        />
+      ) : null}
+
+      {/* ── Análisis avanzado (expandible) ───────────────────────── */}
+      <MobileAdvancedAnalyticsSection
+        matchId={matchId}
+        homeTeamId={homeTeamId}
+        awayTeamId={awayTeamId}
+        homeName={match.homeTeam?.name ?? 'Local'}
+        awayName={match.awayTeam?.name ?? 'Visitante'}
+        playerNames={playerNames}
+      />
+
       {(analytics?.summary?.totalFrames ?? 0) > 0 ? (
         <MobileFramesExport matchId={matchId} totalFrames={analytics!.summary.totalFrames} />
       ) : null}
@@ -1231,6 +1276,525 @@ function MiniTag({ label }: { label: string }) {
     </View>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECCIÓN: Predicción del partido
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MobilePredictionCard({ matchId, homeName, awayName }: {
+  matchId: number; homeName: string; awayName: string;
+}) {
+  const { data, isLoading } = useQuery<MatchPredictionResponse>({
+    queryKey: ['mobile-prediction', matchId],
+    queryFn: () => getMatchPrediction(matchId),
+    staleTime: 10 * 60_000,
+    retry: 1,
+    enabled: matchId > 0,
+  });
+
+  return (
+    <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+      <View className="flex-row items-center gap-2 mb-3">
+        <Ionicons name="stats-chart-outline" size={15} color="#39FF14" />
+        <Text className="text-geo-green font-bold text-sm">Predicción del partido</Text>
+      </View>
+
+      {isLoading ? (
+        <View className="flex-row items-center gap-2 py-2">
+          <ActivityIndicator size="small" color="#39FF14" />
+          <Text className="text-gray-400 text-xs">Calculando predicción…</Text>
+        </View>
+      ) : !data?.elo && !data?.poisson ? (
+        <Text className="text-gray-500 text-xs">Sin datos de predicción disponibles.</Text>
+      ) : (
+        <>
+          {/* ── Elo win probs ── */}
+          {data?.elo ? (
+            <View className="mb-3">
+              <MobileProbBar label={homeName} subLabel={`Elo ${data.elo.home.elo}`} value={data.elo.home.winProb} barColor="#3b82f6" />
+              <MobileProbBar label="Empate" value={data.elo.draw.prob} barColor="#71717a" />
+              <MobileProbBar label={awayName} subLabel={`Elo ${data.elo.away.elo}`} value={data.elo.away.winProb} barColor="#f97316" />
+            </View>
+          ) : null}
+
+          {/* ── Poisson / Dixon-Coles ── */}
+          {data?.poisson ? (
+            <View className="border-t border-gray-700/60 pt-3">
+              <View className="flex-row mb-3">
+                <View className="flex-1 items-center">
+                  <Text className="text-gray-400 text-[10px] mb-1">Goles esperados</Text>
+                  <Text className="text-2xl font-black text-blue-400">{data.poisson.expectedGoals.home}</Text>
+                  <Text className="text-[10px] text-gray-500" numberOfLines={1}>{homeName}</Text>
+                </View>
+                <View className="w-px bg-gray-700 mx-2" />
+                <View className="flex-1 items-center">
+                  <Text className="text-gray-400 text-[10px] mb-1">Goles esperados</Text>
+                  <Text className="text-2xl font-black text-orange-400">{data.poisson.expectedGoals.away}</Text>
+                  <Text className="text-[10px] text-gray-500" numberOfLines={1}>{awayName}</Text>
+                </View>
+              </View>
+
+              <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">
+                Marcadores más probables
+              </Text>
+              {data.poisson.topScores.slice(0, 5).map((s) => (
+                <View key={s.score} className="flex-row items-center gap-2 mb-1.5">
+                  <View className="w-10 bg-white/10 rounded px-1 py-0.5 items-center">
+                    <Text className="text-xs font-bold text-white">{s.score}</Text>
+                  </View>
+                  <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: '#374151', overflow: 'hidden' }}>
+                    <View style={{ height: '100%', borderRadius: 4, backgroundColor: '#39FF14', opacity: 0.7, width: `${Math.min(100, s.prob * 600)}%` }} />
+                  </View>
+                  <Text className="text-gray-400 text-[10px]" style={{ width: 38 }}>{(s.prob * 100).toFixed(1)}%</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </>
+      )}
+    </View>
+  );
+}
+
+function MobileProbBar({ label, subLabel, value, barColor }: {
+  label: string; subLabel?: string; value: number; barColor: string;
+}) {
+  const pct = Math.round(value * 100);
+  return (
+    <View className="flex-row items-center gap-2 mb-2">
+      <View style={{ width: 76 }}>
+        <Text className="text-white text-xs font-semibold text-right" numberOfLines={1}>{label}</Text>
+        {subLabel ? <Text className="text-gray-500 text-[10px] text-right">{subLabel}</Text> : null}
+      </View>
+      <View style={{ flex: 1, height: 10, borderRadius: 5, backgroundColor: '#374151', overflow: 'hidden' }}>
+        <View style={{ height: '100%', borderRadius: 5, backgroundColor: barColor, width: `${pct}%` }} />
+      </View>
+      <Text className="text-white text-xs font-bold text-right" style={{ width: 32 }}>{pct}%</Text>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECCIÓN: Historial H2H
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MobileH2HCard({ teamAId, teamBId, teamAName, teamBName }: {
+  teamAId: number; teamBId: number; teamAName: string; teamBName: string;
+}) {
+  const { data, isLoading } = useQuery<MatchH2HResponse>({
+    queryKey: ['mobile-h2h', teamAId, teamBId],
+    queryFn: () => getTeamH2H(teamAId, teamBId),
+    staleTime: 10 * 60_000,
+    retry: 1,
+    enabled: teamAId > 0 && teamBId > 0,
+  });
+
+  const s = data?.summary;
+
+  return (
+    <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 p-4 mb-4">
+      <View className="flex-row items-center gap-2 mb-3">
+        <Ionicons name="swap-horizontal" size={15} color="#39FF14" />
+        <Text className="text-geo-green font-bold text-sm">Historial H2H</Text>
+      </View>
+
+      {isLoading ? (
+        <View className="flex-row items-center gap-2 py-2">
+          <ActivityIndicator size="small" color="#39FF14" />
+          <Text className="text-gray-400 text-xs">Cargando historial…</Text>
+        </View>
+      ) : !s || s.played === 0 ? (
+        <Text className="text-gray-500 text-xs text-center py-3">Estos equipos nunca se han enfrentado.</Text>
+      ) : (
+        <>
+          {/* Big 3 numbers */}
+          <View className="flex-row mb-3">
+            <View className="flex-1 items-center">
+              <Text className="text-3xl font-black text-blue-400">{s.teamAWins}</Text>
+              <Text className="text-[10px] text-gray-400 text-center" numberOfLines={2}>{teamAName}</Text>
+            </View>
+            <View className="flex-1 items-center">
+              <Text className="text-3xl font-black text-gray-400">{s.draws}</Text>
+              <Text className="text-[10px] text-gray-400">Empates</Text>
+            </View>
+            <View className="flex-1 items-center">
+              <Text className="text-3xl font-black text-orange-400">{s.teamBWins}</Text>
+              <Text className="text-[10px] text-gray-400 text-center" numberOfLines={2}>{teamBName}</Text>
+            </View>
+          </View>
+
+          {/* Proportional win-share bar */}
+          <View style={{ height: 8, flexDirection: 'row', borderRadius: 4, overflow: 'hidden', marginBottom: 8 }}>
+            {s.teamAWins > 0 ? <View style={{ flex: s.teamAWins, backgroundColor: '#3b82f6' }} /> : null}
+            {s.draws > 0 ? <View style={{ flex: s.draws, backgroundColor: '#71717a' }} /> : null}
+            {s.teamBWins > 0 ? <View style={{ flex: s.teamBWins, backgroundColor: '#f97316' }} /> : null}
+          </View>
+
+          <Text className="text-gray-500 text-[10px] text-center mb-3">
+            {s.played} partidos · {s.avgGoalsPerMatch} goles/partido promedio
+          </Text>
+
+          {/* Recent encounters */}
+          {(data?.recent ?? []).slice(0, 5).map((m) => (
+            <View key={m.matchId} className="flex-row items-center gap-1 rounded-lg bg-gray-800 px-3 py-2 mb-1.5">
+              <Text className="text-gray-500 text-[10px]" style={{ width: 66 }}>
+                {m.date ? new Date(m.date).toLocaleDateString('es-MX') : '—'}
+              </Text>
+              <Text className="text-white text-xs flex-1 text-center" numberOfLines={1}>
+                {m.homeTeam}{' '}
+                <Text className="text-geo-green font-mono font-bold">{m.score}</Text>
+                {' '}{m.awayTeam}
+              </Text>
+              <Text
+                className="text-[10px] font-bold text-right"
+                style={{ width: 14, color: m.winner === 'Empate' ? '#9ca3af' : m.winner === teamAName ? '#60a5fa' : '#fb923c' }}
+              >
+                {m.winner === 'Empate' ? 'E' : m.winner === teamAName ? 'A' : 'B'}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECCIÓN: Análisis avanzado (expandible)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MobileAdvancedAnalyticsSection({ matchId, homeTeamId, awayTeamId, homeName, awayName, playerNames }: {
+  matchId: number;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  homeName: string;
+  awayName: string;
+  playerNames: Record<number, string>;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+
+  const { data: adv, isLoading: advLoading } = useQuery<MatchTrackingAnalytics>({
+    queryKey: ['mobile-adv-analytics', matchId],
+    queryFn: () => getMatchAdvancedAnalytics(matchId),
+    staleTime: 5 * 60_000, retry: 1,
+    enabled: expanded && matchId > 0,
+  });
+
+  const { data: xgData, isLoading: xgLoading } = useQuery<MatchXGResponse>({
+    queryKey: ['mobile-xg', matchId],
+    queryFn: () => getMatchXG(matchId),
+    staleTime: 5 * 60_000, retry: 1,
+    enabled: expanded && matchId > 0,
+  });
+
+  const { data: xtData, isLoading: xtLoading } = useQuery<MatchXTResponse>({
+    queryKey: ['mobile-xt', matchId],
+    queryFn: () => getMatchXT(matchId),
+    staleTime: 5 * 60_000, retry: 1,
+    enabled: expanded && matchId > 0,
+  });
+
+  return (
+    <View className="rounded-2xl border border-geo-green/20 bg-gray-900/80 mb-4 overflow-hidden">
+      {/* Toggle header */}
+      <TouchableOpacity
+        onPress={() => setExpanded((v) => !v)}
+        activeOpacity={0.7}
+        className="flex-row items-center justify-between p-4"
+      >
+        <View className="flex-row items-center gap-2">
+          <Ionicons name="analytics-outline" size={15} color="#39FF14" />
+          <Text className="text-geo-green font-bold text-sm">Análisis avanzado</Text>
+        </View>
+        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#39FF14" />
+      </TouchableOpacity>
+
+      {expanded ? (
+        <View className="px-4 pb-5">
+          {/* ── Tracking analytics ── */}
+          {advLoading ? (
+            <View className="py-6 items-center gap-2">
+              <ActivityIndicator color="#39FF14" />
+              <Text className="text-gray-400 text-xs">Calculando estadísticas…</Text>
+            </View>
+          ) : !adv ? (
+            <Text className="text-gray-500 text-xs text-center py-3 mb-2">
+              Sin datos de tracking disponibles. Sube y procesa un video primero.
+            </Text>
+          ) : (
+            <>
+              {/* Posesión */}
+              <AdvSection label="Posesión">
+                <View className="flex-row items-center gap-2 mb-1">
+                  <Text className="text-blue-400 text-xs font-bold" style={{ width: 36 }}>
+                    {Math.round(adv.possession.home * 100)}%
+                  </Text>
+                  <View style={{ flex: 1, height: 10, flexDirection: 'row', borderRadius: 5, overflow: 'hidden' }}>
+                    <View style={{ flex: Math.round(adv.possession.home * 100), backgroundColor: '#3b82f6' }} />
+                    <View style={{ flex: Math.round(adv.possession.away * 100), backgroundColor: '#f97316' }} />
+                  </View>
+                  <Text className="text-orange-400 text-xs font-bold" style={{ width: 36 }}>
+                    {Math.round(adv.possession.away * 100)}%
+                  </Text>
+                </View>
+                <View className="flex-row justify-between">
+                  <Text className="text-gray-500 text-[10px]" numberOfLines={1}>{homeName}</Text>
+                  <Text className="text-gray-500 text-[10px]" numberOfLines={1}>{awayName}</Text>
+                </View>
+              </AdvSection>
+
+              {/* Formación observada */}
+              <AdvSection label="Formación observada">
+                <View className="flex-row gap-2">
+                  <View className="flex-1 bg-gray-800 rounded-xl p-3 items-center">
+                    <Text className="text-xl font-black text-blue-400">{adv.observedFormation.home || '—'}</Text>
+                    <Text className="text-[10px] text-gray-400 mt-0.5" numberOfLines={1}>{homeName}</Text>
+                  </View>
+                  <View className="flex-1 bg-gray-800 rounded-xl p-3 items-center">
+                    <Text className="text-xl font-black text-orange-400">{adv.observedFormation.away || '—'}</Text>
+                    <Text className="text-[10px] text-gray-400 mt-0.5" numberOfLines={1}>{awayName}</Text>
+                  </View>
+                </View>
+              </AdvSection>
+
+              {/* Línea defensiva + Compacidad */}
+              <View className="flex-row gap-2 mb-4">
+                <AdvStatCard
+                  label="Línea defensiva"
+                  homeVal={`${adv.defensiveLine.home}m`}
+                  awayVal={`${adv.defensiveLine.away}m`}
+                  note=">40m = bloque alto"
+                />
+                <AdvStatCard
+                  label="Compacidad (hull)"
+                  homeVal={`${adv.convexHull.home}m²`}
+                  awayVal={`${adv.convexHull.away}m²`}
+                  note="Menor = más compacto"
+                />
+              </View>
+
+              {/* Stats por jugador */}
+              <PlayerAdvStatsTable
+                speeds={adv.speeds}
+                zones={adv.zones}
+                passNodes={adv.passNetwork.nodes}
+                playerNames={playerNames}
+                homeTeamId={adv.meta?.homeTeamId ?? adv.possession?.homeTeamId ?? null}
+              />
+            </>
+          )}
+
+          {/* ── xG section ── */}
+          <AdvSection label="⚽ Expected Goals (xG)">
+            {xgLoading ? (
+              <ActivityIndicator size="small" color="#39FF14" />
+            ) : !xgData || (xgData.shots.length === 0 && Object.keys(xgData.teamTotals ?? {}).length === 0) ? (
+              <Text className="text-gray-500 text-xs">Sin tiros registrados aún.</Text>
+            ) : (
+              <XGBlock
+                xgData={xgData}
+                homeTeamId={homeTeamId}
+                awayTeamId={awayTeamId}
+                homeName={homeName}
+                awayName={awayName}
+                playerNames={playerNames}
+              />
+            )}
+          </AdvSection>
+
+          {/* ── xT section ── */}
+          <AdvSection label="📈 Expected Threat (xT)">
+            {xtLoading ? (
+              <ActivityIndicator size="small" color="#39FF14" />
+            ) : !xtData || (xtData.topPasses?.length ?? 0) === 0 ? (
+              <Text className="text-gray-500 text-xs">Sin datos de xT disponibles.</Text>
+            ) : (
+              <XTBlock
+                xtData={xtData}
+                homeTeamId={homeTeamId}
+                playerNames={playerNames}
+              />
+            )}
+          </AdvSection>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ── Sub-helpers para Análisis avanzado ──────────────────────────────────────
+
+function AdvSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View className="mb-4">
+      <Text className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-2">{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function AdvStatCard({ label, homeVal, awayVal, note }: { label: string; homeVal: string; awayVal: string; note?: string }) {
+  return (
+    <View className="flex-1 bg-gray-800 rounded-xl p-3">
+      <Text className="text-[10px] text-gray-400 mb-2 text-center">{label}</Text>
+      <View className="flex-row justify-around">
+        <Text className="text-lg font-black text-blue-400">{homeVal}</Text>
+        <Text className="text-lg font-black text-orange-400">{awayVal}</Text>
+      </View>
+      {note ? <Text className="text-[9px] text-gray-500 text-center mt-1">{note}</Text> : null}
+    </View>
+  );
+}
+
+function PlayerAdvStatsTable({ speeds, zones, passNodes, playerNames, homeTeamId }: {
+  speeds: Record<string, any>;
+  zones: Record<string, any>;
+  passNodes: Array<{ playerId: number; teamId: number; degree: number; pageRank: number }>;
+  playerNames: Record<number, string>;
+  homeTeamId: number | null;
+}) {
+  const ids = Object.keys(speeds).map(Number).filter((n) => !isNaN(n));
+  if (!ids.length) return null;
+
+  const sorted = ids
+    .map((id) => ({ id, s: speeds[String(id)] }))
+    .sort((a, b) => (b.s.distanceM ?? 0) - (a.s.distanceM ?? 0))
+    .slice(0, 6);
+
+  const topNodes = [...passNodes]
+    .sort((a, b) => b.pageRank - a.pageRank)
+    .slice(0, 5);
+
+  return (
+    <>
+      {/* Speed / distance table */}
+      <AdvSection label="Stats por jugador (distancia cubierta)">
+        {/* Header */}
+        <View className="flex-row bg-gray-800 rounded-t-xl px-3 py-1.5">
+          <Text className="text-[10px] text-gray-400 flex-1">Jugador</Text>
+          <Text className="text-[10px] text-gray-400 w-12 text-right">km</Text>
+          <Text className="text-[10px] text-gray-400 w-14 text-right">Vmáx</Text>
+          <Text className="text-[10px] text-gray-400 w-12 text-right">Spr</Text>
+        </View>
+        {sorted.map(({ id, s }, i) => (
+          <View
+            key={`pspd-${id}`}
+            className={`flex-row items-center px-3 py-2 bg-gray-800 border-t border-gray-700 ${i === sorted.length - 1 ? 'rounded-b-xl' : ''}`}
+          >
+            <Text className="text-white text-xs flex-1" numberOfLines={1}>{playerNames[id] ?? `#${id}`}</Text>
+            <Text className="text-blue-300 text-xs w-12 text-right">{(s.distanceM / 1000).toFixed(2)}</Text>
+            <Text className="text-yellow-300 text-xs w-14 text-right">{s.maxSpeed.toFixed(1)} m/s</Text>
+            <Text className="text-geo-green text-xs w-12 text-right">{s.sprintCount}</Text>
+          </View>
+        ))}
+      </AdvSection>
+
+      {/* Pass network — top influencers */}
+      {topNodes.length > 0 ? (
+        <AdvSection label="Red de pases — más influyentes">
+          {topNodes.map((node, i) => {
+            const isHome = node.teamId === homeTeamId;
+            return (
+              <View key={`pr-${node.playerId}`} className="flex-row items-center gap-2 rounded-lg bg-gray-800 px-3 py-2 mb-1.5">
+                <Text className="text-gray-400 text-xs" style={{ width: 16 }}>{i + 1}.</Text>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isHome ? '#60a5fa' : '#fb923c' }} />
+                <Text className="text-white text-xs flex-1" numberOfLines={1}>{playerNames[node.playerId] ?? `#${node.playerId}`}</Text>
+                <Text className="text-gray-400 text-[10px]">{node.degree} pases</Text>
+              </View>
+            );
+          })}
+        </AdvSection>
+      ) : null}
+    </>
+  );
+}
+
+function XGBlock({ xgData, homeTeamId, awayTeamId, homeName, awayName, playerNames }: {
+  xgData: MatchXGResponse;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  homeName: string;
+  awayName: string;
+  playerNames: Record<number, string>;
+}) {
+  const homeXG = homeTeamId != null ? (xgData.teamTotals[homeTeamId] ?? 0) : 0;
+  const awayXG = awayTeamId != null ? (xgData.teamTotals[awayTeamId] ?? 0) : 0;
+  const total = homeXG + awayXG || 1;
+
+  return (
+    <View>
+      {/* Team xG bar */}
+      <View className="flex-row items-center gap-2 mb-1">
+        <Text className="text-blue-400 text-xs font-bold" style={{ width: 40 }}>{homeXG.toFixed(2)}</Text>
+        <View style={{ flex: 1, height: 10, flexDirection: 'row', borderRadius: 5, overflow: 'hidden' }}>
+          <View style={{ flex: homeXG / total, backgroundColor: '#3b82f6' }} />
+          <View style={{ flex: awayXG / total, backgroundColor: '#f97316' }} />
+        </View>
+        <Text className="text-orange-400 text-xs font-bold" style={{ width: 40 }}>{awayXG.toFixed(2)}</Text>
+      </View>
+      <View className="flex-row justify-between mb-3">
+        <Text className="text-[10px] text-gray-500" numberOfLines={1}>{homeName}</Text>
+        <Text className="text-[10px] text-gray-500" numberOfLines={1}>{awayName}</Text>
+      </View>
+
+      {/* Top shots by xG */}
+      {xgData.shots.length > 0 ? (
+        <>
+          <Text className="text-[10px] text-gray-400 mb-1.5">Tiros de mayor xG:</Text>
+          {[...xgData.shots].sort((a, b) => b.xg - a.xg).slice(0, 5).map((shot, i) => {
+            const isHome = shot.teamId === homeTeamId;
+            const name = shot.playerId != null ? (playerNames[shot.playerId] ?? `#${shot.playerId}`) : '—';
+            return (
+              <View key={`sh-${i}`} className="flex-row items-center gap-2 mb-1.5">
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isHome ? '#60a5fa' : '#fb923c' }} />
+                <Text className="text-gray-400 text-[10px]" style={{ width: 22 }}>{shot.minute}'</Text>
+                <Text className="text-white text-xs flex-1" numberOfLines={1}>{name}</Text>
+                <Text className="text-xs" style={{ color: shot.outcome === 'goal' ? '#39FF14' : '#6b7280', width: 16 }}>
+                  {shot.outcome === 'goal' ? '⚽' : '·'}
+                </Text>
+                <Text className="text-yellow-300 text-xs font-bold" style={{ width: 44 }}>xG {shot.xg.toFixed(2)}</Text>
+              </View>
+            );
+          })}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function XTBlock({ xtData, homeTeamId, playerNames }: {
+  xtData: MatchXTResponse;
+  homeTeamId: number | null;
+  playerNames: Record<number, string>;
+}) {
+  const passes = xtData.topPasses ?? [];
+  if (!passes.length) return <Text className="text-gray-500 text-xs">Sin pases con xT registrados.</Text>;
+
+  const maxXT = Math.max(...passes.map((p) => p.xtDelta), 0.001);
+
+  return (
+    <View>
+      {passes.slice(0, 6).map((p, i) => {
+        const isHome = p.teamId === homeTeamId;
+        const name = playerNames[p.playerId] ?? `#${p.playerId}`;
+        const barW = Math.round((p.xtDelta / maxXT) * 100);
+        return (
+          <View key={`xt-${p.playerId}-${i}`} className="flex-row items-center gap-2 mb-2">
+            <Text className="text-gray-400 text-xs" style={{ width: 16 }}>{i + 1}.</Text>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isHome ? '#60a5fa' : '#fb923c' }} />
+            <Text className="text-white text-xs" style={{ width: 96 }} numberOfLines={1}>{name}</Text>
+            <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: '#374151', overflow: 'hidden' }}>
+              <View style={{ height: '100%', borderRadius: 4, backgroundColor: isHome ? '#3b82f6' : '#f97316', width: `${barW}%` }} />
+            </View>
+            <Text className="text-geo-green text-xs font-bold" style={{ width: 46 }}>+{p.xtDelta.toFixed(3)}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function MobileFramesExport({ matchId, totalFrames }: { matchId: number; totalFrames: number }) {
   const [page, setPage] = React.useState(1);

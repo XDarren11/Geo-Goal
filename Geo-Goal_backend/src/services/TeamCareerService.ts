@@ -20,6 +20,12 @@ import { PlayerMatchStat } from "../models/PlayerMatchStat";
 import { User } from "../models/User";
 import { TrackingAnalyticsService } from "./TrackingAnalyticsService";
 
+/** Máximo de partidos sobre los que se computan métricas de tracking.
+ *  La media de posesión/hull/defLine converge rápidamente; calcular
+ *  analytics para 100+ partidos en serie era el principal cuello de botella.
+ */
+const TRACKING_MATCH_LIMIT = 50;
+
 export interface TeamCareerScope {
   seasonId?: number;
   leagueId?: number;
@@ -44,9 +50,9 @@ export interface TeamCareerStats {
   avgPossession: number;
   avgShotsPerMatch: number;
   avgPassAccuracy: number;
-  avgDistanceTeamKm: number; // km totales del equipo por partido
-  avgConvexHull: number; // m²
-  avgDefensiveLine: number; // m
+  avgDistanceTeamKm: number;
+  avgConvexHull: number;
+  avgDefensiveLine: number;
 
   // Elo
   eloRating: number;
@@ -76,7 +82,7 @@ export interface TeamCareerStats {
     scoreAgainst: number;
     opponent: string;
   }>;
-  formStreak: string; // ej. "WWDLW"
+  formStreak: string;
 
   // Próximos partidos
   upcomingMatches: Array<{
@@ -92,14 +98,7 @@ export class TeamCareerService {
     teamId: number,
     scope: TeamCareerScope = {}
   ): Promise<TeamCareerStats> {
-    const team = await Team.findByPk(teamId, {
-      attributes: ["id", "name", "logoUrl"],
-    });
-    if (!team) {
-      throw new Error(`Team ${teamId} not found`);
-    }
-
-    // 1. Filtros para partidos jugados
+    // ── Paso 1: team + partidos jugados en paralelo ───────────────────────────
     const matchWhere: any = {
       played: true,
       [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
@@ -107,24 +106,25 @@ export class TeamCareerService {
     if (scope.seasonId) matchWhere.seasonId = scope.seasonId;
     if (scope.leagueId) matchWhere.leagueId = scope.leagueId;
 
-    const matches: any[] = await Match.findAll({
-      where: matchWhere,
-      include: [
-        { model: Team, as: "homeTeam", attributes: ["id", "name"] },
-        { model: Team, as: "awayTeam", attributes: ["id", "name"] },
-      ],
-      order: [["date", "DESC"]],
-    });
+    const [team, matches] = await Promise.all([
+      Team.findByPk(teamId, { attributes: ["id", "name", "logoUrl"] }),
+      Match.findAll({
+        where: matchWhere,
+        include: [
+          { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+          { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+        ],
+        order: [["date", "DESC"]],
+      }),
+    ]);
 
-    // 2. Agregar W/D/L
-    let wins = 0,
-      draws = 0,
-      losses = 0,
-      gf = 0,
-      ga = 0;
+    if (!team) throw new Error(`Team ${teamId} not found`);
+
+    // ── Paso 2: agregar W/D/L en memoria (sin queries) ────────────────────────
+    let wins = 0, draws = 0, losses = 0, gf = 0, ga = 0;
     const recentForm: TeamCareerStats["recentForm"] = [];
 
-    for (const m of matches) {
+    for (const m of matches as any[]) {
       const isHome = m.homeTeamId === teamId;
       const scoreFor = isHome ? m.homeScore : m.awayScore;
       const scoreAgainst = isHome ? m.awayScore : m.homeScore;
@@ -132,16 +132,9 @@ export class TeamCareerService {
       ga += scoreAgainst || 0;
 
       let result: "W" | "D" | "L";
-      if (scoreFor > scoreAgainst) {
-        wins++;
-        result = "W";
-      } else if (scoreFor < scoreAgainst) {
-        losses++;
-        result = "L";
-      } else {
-        draws++;
-        result = "D";
-      }
+      if (scoreFor > scoreAgainst) { wins++; result = "W"; }
+      else if (scoreFor < scoreAgainst) { losses++; result = "L"; }
+      else { draws++; result = "D"; }
 
       if (recentForm.length < 5) {
         recentForm.push({
@@ -155,88 +148,71 @@ export class TeamCareerService {
       }
     }
 
-    // 3. TeamMatchStat agregado
-    const matchIds = matches.map((m) => m.id);
-    const teamStats = matchIds.length
-      ? await TeamMatchStat.findAll({
-          where: { teamId, matchId: { [Op.in]: matchIds } },
-        })
-      : [];
+    const matchIds = (matches as any[]).map((m) => m.id);
 
+    // ── Paso 3: todas las queries independientes en paralelo ──────────────────
+    const [
+      teamStats,
+      trackingAgg,
+      elo,
+      topScorersRaw,
+      topAssistantsRaw,
+      topRated,
+      upcoming,
+    ] = await Promise.all([
+      // 3a. Stats por partido del equipo
+      matchIds.length
+        ? TeamMatchStat.findAll({
+            where: { teamId, matchId: { [Op.in]: matchIds } },
+          })
+        : Promise.resolve([]),
+
+      // 3b. Tracking analytics en paralelo con cap
+      this.aggregateTrackingStats(teamId, (matches as any[]).slice(0, TRACKING_MATCH_LIMIT)),
+
+      // 3c. Elo actual
+      TeamEloRating.findByPk(teamId),
+
+      // 3d. Top goleadores
+      this.topPlayers(teamId, matchIds, "goals", "SUM", 5),
+
+      // 3e. Top asistidores
+      this.topPlayers(teamId, matchIds, "assists", "SUM", 5),
+
+      // 3f. Top valorados
+      this.topRatedPlayers(teamId, matchIds, 5),
+
+      // 3g. Próximos partidos
+      Match.findAll({
+        where: {
+          played: false,
+          date: { [Op.gte]: new Date() },
+          [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+          ...(scope.leagueId ? { leagueId: scope.leagueId } : {}),
+          ...(scope.seasonId ? { seasonId: scope.seasonId } : {}),
+        },
+        include: [
+          { model: Team, as: "homeTeam", attributes: ["name"] },
+          { model: Team, as: "awayTeam", attributes: ["name"] },
+        ],
+        order: [["date", "ASC"]],
+        limit: 3,
+      }),
+    ]);
+
+    // ── Paso 4: calcular promedios de TeamMatchStat en memoria ────────────────
+    const ts = teamStats as any[];
     const avgShots =
-      teamStats.length > 0
-        ? teamStats.reduce((s, x) => s + (x.shots || 0), 0) / teamStats.length
-        : 0;
-    const totalPasses = teamStats.reduce((s, x) => s + (x.passes || 0), 0);
-    const totalPassesCompleted = teamStats.reduce(
-      (s, x) => s + (x.passesCompleted || 0),
-      0
-    );
-    const avgPassAccuracy =
-      totalPasses > 0 ? totalPassesCompleted / totalPasses : 0;
-    const totalDistance = teamStats.reduce(
-      (s, x) => s + (x.distanceMeters || 0),
-      0
-    );
-    const avgDistanceKm =
-      teamStats.length > 0 ? totalDistance / 1000 / teamStats.length : 0;
+      ts.length > 0 ? ts.reduce((s, x) => s + (x.shots || 0), 0) / ts.length : 0;
+    const totalPasses = ts.reduce((s, x) => s + (x.passes || 0), 0);
+    const totalPassesCompleted = ts.reduce((s, x) => s + (x.passesCompleted || 0), 0);
+    const avgPassAccuracy = totalPasses > 0 ? totalPassesCompleted / totalPasses : 0;
+    const totalDistance = ts.reduce((s, x) => s + (x.distanceMeters || 0), 0);
+    const avgDistanceKm = ts.length > 0 ? totalDistance / 1000 / ts.length : 0;
 
-    // 4. Posesión + formación + hull + def line (de TrackingAnalyticsService)
-    let possSum = 0,
-      possCount = 0;
-    let hullSum = 0,
-      hullCount = 0;
-    let defLineSum = 0,
-      defLineCount = 0;
-    const formationCounts: Record<string, number> = {};
-
-    for (const m of matches) {
-      try {
-        const analytics = await TrackingAnalyticsService.getOrCompute(m.id);
-        const isHome = m.homeTeamId === teamId;
-
-        const possession = isHome
-          ? analytics.possession?.home
-          : analytics.possession?.away;
-        if (typeof possession === "number") {
-          possSum += possession;
-          possCount += 1;
-        }
-
-        const formation = isHome
-          ? analytics.observedFormation?.home
-          : analytics.observedFormation?.away;
-        if (formation && formation !== "?" && formation !== "—") {
-          formationCounts[formation] = (formationCounts[formation] || 0) + 1;
-        }
-
-        const hull = isHome
-          ? analytics.convexHull?.home
-          : analytics.convexHull?.away;
-        if (typeof hull === "number") {
-          hullSum += hull;
-          hullCount += 1;
-        }
-
-        const defLine = isHome
-          ? analytics.defensiveLine?.home
-          : analytics.defensiveLine?.away;
-        if (typeof defLine === "number") {
-          defLineSum += defLine;
-          defLineCount += 1;
-        }
-      } catch {
-        // partido sin tracking analytics — ignorar
-      }
-    }
-
-    const mostUsedFormation =
-      Object.entries(formationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ??
-      "—";
-
-    // 5. Elo
-    const elo = await TeamEloRating.findByPk(teamId);
-    const eloHistory = ((elo?.ratingHistory as any[]) ?? [])
+    // ── Paso 5: mapear resultados ─────────────────────────────────────────────
+    const eloRecord = elo as any;
+    const eloHistory = ((eloRecord?.ratingHistory as any[]) ?? [])
       .slice(-15)
       .map((h: any) => ({
         matchId: Number(h.matchId),
@@ -246,39 +222,23 @@ export class TeamCareerService {
         opponent: Number(h.opponent),
       }));
 
-    // 6. Top jugadores
-    const topScorersRaw = await this.topPlayers(teamId, matchIds, "goals", "SUM", 5);
-    const topScorers = topScorersRaw.map((p) => ({
+    const topScorers = (topScorersRaw as any[]).map((p) => ({
       playerId: p.playerId,
       name: p.name,
-      goals: Number((p as any).goals ?? 0),
+      goals: Number(p.goals ?? 0),
     }));
-    const topAssistantsRaw = await this.topPlayers(teamId, matchIds, "assists", "SUM", 5);
-    const topAssistants = topAssistantsRaw.map((p) => ({
+    const topAssistants = (topAssistantsRaw as any[]).map((p) => ({
       playerId: p.playerId,
       name: p.name,
-      assists: Number((p as any).assists ?? 0),
+      assists: Number(p.assists ?? 0),
     }));
-    const topRated = await this.topRatedPlayers(teamId, matchIds, 5);
 
-    // 7. Próximos partidos
-    const upcoming = await Match.findAll({
-      where: {
-        played: false,
-        date: { [Op.gte]: new Date() },
-        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
-        ...(scope.leagueId ? { leagueId: scope.leagueId } : {}),
-        ...(scope.seasonId ? { seasonId: scope.seasonId } : {}),
-      },
-      include: [
-        { model: Team, as: "homeTeam", attributes: ["name"] },
-        { model: Team, as: "awayTeam", attributes: ["name"] },
-      ],
-      order: [["date", "ASC"]],
-      limit: 3,
-    });
+    const { possSum, possCount, hullSum, hullCount, defLineSum, defLineCount, formationCounts } =
+      trackingAgg;
+    const mostUsedFormation =
+      Object.entries(formationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
 
-    const total = matches.length;
+    const total = (matches as any[]).length;
     return {
       team: { id: team.id, name: team.name, logoUrl: team.logoUrl },
       scope,
@@ -297,22 +257,84 @@ export class TeamCareerService {
       avgDistanceTeamKm: Number(avgDistanceKm.toFixed(2)),
       avgConvexHull: hullCount > 0 ? Number((hullSum / hullCount).toFixed(0)) : 0,
       avgDefensiveLine: defLineCount > 0 ? Number((defLineSum / defLineCount).toFixed(1)) : 0,
-      eloRating: Math.round(elo?.rating ?? 1500),
+      eloRating: Math.round(eloRecord?.rating ?? 1500),
       eloHistory,
       formationDistribution: formationCounts,
       mostUsedFormation,
       topScorers,
       topAssistants,
-      topRated,
+      topRated: topRated as TeamCareerStats["topRated"],
       recentForm,
-      formStreak: recentForm.map((r) => r.result).reverse().join(""),
-      upcomingMatches: upcoming.map((m: any) => ({
+      formStreak: recentForm
+        .map((r) => r.result)
+        .reverse()
+        .join(""),
+      upcomingMatches: (upcoming as any[]).map((m) => ({
         matchId: m.id,
         date: m.date ? new Date(m.date).toISOString() : null,
-        opponent: (m.homeTeamId === teamId ? m.awayTeam?.name : m.homeTeam?.name) ?? "—",
+        opponent:
+          (m.homeTeamId === teamId ? m.awayTeam?.name : m.homeTeam?.name) ?? "—",
         isHome: m.homeTeamId === teamId,
       })),
     };
+  }
+
+  /**
+   * Agrega métricas de TrackingAnalytics en paralelo (posesión, formación,
+   * convexHull, defensiveLine) para los últimos N partidos del equipo.
+   *
+   * Reemplaza el antiguo for...await secuencial que bloqueaba el endpoint.
+   */
+  private static async aggregateTrackingStats(
+    teamId: number,
+    matches: any[]
+  ): Promise<{
+    possSum: number;
+    possCount: number;
+    hullSum: number;
+    hullCount: number;
+    defLineSum: number;
+    defLineCount: number;
+    formationCounts: Record<string, number>;
+  }> {
+    let possSum = 0, possCount = 0;
+    let hullSum = 0, hullCount = 0;
+    let defLineSum = 0, defLineCount = 0;
+    const formationCounts: Record<string, number> = {};
+
+    if (!matches.length) {
+      return { possSum, possCount, hullSum, hullCount, defLineSum, defLineCount, formationCounts };
+    }
+
+    // Todas las queries de cache en paralelo en lugar de secuencialmente
+    const results = await Promise.allSettled(
+      matches.map((m) => TrackingAnalyticsService.getOrCompute(m.id))
+    );
+
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status !== "fulfilled") continue;
+      const analytics = (results[i] as PromiseFulfilledResult<any>).value;
+      const m = matches[i];
+      const isHome = m.homeTeamId === teamId;
+
+      const possession = isHome ? analytics.possession?.home : analytics.possession?.away;
+      if (typeof possession === "number") { possSum += possession; possCount++; }
+
+      const formation = isHome
+        ? analytics.observedFormation?.home
+        : analytics.observedFormation?.away;
+      if (formation && formation !== "?" && formation !== "—") {
+        formationCounts[formation] = (formationCounts[formation] || 0) + 1;
+      }
+
+      const hull = isHome ? analytics.convexHull?.home : analytics.convexHull?.away;
+      if (typeof hull === "number") { hullSum += hull; hullCount++; }
+
+      const defLine = isHome ? analytics.defensiveLine?.home : analytics.defensiveLine?.away;
+      if (typeof defLine === "number") { defLineSum += defLine; defLineCount++; }
+    }
+
+    return { possSum, possCount, hullSum, hullCount, defLineSum, defLineCount, formationCounts };
   }
 
   /** Helper: top N jugadores por SUM/AVG de un campo */
@@ -337,18 +359,19 @@ export class TeamCareerService {
       raw: true,
     });
 
-    const ids = rows.map((r) => Number(r.playerId)).filter((n) => Number.isInteger(n) && n > 0);
+    const ids = rows
+      .map((r) => Number(r.playerId))
+      .filter((n) => Number.isInteger(n) && n > 0);
     const users = await User.findAll({
       where: { id: { [Op.in]: ids } },
       attributes: ["id", "name"],
     });
     const nameMap = new Map(users.map((u) => [u.id, u.name]));
 
-    const labelKey = field;
     return rows.map((r) => ({
       playerId: Number(r.playerId),
       name: nameMap.get(Number(r.playerId)) ?? "—",
-      [labelKey]: Number(r.total),
+      [field]: Number(r.total),
     }));
   }
 
@@ -374,7 +397,9 @@ export class TeamCareerService {
       raw: true,
     });
 
-    const ids = rows.map((r) => Number(r.playerId)).filter((n) => Number.isInteger(n) && n > 0);
+    const ids = rows
+      .map((r) => Number(r.playerId))
+      .filter((n) => Number.isInteger(n) && n > 0);
     const users = await User.findAll({
       where: { id: { [Op.in]: ids } },
       attributes: ["id", "name"],

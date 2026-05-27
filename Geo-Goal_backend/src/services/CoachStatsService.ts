@@ -42,7 +42,7 @@ export interface CoachStats {
   mostUsedFormation: string;
   avgGoalsScored: number;
   avgGoalsConceded: number;
-  attackingIndex: number; // 0 = muy defensivo, 1 = muy ofensivo
+  attackingIndex: number;
 
   // Jugadores formados
   topPlayersFormed: Array<{
@@ -67,62 +67,71 @@ export interface CoachStats {
 
 export class CoachStatsService {
   static async getStats(coachId: number): Promise<CoachStats> {
-    const coach = await User.findByPk(coachId, { attributes: ["id", "name"] });
+    // ── Paso 1: todas las queries iniciales independientes en paralelo ─────────
+    const [coach, teams, detailsHome, detailsAway] = await Promise.all([
+      User.findByPk(coachId, { attributes: ["id", "name"] }),
+      Team.findAll({
+        where: { trainerId: coachId },
+        attributes: ["id", "name", "logoUrl"],
+      }),
+      MatchDetail.findAll({
+        where: { homeCoachId: coachId },
+        attributes: ["matchId"],
+      }),
+      MatchDetail.findAll({
+        where: { awayCoachId: coachId },
+        attributes: ["matchId"],
+      }),
+    ]);
+
     if (!coach) throw new Error(`Coach ${coachId} not found`);
 
-    // 1. Equipos donde es trainer principal
-    const teams = await Team.findAll({
-      where: { trainerId: coachId },
-      attributes: ["id", "name", "logoUrl"],
-    });
-
-    // 2. Match IDs donde aparece como coach (en MatchDetail)
-    const detailsHome = await MatchDetail.findAll({
-      where: { homeCoachId: coachId },
-      attributes: ["matchId"],
-    });
-    const detailsAway = await MatchDetail.findAll({
-      where: { awayCoachId: coachId },
-      attributes: ["matchId"],
-    });
     const coachedMatchIds = Array.from(
       new Set([
-        ...detailsHome.map((d) => d.matchId),
-        ...detailsAway.map((d) => d.matchId),
+        ...(detailsHome as any[]).map((d) => d.matchId),
+        ...(detailsAway as any[]).map((d) => d.matchId),
       ])
     );
+    const teamIds = (teams as any[]).map((t) => t.id);
 
-    // 3. Partidos jugados donde dirigió + detail para formación
-    const matches: any[] = coachedMatchIds.length
-      ? await Match.findAll({
-          where: { id: { [Op.in]: coachedMatchIds }, played: true },
-          include: [
-            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
-            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
-            {
-              model: MatchDetail,
-              attributes: [
-                "homeCoachId",
-                "awayCoachId",
-                "homeFormation",
-                "awayFormation",
-              ],
-            },
-          ],
-          order: [["date", "DESC"]],
-        })
-      : [];
+    // ── Paso 2: partidos + elo + jugadores formados en paralelo ───────────────
+    const [matches, elos, topPlayersFormed] = await Promise.all([
+      coachedMatchIds.length
+        ? Match.findAll({
+            where: { id: { [Op.in]: coachedMatchIds }, played: true },
+            include: [
+              { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+              { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+              {
+                model: MatchDetail,
+                attributes: [
+                  "homeCoachId",
+                  "awayCoachId",
+                  "homeFormation",
+                  "awayFormation",
+                ],
+              },
+            ],
+            order: [["date", "DESC"]],
+          })
+        : Promise.resolve([]),
 
-    // 4. Agregados W/D/L + estilo táctico
-    let wins = 0,
-      draws = 0,
-      losses = 0,
-      gs = 0,
-      gc = 0;
+      teamIds.length
+        ? TeamEloRating.findAll({
+            where: { teamId: { [Op.in]: teamIds } },
+            attributes: ["teamId", "rating"],
+          })
+        : Promise.resolve([]),
+
+      this.computeTopPlayersFormed(teams as any[], coachedMatchIds),
+    ]);
+
+    // ── Paso 3: agregar W/D/L y estilo táctico en memoria (sin queries) ───────
+    let wins = 0, draws = 0, losses = 0, gs = 0, gc = 0;
     const formationCounts: Record<string, number> = {};
     const recentResults: CoachStats["recentResults"] = [];
 
-    for (const m of matches) {
+    for (const m of matches as any[]) {
       const detail = m.detail ?? m.MatchDetail ?? null;
       const isHomeCoach = detail?.homeCoachId === coachId;
       const isAwayCoach = detail?.awayCoachId === coachId;
@@ -134,60 +143,36 @@ export class CoachStatsService {
       gc += oppScore || 0;
 
       let result: "W" | "D" | "L";
-      if (myScore > oppScore) {
-        wins++;
-        result = "W";
-      } else if (myScore < oppScore) {
-        losses++;
-        result = "L";
-      } else {
-        draws++;
-        result = "D";
-      }
+      if (myScore > oppScore) { wins++; result = "W"; }
+      else if (myScore < oppScore) { losses++; result = "L"; }
+      else { draws++; result = "D"; }
 
-      const myFormation = isHomeCoach
-        ? detail?.homeFormation
-        : detail?.awayFormation;
+      const myFormation = isHomeCoach ? detail?.homeFormation : detail?.awayFormation;
       if (myFormation) {
         formationCounts[myFormation] = (formationCounts[myFormation] || 0) + 1;
       }
 
       if (recentResults.length < 10) {
-        const oppName = isHomeCoach
-          ? m.awayTeam?.name ?? "—"
-          : m.homeTeam?.name ?? "—";
         recentResults.push({
           matchId: m.id,
           date: m.date ? new Date(m.date).toISOString() : null,
           result,
           teamId: isHomeCoach ? m.homeTeamId : m.awayTeamId,
-          opponentName: oppName,
+          opponentName: (isHomeCoach ? m.awayTeam?.name : m.homeTeam?.name) ?? "—",
           score: `${myScore ?? 0}-${oppScore ?? 0}`,
         });
       }
     }
 
-    // 5. Elo actual de sus equipos
-    const teamIds = teams.map((t) => t.id);
-    const elos = teamIds.length
-      ? await TeamEloRating.findAll({
-          where: { teamId: { [Op.in]: teamIds } },
-          attributes: ["teamId", "rating"],
-        })
-      : [];
-    const eloMap = new Map(elos.map((e) => [e.teamId, Number(e.rating)]));
-
-    // 6. Top jugadores formados (con >= 3 partidos bajo este coach)
-    const topPlayersFormed = await this.computeTopPlayersFormed(
-      teams,
-      coachedMatchIds
+    // ── Paso 4: mapear resultados ─────────────────────────────────────────────
+    const eloMap = new Map(
+      (elos as any[]).map((e) => [e.teamId, Number(e.rating)])
     );
 
-    const totalMatches = matches.length;
-    const total = totalMatches; // alias para legibilidad
+    const totalMatches = (matches as any[]).length;
     return {
       coach: { id: coach.id, name: coach.name },
-      teamsManaged: teams.map((t) => ({
+      teamsManaged: (teams as any[]).map((t) => ({
         id: t.id,
         name: t.name,
         logoUrl: t.logoUrl,
@@ -197,15 +182,16 @@ export class CoachStatsService {
       wins,
       draws,
       losses,
-      winRate: total > 0 ? Number((wins / total).toFixed(3)) : 0,
+      winRate: totalMatches > 0 ? Number((wins / totalMatches).toFixed(3)) : 0,
       pointsPerMatch:
-        total > 0 ? Number(((wins * 3 + draws) / total).toFixed(2)) : 0,
+        totalMatches > 0
+          ? Number(((wins * 3 + draws) / totalMatches).toFixed(2))
+          : 0,
       formationDistribution: formationCounts,
       mostUsedFormation:
-        Object.entries(formationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ??
-        "—",
-      avgGoalsScored: total > 0 ? Number((gs / total).toFixed(2)) : 0,
-      avgGoalsConceded: total > 0 ? Number((gc / total).toFixed(2)) : 0,
+        Object.entries(formationCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—",
+      avgGoalsScored: totalMatches > 0 ? Number((gs / totalMatches).toFixed(2)) : 0,
+      avgGoalsConceded: totalMatches > 0 ? Number((gc / totalMatches).toFixed(2)) : 0,
       attackingIndex:
         gs + gc > 0 ? Number((gs / (gs + gc)).toFixed(3)) : 0.5,
       topPlayersFormed,
@@ -218,7 +204,7 @@ export class CoachStatsService {
    * Requiere al menos 3 partidos jugados.
    */
   private static async computeTopPlayersFormed(
-    teams: Team[],
+    teams: any[],
     matchIds: number[]
   ): Promise<CoachStats["topPlayersFormed"]> {
     if (!teams.length || !matchIds.length) return [];
