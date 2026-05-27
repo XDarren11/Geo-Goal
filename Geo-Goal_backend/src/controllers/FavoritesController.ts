@@ -5,7 +5,7 @@ import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { League } from "../models/League";
 
-const ALLOWED_TYPES: FavoriteEntityType[] = ["team", "player", "coach", "league"];
+const ALLOWED_TYPES: FavoriteEntityType[] = ["team", "player", "coach", "league", "admin"];
 
 function isValidType(t: unknown): t is FavoriteEntityType {
   return typeof t === "string" && (ALLOWED_TYPES as string[]).includes(t);

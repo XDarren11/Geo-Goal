@@ -138,8 +138,22 @@ export default function DashboardView() {
             </div>
           </div>
 
+          {/* Admin career dashboard shortcut */}
+          <div className="mt-5">
+            <Link
+              to={`/admins/${user?.id}/dashboard`}
+              className="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 hover:border-emerald-500/60 hover:bg-emerald-500/15 transition-all opacity-0 animate-in-up stagger-6"
+            >
+              <div>
+                <p className="font-bold text-[var(--geo-text)]">🏛️ Mi historial de administrador</p>
+                <p className="text-xs text-[var(--geo-text-muted)] mt-0.5">Ver todas las ligas creadas, equipos y progreso de partidos</p>
+              </div>
+              <ArrowTopRightOnSquareIcon className="h-5 w-5 text-geo-green shrink-0 ml-4" />
+            </Link>
+          </div>
+
           <div className="mt-8 grid gap-5 xl:grid-cols-2">
-            <section className="card-pitch p-5 opacity-0 animate-in-up stagger-6">
+            <section className="card-pitch p-5 opacity-0 animate-in-up stagger-7">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-geo text-xl text-[var(--geo-text)]">Ligas disponibles</h2>
                 <TrophyIcon className="h-5 w-5 text-geo-green" />
@@ -366,6 +380,20 @@ export default function DashboardView() {
               <p className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">Racha</p>
               <p className="mt-2 text-3xl font-geo text-[var(--geo-text)]">{coachDashboard?.stats.streak ?? "-"}</p>
             </div>
+          </div>
+
+          {/* Coach career dashboard shortcut */}
+          <div className="mt-5">
+            <Link
+              to={`/coaches/${user?.id}/dashboard`}
+              className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-500/10 px-5 py-4 hover:border-sky-500/60 hover:bg-sky-500/15 transition-all"
+            >
+              <div>
+                <p className="font-bold text-[var(--geo-text)]">👨‍🏫 Mi carrera como entrenador</p>
+                <p className="text-xs text-[var(--geo-text-muted)] mt-0.5">Ver equipos dirigidos, win rate, formación favorita y forma reciente</p>
+              </div>
+              <ArrowTopRightOnSquareIcon className="h-5 w-5 text-sky-400 shrink-0 ml-4" />
+            </Link>
           </div>
 
           <div className="mt-8 grid gap-5 xl:grid-cols-2">
@@ -637,6 +665,20 @@ export default function DashboardView() {
             ) : (
               <p className="text-sm text-[var(--geo-text-muted)]">No tienes próximos juegos.</p>
             )}
+          </div>
+
+          {/* Player career dashboard shortcut */}
+          <div className="mt-5">
+            <Link
+              to={`/players/${user?.id}/dashboard`}
+              className="flex items-center justify-between rounded-xl border border-violet-500/30 bg-violet-500/10 px-5 py-4 hover:border-violet-500/60 hover:bg-violet-500/15 transition-all"
+            >
+              <div>
+                <p className="font-bold text-[var(--geo-text)]">⚽ Mi carrera como jugador</p>
+                <p className="text-xs text-[var(--geo-text-muted)] mt-0.5">Ver estadísticas personales, rating, goles y forma reciente</p>
+              </div>
+              <ArrowTopRightOnSquareIcon className="h-5 w-5 text-violet-400 shrink-0 ml-4" />
+            </Link>
           </div>
 
           <div className="mt-8 grid gap-5 xl:grid-cols-2">

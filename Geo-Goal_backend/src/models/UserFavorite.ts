@@ -8,7 +8,7 @@ import {
 } from "sequelize-typescript";
 import { User } from "./User";
 
-export type FavoriteEntityType = "team" | "player" | "coach" | "league";
+export type FavoriteEntityType = "team" | "player" | "coach" | "league" | "admin";
 
 @Table({
   tableName: "user_favorites",

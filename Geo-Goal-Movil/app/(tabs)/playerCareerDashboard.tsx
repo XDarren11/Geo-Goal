@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPlayerDashboard } from '@/Api/publicAPI';
+import { getPlayerDashboard, getPublicPlayerHeatmap } from '@/Api/publicAPI';
 import { addFavorite, removeFavoriteByEntity, getFavoriteIds } from '@/Api/favoritesAPI';
 import { useAuth } from '@/hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,6 +76,16 @@ export default function PlayerCareerDashboardScreen() {
     staleTime: 60_000,
   });
 
+  // Deferred — only starts after main dashboard loads; reads cache-only, no heavy compute
+  const { data: heatmapRes, isLoading: heatmapLoading } = useQuery({
+    queryKey: ['playerHeatmap', id],
+    queryFn: () => getPublicPlayerHeatmap(id),
+    enabled: !!id && !isLoading,
+    staleTime: 5 * 60_000,
+  });
+
+  const { width: screenWidth } = useWindowDimensions();
+
   const isFav = favIds.some((f) => f.entityType === 'player' && f.entityId === id);
 
   const toggleFav = useMutation({
@@ -105,6 +115,9 @@ export default function PlayerCareerDashboardScreen() {
       </View>
     );
   }
+
+  // 16px outer padding * 2 + 12px card inner padding * 2 = 56px
+  const heatCellW = Math.floor((screenWidth - 56) / 21);
 
   // ── derived ──
   const avg = data.avgRating ?? 0;
@@ -260,6 +273,89 @@ export default function PlayerCareerDashboardScreen() {
             </View>
           </DashSection>
         )}
+
+        {/* ── Mapa de calor posicional ── */}
+        <DashSection title="Mapa de calor posicional">
+          <View
+            style={{
+              backgroundColor: '#0f172a',
+              borderWidth: 1,
+              borderColor: '#39FF1420',
+              borderRadius: 20,
+              overflow: 'hidden',
+              padding: 12,
+            }}
+          >
+            {heatmapLoading ? (
+              <View style={{ height: 110, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Ionicons name="map-outline" size={26} color="#374151" />
+                <Text style={{ color: '#6b7280', fontSize: 12 }}>Cargando mapa de calor...</Text>
+              </View>
+            ) : heatmapRes && heatmapRes.matchesWithData > 0 ? (
+              <>
+                {/* Field wrapper */}
+                <View
+                  style={{
+                    borderWidth: 1,
+                    borderColor: '#39FF1440',
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                    backgroundColor: '#061410',
+                    alignSelf: 'center',
+                  }}
+                >
+                  {heatmapRes.heatmap.map((row, rIdx) => (
+                    <View key={rIdx} style={{ flexDirection: 'row' }}>
+                      {row.map((val, cIdx) => {
+                        const op = val < 0.02 ? 0 : Math.min(0.92, val);
+                        return (
+                          <View
+                            key={cIdx}
+                            style={{
+                              width: heatCellW,
+                              height: heatCellW,
+                              backgroundColor:
+                                op === 0
+                                  ? 'transparent'
+                                  : `rgba(57, 255, 20, ${op.toFixed(2)})`,
+                            }}
+                          />
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+                {/* Legend row */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    {[0.08, 0.25, 0.55, 0.85].map((op, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: 2,
+                          backgroundColor: `rgba(57, 255, 20, ${op})`,
+                        }}
+                      />
+                    ))}
+                    <Text style={{ color: '#6b7280', fontSize: 9, marginLeft: 2 }}>baja → alta actividad</Text>
+                  </View>
+                  <Text style={{ color: '#4b5563', fontSize: 9 }}>
+                    {heatmapRes.matchesWithData}/{heatmapRes.totalMatches} partidos
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={{ height: 80, alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Ionicons name="map-outline" size={24} color="#374151" />
+                <Text style={{ color: '#4b5563', fontSize: 12, textAlign: 'center' }}>
+                  Sin datos de posicionamiento disponibles
+                </Text>
+              </View>
+            )}
+          </View>
+        </DashSection>
 
         {/* ── KPI cards ── */}
         <DashSection title="Estadísticas globales">

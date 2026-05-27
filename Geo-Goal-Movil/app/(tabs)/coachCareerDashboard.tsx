@@ -217,8 +217,18 @@ export default function CoachCareerDashboardScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <KpiCard label="GF/PJ" value={data.avgGoalsFor.toFixed(2)} accent="#38bdf8" sub="por partido" />
-            <KpiCard label="GC/PJ" value={data.avgGoalsAgainst.toFixed(2)} accent="#f97316" sub="por partido" />
+            <KpiCard
+              label="GF/PJ"
+              value={typeof data.avgGoalsFor === 'number' ? data.avgGoalsFor.toFixed(2) : '—'}
+              accent="#38bdf8"
+              sub="por partido"
+            />
+            <KpiCard
+              label="GC/PJ"
+              value={typeof data.avgGoalsAgainst === 'number' ? data.avgGoalsAgainst.toFixed(2) : '—'}
+              accent="#f97316"
+              sub="por partido"
+            />
           </View>
         </View>
 
@@ -281,7 +291,7 @@ export default function CoachCareerDashboardScreen() {
                 const teamWinRate = t.matches > 0 ? t.wins / t.matches : 0;
                 return (
                   <TouchableOpacity
-                    key={t.teamId}
+                    key={`${t.teamId ?? 'team'}-${i}`}
                     onPress={() =>
                       router.push({
                         pathname: '/(tabs)/teamCareerDashboard',
@@ -291,6 +301,7 @@ export default function CoachCareerDashboardScreen() {
                     style={{
                       paddingHorizontal: 14,
                       paddingVertical: 12,
+                      backgroundColor: '#111827',
                       borderBottomWidth: i < data.teamsManaged.length - 1 ? 1 : 0,
                       borderBottomColor: '#1f2937',
                     }}
@@ -312,8 +323,8 @@ export default function CoachCareerDashboardScreen() {
                         >
                           <Ionicons name="shield-outline" size={13} color="#39FF14" />
                         </View>
-                        <Text style={{ color: '#39FF14', fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                          {t.teamName}
+                        <Text style={{ color: '#f8fafc', fontSize: 14, fontWeight: '800', flex: 1 }} numberOfLines={1}>
+                          {t.teamName ?? 'Equipo'}
                         </Text>
                       </View>
                       <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>

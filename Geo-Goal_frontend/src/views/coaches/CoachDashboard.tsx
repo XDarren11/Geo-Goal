@@ -138,30 +138,39 @@ export default function CoachDashboard() {
         )}
       </div>
 
-      {/* Equipos dirigidos */}
+      {/* Equipos dirigidos (histórico) */}
       {data.teamsManaged.length > 0 && (
         <section>
-          <h2 className="text-sm font-bold text-[var(--geo-text)] mb-2">⚽ Equipos que dirige</h2>
+          <h2 className="text-sm font-bold text-[var(--geo-text)] mb-2">⚽ Equipos dirigidos</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {data.teamsManaged.map((t) => (
-              <Link
-                key={t.id}
-                to={`/teams/${t.id}/dashboard`}
-                className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 hover:border-emerald-500/50 transition"
-              >
-                <div className="flex items-center gap-2">
-                  {t.logoUrl ? (
-                    <img src={t.logoUrl} alt={t.name} className="w-8 h-8 rounded object-contain bg-white/5" />
-                  ) : (
-                    <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center text-sm">⚽</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm truncate">{t.name}</div>
-                    <div className="text-[10px] text-[var(--geo-text-muted)]">Elo: {t.currentElo}</div>
+            {data.teamsManaged.map((t) => {
+              const winRate = t.matches > 0 ? t.wins / t.matches : 0;
+              return (
+                <Link
+                  key={t.teamId}
+                  to={`/teams/${t.teamId}/dashboard`}
+                  className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-3 hover:border-emerald-500/50 transition"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {t.logoUrl ? (
+                      <img src={t.logoUrl} alt={t.teamName} className="w-8 h-8 rounded object-contain bg-white/5" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center text-sm">⚽</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm truncate">{t.teamName}</div>
+                      <div className="text-[10px] text-[var(--geo-text-muted)]">{t.matches}PJ · {t.wins}V · Elo {t.currentElo}</div>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                  <div className="h-1.5 rounded-full bg-[var(--geo-bg)] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${winRate >= 0.5 ? "bg-emerald-500" : "bg-amber-500"}`}
+                      style={{ width: `${Math.round(winRate * 100)}%` }}
+                    />
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}
@@ -182,15 +191,15 @@ export default function CoachDashboard() {
         />
         <KpiCard
           label="Goles a favor"
-          value={data.avgGoalsScored.toFixed(2)}
+          value={(data.avgGoalsFor ?? data.avgGoalsScored ?? 0).toFixed(2)}
           hint="por partido"
           accent="emerald"
         />
         <KpiCard
           label="Goles en contra"
-          value={data.avgGoalsConceded.toFixed(2)}
+          value={(data.avgGoalsAgainst ?? data.avgGoalsConceded ?? 0).toFixed(2)}
           hint="por partido"
-          accent={data.avgGoalsConceded < 1 ? "emerald" : data.avgGoalsConceded > 2 ? "red" : "amber"}
+          accent={(data.avgGoalsAgainst ?? data.avgGoalsConceded ?? 0) < 1 ? "emerald" : (data.avgGoalsAgainst ?? data.avgGoalsConceded ?? 0) > 2 ? "red" : "amber"}
         />
       </div>
 
@@ -233,24 +242,23 @@ export default function CoachDashboard() {
       {/* Jugadores formados */}
       <section className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
         <h2 className="text-sm font-bold text-[var(--geo-text)] mb-3">⭐ Mejores jugadores formados</h2>
-        {data.topPlayersFormed.length === 0 ? (
+        {(data.topFormedPlayers ?? data.topPlayersFormed ?? []).length === 0 ? (
           <p className="text-xs text-[var(--geo-text-muted)]">
             Aún no hay jugadores con suficientes partidos bajo su dirección (mínimo 3).
           </p>
         ) : (
           <ul className="space-y-1">
-            {data.topPlayersFormed.map((p, idx) => (
-              <li key={`${p.playerId}-${p.teamId}`} className="flex items-center justify-between gap-2 py-1.5 border-b border-[var(--geo-border)]/20 last:border-0">
+            {(data.topFormedPlayers ?? data.topPlayersFormed ?? []).map((p: any, idx: number) => (
+              <li key={`${p.playerId}-${idx}`} className="flex items-center justify-between gap-2 py-1.5 border-b border-[var(--geo-border)]/20 last:border-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-5 text-xs text-[var(--geo-text-muted)] text-right">{idx + 1}.</span>
                   <Link to={`/players/${p.playerId}/dashboard`} className="font-bold hover:text-emerald-400 truncate">
                     {p.name}
                   </Link>
-                  <span className="text-[10px] text-[var(--geo-text-muted)]">({p.teamName})</span>
                 </div>
-                <div className="text-xs">
-                  <span className="font-black text-emerald-300">{p.avgRating.toFixed(2)}</span>
-                  <span className="text-[var(--geo-text-muted)] ml-2">{p.matchesUnderCoach}p</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-emerald-300">{p.goals ?? p.matchesUnderCoach ?? 0}G</span>
+                  <span className="font-black text-emerald-300">{p.avgRating.toFixed(2)}★</span>
                 </div>
               </li>
             ))}

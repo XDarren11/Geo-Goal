@@ -81,6 +81,12 @@ router.get(
 // ── Listado público de jugadores (descubrir perfiles) ────────────────────────
 
 router.get("/players", asyncHandler(PublicController.getPlayersList));
+router.get(
+  "/players/:id/heatmap",
+  [param("id").isInt({ min: 1 })],
+  handleInputError,
+  asyncHandler(PublicController.getPlayerHeatmap)
+);
 router.get("/teams", asyncHandler(PublicController.getTeamsList));
 router.get("/coaches", asyncHandler(PublicController.getCoachesList));
 
@@ -167,6 +173,13 @@ router.get(
   param("id").isInt().withMessage("ID de coach no válido"),
   handleInputError,
   asyncHandler(PublicController.getCoachDashboard)
+);
+
+router.get(
+  "/admins/:id/dashboard",
+  param("id").isInt().withMessage("ID de admin no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getAdminDashboard)
 );
 
 // ── Fase 7: Revisión de eventos inferidos ────────────────────────────────────

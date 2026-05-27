@@ -445,6 +445,30 @@ export class PublicController {
     }
   };
 
+  // ── Heatmap diferido — solo lee cache, nunca re-computa ──────────────────────
+  static getPlayerHeatmap = async (req: Request, res: Response): Promise<void> => {
+    const { PlayerCareerService } = await import("../services/PlayerCareerService");
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ error: "ID de jugador no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+      teamId:   req.query.team   ? Number(req.query.team)   : undefined,
+    };
+    try {
+      const result = await PlayerCareerService.getHeatmapCached(playerId, scope);
+      // Cache 5 min en el cliente — el heatmap no cambia frecuentemente
+      res.set("Cache-Control", "public, max-age=300");
+      res.json(result);
+    } catch (err: any) {
+      console.error(`[player-heatmap] ${playerId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo calcular el heatmap" });
+    }
+  };
+
   static getTeamDashboard = async (req: Request, res: Response): Promise<void> => {
     const { TeamCareerService } = await import("../services/TeamCareerService");
     const teamId = Number(req.params.id);
@@ -573,5 +597,92 @@ export class PublicController {
         teams: (u.teamsManaged ?? []).map((t: any) => ({ id: t.id, name: t.name })),
       })),
     });
+  };
+
+  // ── Dashboard de administrador — historial de ligas creadas ──────────────
+  static getAdminDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { User }    = await import("../models/User");
+    const { League }  = await import("../models/League");
+    const { Team }    = await import("../models/Team");
+    const { Match }   = await import("../models/Match");
+    const { Op, Sequelize } = await import("sequelize");
+
+    const adminId = Number(req.params.id);
+    if (!Number.isInteger(adminId) || adminId <= 0) {
+      res.status(400).json({ error: "ID de admin no válido" });
+      return;
+    }
+
+    try {
+      const admin = await User.findByPk(adminId, { attributes: ["id", "name", "username"] });
+      if (!admin) { res.status(404).json({ error: "Admin no encontrado" }); return; }
+
+      // Ligas creadas por el admin (más recientes primero)
+      const leagues = await League.findAll({
+        where: { managerId: adminId },
+        attributes: ["id", "name", "logoUrl", "createdAt"],
+        include: [{ model: Team, attributes: ["id"], required: false }],
+        order: [["createdAt", "DESC"]],
+      });
+
+      const leagueIds = (leagues as any[]).map((l) => l.id);
+
+      // Conteo de partidos por liga (1 query batch)
+      let matchStats: Record<number, { total: number; played: number }> = {};
+      if (leagueIds.length > 0) {
+        const rows = await Match.findAll({
+          where: { leagueId: { [Op.in]: leagueIds } },
+          attributes: [
+            "leagueId",
+            [Sequelize.fn("COUNT", Sequelize.col("id")), "total"],
+            [Sequelize.fn("SUM",
+              Sequelize.literal("CASE WHEN played = true THEN 1 ELSE 0 END")), "played"],
+          ],
+          group: ["leagueId"],
+          raw: true,
+        }) as any[];
+
+        for (const r of rows) {
+          matchStats[Number(r.leagueId)] = {
+            total:  Number(r.total  ?? 0),
+            played: Number(r.played ?? 0),
+          };
+        }
+      }
+
+      let totalMatches = 0;
+      let totalTeams   = 0;
+
+      const leagueList = (leagues as any[]).map((l) => {
+        const ms         = matchStats[l.id] ?? { total: 0, played: 0 };
+        const teamsCount = (l.teams ?? []).length;
+        totalMatches += ms.total;
+        totalTeams   += teamsCount;
+        return {
+          leagueId:       l.id,
+          name:           l.name,
+          logoUrl:        l.logoUrl ?? null,
+          teamsCount,
+          matchesTotal:   ms.total,
+          matchesPlayed:  ms.played,
+          createdAt:      l.createdAt ? new Date(l.createdAt).toISOString() : null,
+        };
+      });
+
+      res.json({
+        admin: {
+          id:       admin.id,
+          name:     admin.name,
+          username: (admin as any).username ?? null,
+        },
+        totalLeagues: leagues.length,
+        totalTeams,
+        totalMatches,
+        leagues: leagueList,
+      });
+    } catch (err: any) {
+      console.error(`[admin-dashboard] ${adminId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo cargar el dashboard del admin" });
+    }
   };
 }

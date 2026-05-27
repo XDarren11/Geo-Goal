@@ -45,6 +45,7 @@ import PlayerDashboardView from "@/views/players/PlayerDashboard";
 import PlayersListView from "@/views/players/PlayersList";
 import TeamCareerDashboardView from "@/views/teams/TeamDashboard";
 import CoachDashboardView from "@/views/coaches/CoachDashboard";
+import AdminCareerDashboardView from "@/views/admin/AdminCareerDashboard";
 
 const ACCESS_TOKEN_KEY = "AUTH_TOKEN";
 const REFRESH_TOKEN_KEY = "AUTH_REFRESH_TOKEN";
@@ -226,6 +227,7 @@ export default function Router() {
           <Route path="/players/:playerId/dashboard" element={<PlayerDashboardView />} />
           <Route path="/teams/:teamId/dashboard" element={<TeamCareerDashboardView />} />
           <Route path="/coaches/:coachId/dashboard" element={<CoachDashboardView />} />
+          <Route path="/admins/:adminId/dashboard" element={<AdminCareerDashboardView />} />
 
           <Route path="/news" element={<NewsView />} />
           <Route

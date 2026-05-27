@@ -668,10 +668,14 @@ export interface TeamCareerStats {
 export interface CoachStats {
   coach: { id: number; name: string };
   teamsManaged: Array<{
-    id: number;
-    name: string;
+    teamId: number;
+    teamName: string;
     logoUrl: string | null;
     currentElo: number;
+    matches: number;
+    wins: number;
+    draws: number;
+    losses: number;
   }>;
   totalMatches: number;
   wins: number;
@@ -681,16 +685,27 @@ export interface CoachStats {
   pointsPerMatch: number;
   formationDistribution: Record<string, number>;
   mostUsedFormation: string;
-  avgGoalsScored: number;
-  avgGoalsConceded: number;
+  /** @alias avgGoalsFor */
+  avgGoalsScored?: number;
+  /** @alias avgGoalsAgainst */
+  avgGoalsConceded?: number;
+  avgGoalsFor: number;
+  avgGoalsAgainst: number;
   attackingIndex: number;
-  topPlayersFormed: Array<{
+  /** @alias topFormedPlayers */
+  topPlayersFormed?: Array<{
     playerId: number;
     name: string;
     teamId: number;
     teamName: string;
     avgRating: number;
     matchesUnderCoach: number;
+  }>;
+  topFormedPlayers: Array<{
+    playerId: number;
+    name: string;
+    avgRating: number;
+    goals: number;
   }>;
   recentResults: Array<{
     matchId: number;
@@ -774,5 +789,30 @@ export async function getPublicPlayersList(
   const { data } = await api.get<PublicPlayersListResponse>(`${BASE}/players`, {
     params: filters,
   });
+  return data;
+}
+
+// ── Dashboard de administrador — historial de ligas ───────────────────────────
+
+export interface AdminLeagueItem {
+  leagueId: number;
+  name: string;
+  logoUrl: string | null;
+  teamsCount: number;
+  matchesTotal: number;
+  matchesPlayed: number;
+  createdAt: string | null;
+}
+
+export interface AdminCareerStats {
+  admin: { id: number; name: string; username: string | null };
+  totalLeagues: number;
+  totalTeams: number;
+  totalMatches: number;
+  leagues: AdminLeagueItem[];
+}
+
+export async function getAdminDashboard(adminId: number): Promise<AdminCareerStats> {
+  const { data } = await api.get<AdminCareerStats>(`${BASE}/admins/${adminId}/dashboard`);
   return data;
 }

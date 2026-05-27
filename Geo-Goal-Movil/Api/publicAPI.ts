@@ -386,6 +386,32 @@ export async function getPublicPlayersList(opts: {
   return data;
 }
 
+// ── Heatmap diferido del jugador ──────────────────────────────────────────────
+
+export interface PlayerHeatmapResponse {
+  /** Grid normalizado 0-1, dimensiones [14][21] */
+  heatmap: number[][];
+  /** Partidos que tenían datos cacheados */
+  matchesWithData: number;
+  /** Total de partidos del jugador considerados */
+  totalMatches: number;
+}
+
+export async function getPublicPlayerHeatmap(
+  playerId: number,
+  opts: { seasonId?: number; leagueId?: number; teamId?: number } = {}
+): Promise<PlayerHeatmapResponse> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  if (opts.teamId)   params.team   = opts.teamId;
+  const { data } = await rawApi.get<PlayerHeatmapResponse>(
+    `${BASE}/players/${playerId}/heatmap`,
+    { params }
+  );
+  return data;
+}
+
 // ── Listado público de equipos ────────────────────────────────────────────────
 
 export interface PublicTeamListItem {
@@ -433,5 +459,30 @@ export async function getPublicCoachesList(opts: {
   search?: string;
 } = {}): Promise<PublicCoachesListResponse> {
   const { data } = await rawApi.get<PublicCoachesListResponse>(`${BASE}/coaches`, { params: opts });
+  return data;
+}
+
+// ── Dashboard de administrador ────────────────────────────────────────────────
+
+export interface AdminLeagueItem {
+  leagueId: number;
+  name: string;
+  logoUrl: string | null;
+  teamsCount: number;
+  matchesTotal: number;
+  matchesPlayed: number;
+  createdAt: string | null;
+}
+
+export interface AdminCareerStats {
+  admin: { id: number; name: string; username: string | null };
+  totalLeagues: number;
+  totalTeams: number;
+  totalMatches: number;
+  leagues: AdminLeagueItem[];
+}
+
+export async function getAdminDashboard(adminId: number): Promise<AdminCareerStats> {
+  const { data } = await rawApi.get<AdminCareerStats>(`${BASE}/admins/${adminId}/dashboard`);
   return data;
 }

@@ -36,7 +36,7 @@ export interface PlayerCareerScope {
 }
 
 export interface PlayerCareerStats {
-  player: { id: number; name: string };
+  player: { id: number; name: string; username: string | null };
   scope: PlayerCareerScope;
 
   // KPIs principales
@@ -61,9 +61,11 @@ export interface PlayerCareerStats {
   mvpCount: number;
   weeklyAwards: number;
 
-  // xG acumulado y métrica derivada
+  // Totales derivados — nombres alineados con publicAPI.ts del frontend
   totalXG: number;
-  goalsMinusXG: number; // overperformance positiva = "clutch"
+  xG: number;           // alias de totalXG (compatibilidad frontend)
+  goalsMinusXG: number;
+  tackles: number;      // no está en el modelo → siempre 0
 
   // Histórico de partidos (últimos N por defecto)
   recentForm: Array<{
@@ -77,6 +79,20 @@ export interface PlayerCareerStats {
     result: "W" | "D" | "L" | "—";
     scoreFor: number;
     scoreAgainst: number;
+  }>;
+  /** Alias de recentForm para compatibilidad con frontend */
+  recentMatches: PlayerCareerStats["recentForm"];
+
+  /** Historial de rating en orden cronológico (máx. 30 partidos con rating) */
+  ratingHistory: Array<{ date: string; rating: number }>;
+
+  /** Equipos donde ha jugado, ordenados por partidos desc */
+  topTeams: Array<{
+    teamId: number;
+    teamName: string;
+    matches: number;
+    goals: number;
+    avgRating: number;
   }>;
 
   // Heatmap acumulado (suma normalizada de heatmaps de cada partido)
@@ -102,7 +118,7 @@ export class PlayerCareerService {
     if (scope.leagueId) matchWhere.leagueId = scope.leagueId;
 
     const [user, stats] = await Promise.all([
-      User.findByPk(playerId, { attributes: ["id", "name"] }),
+      User.findByPk(playerId, { attributes: ["id", "name", "username"] }),
       PlayerMatchStat.findAll({
         where: {
           playerId,
@@ -162,7 +178,7 @@ export class PlayerCareerService {
 
     const hasMatches = matchIds.length > 0;
 
-    const [fouls, shotEvents, mvpCount, weeklyAwards, aggregatedHeatmap, rankTuple] =
+    const [fouls, shotEvents, mvpCount, weeklyAwards, rankTuple] =
       await Promise.all([
         // 3a. Faltas
         hasMatches
@@ -189,10 +205,9 @@ export class PlayerCareerService {
         // 3d. Premios semanales
         WeeklyAward.count({ where: weeklyAwardsWhere }),
 
-        // 3e. Heatmap acumulado (paralelo internamente + cap por partidos)
-        this.aggregateHeatmap(playerId, matchIds),
+        // NOTA: heatmap eliminado del flujo principal (→ endpoint /heatmap separado)
 
-        // 3f. Ranking en equipo (3 queries en paralelo entre sí)
+        // 3e. Ranking en equipo (3 queries en paralelo entre sí)
         scope.teamId
           ? Promise.all([
               this.computeRankInTeam(playerId, scope.teamId, "rating", "AVG"),
@@ -241,11 +256,52 @@ export class PlayerCareerService {
     const [rankRating, rankGoals, rankAssists] = rankTuple as [
       number | null,
       number | null,
-      number | null,
+      number | null
     ];
 
+    // ── Paso 6: topTeams y ratingHistory (en memoria, sin queries extra) ──────
+
+    // Equipos donde jugó: agrupamos TODOS los stats (no solo los recientes)
+    const teamGrouped = new Map<
+      number,
+      { teamId: number; teamName: string; matches: number; goals: number; ratingSum: number; ratingCount: number }
+    >();
+    for (const s of stats as any[]) {
+      const tid = s.teamId;
+      const hTeam = s.match?.homeTeam;
+      const aTeam = s.match?.awayTeam;
+      const tName: string = (hTeam?.id === tid ? hTeam?.name : aTeam?.name) ?? "—";
+      if (!teamGrouped.has(tid)) {
+        teamGrouped.set(tid, { teamId: tid, teamName: tName, matches: 0, goals: 0, ratingSum: 0, ratingCount: 0 });
+      }
+      const tg = teamGrouped.get(tid)!;
+      tg.matches++;
+      tg.goals     += s.goals   || 0;
+      tg.ratingSum += s.rating  || 0;
+      if (s.rating) tg.ratingCount++;
+    }
+    const topTeams = Array.from(teamGrouped.values())
+      .map((t) => ({
+        teamId:    t.teamId,
+        teamName:  t.teamName,
+        matches:   t.matches,
+        goals:     t.goals,
+        avgRating: t.ratingCount > 0 ? Number((t.ratingSum / t.ratingCount).toFixed(2)) : 0,
+      }))
+      .sort((a, b) => b.matches - a.matches);
+
+    // Historial de rating en orden cronológico (los últimos 30 con rating > 0)
+    const ratingHistory = (stats as any[])
+      .slice(0, 30)
+      .filter((s) => s.rating > 0)
+      .reverse()
+      .map((s) => ({
+        date:   s.match?.date ? new Date(s.match.date).toISOString() : "",
+        rating: Number((s.rating as number).toFixed(2)),
+      }));
+
     return {
-      player: { id: playerId, name: user?.name ?? "—" },
+      player: { id: playerId, name: user?.name ?? "—", username: (user as any)?.username ?? null },
       scope,
       matchesPlayed: agg.matches,
       minutesPlayed: agg.minutes,
@@ -271,16 +327,112 @@ export class PlayerCareerService {
       topRating: Number(agg.topRating.toFixed(2)),
       mvpCount: mvpCount as number,
       weeklyAwards: weeklyAwards as number,
-      totalXG: Number(totalXG.toFixed(2)),
+      totalXG:      Number(totalXG.toFixed(2)),
+      xG:           Number(totalXG.toFixed(2)),  // alias para el frontend
       goalsMinusXG: Number((agg.goals - totalXG).toFixed(2)),
+      tackles:      0,  // columna no existe en player_match_stats
       recentForm,
-      aggregatedHeatmap,
+      recentMatches: recentForm,  // alias para el frontend
+      ratingHistory,
+      topTeams,
+      aggregatedHeatmap: [], // heatmap disponible en GET /public/players/:id/heatmap
       teamRank: {
         rating: rankRating,
         goals: rankGoals,
         assists: rankAssists,
       },
     };
+  }
+
+  /**
+   * Endpoint rápido: lee heatmaps SOLO de partidos ya cacheados.
+   * Una sola query batch a match_analytics_cache — nunca dispara recomputación.
+   *
+   * @returns heatmap normalizado (0-1), matchesWithData, totalMatches
+   */
+  static async getHeatmapCached(
+    playerId: number,
+    scope: PlayerCareerScope = {}
+  ): Promise<{
+    heatmap: number[][];
+    matchesWithData: number;
+    totalMatches: number;
+  }> {
+    const { MatchAnalyticsCache } = await import("../models/MatchAnalyticsCache");
+
+    const matchWhere: any = {};
+    if (scope.seasonId) matchWhere.seasonId = scope.seasonId;
+    if (scope.leagueId) matchWhere.leagueId = scope.leagueId;
+
+    // 1. Obtener los matchIds del jugador (solo su stats)
+    const statsRows = await PlayerMatchStat.findAll({
+      where: {
+        playerId,
+        ...(scope.teamId ? { teamId: scope.teamId } : {}),
+      },
+      include: [
+        {
+          model: Match,
+          where: Object.keys(matchWhere).length ? matchWhere : undefined,
+          required: true,
+          attributes: ["id"],
+        },
+      ],
+      attributes: ["matchId"],
+      order: [[{ model: Match, as: "match" } as any, "date", "DESC"]],
+      limit: HEATMAP_MATCH_LIMIT,
+    });
+
+    const matchIds = (statsRows as any[]).map((s) => s.matchId);
+    const totalMatches = matchIds.length;
+
+    if (totalMatches === 0) {
+      return {
+        heatmap: Array.from({ length: HEATMAP_H }, () => Array(HEATMAP_W).fill(0)),
+        matchesWithData: 0,
+        totalMatches: 0,
+      };
+    }
+
+    // 2. Una sola query batch — solo leer, nunca computar
+    const cached = await MatchAnalyticsCache.findAll({
+      where: { matchId: { [Op.in]: matchIds } },
+      attributes: ["matchId", "payload"],
+    });
+
+    // 3. Agregar heatmaps en memoria
+    const sum: number[][] = Array.from({ length: HEATMAP_H }, () =>
+      Array(HEATMAP_W).fill(0)
+    );
+    let matchesWithData = 0;
+
+    for (const row of cached) {
+      const heatmap = (row.payload as any)?.heatmaps?.[playerId];
+      if (!Array.isArray(heatmap) || heatmap.length !== HEATMAP_H) continue;
+      for (let y = 0; y < HEATMAP_H; y++) {
+        const gridRow = heatmap[y];
+        if (!Array.isArray(gridRow) || gridRow.length !== HEATMAP_W) continue;
+        for (let x = 0; x < HEATMAP_W; x++) {
+          sum[y][x] += Number(gridRow[x]) || 0;
+        }
+      }
+      matchesWithData++;
+    }
+
+    if (matchesWithData === 0) {
+      return { heatmap: sum, matchesWithData: 0, totalMatches };
+    }
+
+    // 4. Normalizar 0-1
+    let max = 0;
+    for (const row of sum) for (const v of row) if (v > max) max = v;
+    if (max > 0) {
+      for (let y = 0; y < HEATMAP_H; y++)
+        for (let x = 0; x < HEATMAP_W; x++)
+          sum[y][x] = Number((sum[y][x] / max).toFixed(3));
+    }
+
+    return { heatmap: sum, matchesWithData, totalMatches };
   }
 
   /**

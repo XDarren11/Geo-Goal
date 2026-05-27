@@ -138,22 +138,30 @@ export default function HomeScreen() {
           <>
             <Text className="text-white text-lg font-bold mb-2">Administrador</Text>
             <TouchableOpacity
-              onPress={() =>
-                Alert.alert(
-                  'Solo disponible en web',
-                  'Para crear o gestionar ligas accede a la plataforma web de Geo-Goal.',
-                  [{ text: 'Entendido' }]
-                )
-              }
-              className="bg-gradient-to-r from-geo-green/20 to-geo-green/5 border border-geo-green rounded-xl p-4 flex-row items-center justify-between"
+              onPress={() => router.push('/league/create')}
+              className="border border-geo-green rounded-xl p-4 flex-row items-center justify-between bg-geo-green/10"
             >
               <View className="flex-1">
                 <Text className="text-geo-green font-bold">Crear Liga</Text>
-                <Text className="text-gray-400 text-sm">Disponible en la plataforma web</Text>
+                <Text className="text-gray-400 text-sm">Configura nombre, descripción y formato</Text>
               </View>
-              <Ionicons name="globe-outline" size={24} color="#39FF14" />
+              <Ionicons name="add-circle-outline" size={24} color="#39FF14" />
             </TouchableOpacity>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Admin</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Admin</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/adminCareerDashboard',
+                    params: { adminId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Text className="text-geo-green text-xs font-bold">Ver ligas</Text>
+                <Ionicons name="chevron-forward" size={12} color="#39FF14" />
+              </TouchableOpacity>
+            </View>
             <View className="flex-row gap-2">
               <KPI label="Ligas" value={adminDashboard?.stats?.leagues ?? 0} />
               <KPI label="Próximos" value={adminDashboard?.stats?.nextMatches ?? 0} />
@@ -208,6 +216,17 @@ export default function HomeScreen() {
               <KPI label="GC" value={coachDashboard?.stats?.goalsAgainst ?? 0} />
               <KPI label="Racha" value={coachDashboard?.stats?.streak ?? '-'} />
             </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/team/create')}
+              className="border border-sky-500/60 rounded-xl p-4 flex-row items-center justify-between bg-sky-500/10"
+            >
+              <View className="flex-1">
+                <Text className="text-sky-400 font-bold">Crear Equipo</Text>
+                <Text className="text-gray-400 text-sm">Registra tu equipo con nombre y cancha</Text>
+              </View>
+              <Ionicons name="add-circle-outline" size={24} color="#38bdf8" />
+            </TouchableOpacity>
 
             <Section title="Próximos partidos">
               {coachLoading ? <Loader label="Cargando..." /> : (coachDashboard?.upcomingMatches ?? []).slice(0, 4).map((m: any) => (

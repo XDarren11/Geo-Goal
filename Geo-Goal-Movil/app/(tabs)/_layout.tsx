@@ -161,6 +161,7 @@ export default function TabLayout() {
       <Tabs.Screen name="playerCareerDashboard" options={{ href: null }} />
       <Tabs.Screen name="teamCareerDashboard" options={{ href: null }} />
       <Tabs.Screen name="coachCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="adminCareerDashboard" options={{ href: null }} />
       <Tabs.Screen name="playersList" options={{ href: null }} />
     </Tabs>
   );
