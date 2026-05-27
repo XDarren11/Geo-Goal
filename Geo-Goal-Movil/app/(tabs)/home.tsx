@@ -173,7 +173,21 @@ export default function HomeScreen() {
 
         {user.role === 'coach' && (
           <>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Entrenador</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Entrenador</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/coachCareerDashboard',
+                    params: { coachId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Ionicons name="stats-chart" size={14} color="#39FF14" />
+                <Text className="text-geo-green text-xs font-bold">Mi carrera</Text>
+              </TouchableOpacity>
+            </View>
             <View className="flex-row gap-2 flex-wrap">
               <KPI label="PJ" value={coachDashboard?.stats?.playedMatches ?? 0} />
               <KPI label="PTS" value={coachDashboard?.stats?.points ?? 0} />
@@ -251,7 +265,21 @@ export default function HomeScreen() {
 
         {user.role === 'player' && (
           <>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Jugador</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Jugador</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/playerCareerDashboard',
+                    params: { playerId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Ionicons name="stats-chart" size={14} color="#39FF14" />
+                <Text className="text-geo-green text-xs font-bold">Mi carrera</Text>
+              </TouchableOpacity>
+            </View>
             <Section title="Próximo juego">
               {playerLoading ? <Loader label="Cargando..." /> : playerDashboard?.nextMatch ? (
                 <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-3">

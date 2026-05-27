@@ -181,6 +181,11 @@ export default function TabLayout() {
           headerShown: false,
         }}
       />
+      {/* Fase 8 + nuevas funcionalidades — ocultas de la barra de tabs */}
+      <Tabs.Screen name="playerCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="teamCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="coachCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="playersList" options={{ href: null }} />
     </Tabs>
   );
 }

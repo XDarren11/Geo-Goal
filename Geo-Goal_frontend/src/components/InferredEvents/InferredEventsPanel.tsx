@@ -68,14 +68,12 @@ function formatMinute(minute: number, extraMinute?: number | null): string {
 
 function EventRow({
   ev,
-  matchId,
   onConfirm,
   onReject,
   onUpdate,
   busy,
 }: {
   ev: InferredEvent;
-  matchId: number;
   onConfirm: (id: number) => void;
   onReject: (id: number) => void;
   onUpdate: (id: number, changes: Record<string, unknown>) => void;
@@ -175,7 +173,7 @@ function EventRow({
               disabled={busy}
               className="rounded bg-blue-600 px-3 py-1 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              💾 Guardar
+              Guardar
             </button>
             <button
               onClick={() => setEditing(false)}
@@ -302,7 +300,6 @@ export function InferredEventsPanel({ matchId }: { matchId: number }) {
           <EventRow
             key={ev.id}
             ev={ev}
-            matchId={matchId}
             onConfirm={confirmMut.mutate}
             onReject={rejectMut.mutate}
             onUpdate={(id, changes) => updateMut.mutate({ id, changes })}

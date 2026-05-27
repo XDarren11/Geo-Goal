@@ -9,9 +9,11 @@ import { useAuth } from '@/hooks/useAuth';
 import type { League } from '@/types';
 import Loader from '@/components/Loader';
 
+type ExploreTab = 'leagues' | 'teams' | 'players';
+
 export default function ExploreScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'leagues' | 'teams'>('leagues');
+  const [activeTab, setActiveTab] = useState<ExploreTab>('leagues');
   const params = useLocalSearchParams();
   const { data: user } = useAuth();
 
@@ -74,6 +76,9 @@ export default function ExploreScreen() {
     }
   };
 
+  // Mi equipo dinámico: si el jugador tiene exactamente 1 equipo, atajo directo al dashboard
+  const singleTeam = user?.role === 'player' && teams.length === 1 ? teams[0] : null;
+
   return (
     <View className="flex-1 bg-geo-black">
       {/* Header */}
@@ -82,6 +87,28 @@ export default function ExploreScreen() {
         <Text className="text-geo-green text-2xl font-extrabold">Explorar</Text>
       </View>
 
+      {/* Mi equipo dinámico: atajo si el jugador tiene 1 solo equipo */}
+      {singleTeam ? (
+        <View className="mx-4 mt-3">
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/(tabs)/teamCareerDashboard' as any,
+                params: { teamId: String(singleTeam.id), name: singleTeam.name },
+              })
+            }
+            className="flex-row items-center gap-3 rounded-2xl border border-geo-green/40 bg-geo-green/10 px-4 py-3"
+          >
+            <Ionicons name="football" size={20} color="#39FF14" />
+            <View className="flex-1">
+              <Text className="text-geo-green text-xs uppercase tracking-wider font-bold">Mi equipo</Text>
+              <Text className="text-white font-semibold">{singleTeam.name}</Text>
+            </View>
+            <Ionicons name="stats-chart" size={18} color="#39FF14" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       {/* Tabs */}
       <View className="px-4 py-3">
         <View className="flex-row rounded-2xl bg-gray-900/80 border border-geo-green/20 p-1">
@@ -89,7 +116,7 @@ export default function ExploreScreen() {
             onPress={() => setActiveTab('leagues')}
             className={`py-2 px-2 flex-1 rounded-xl ${activeTab === 'leagues' ? 'bg-geo-green/15' : ''}`}
           >
-            <Text className={`font-semibold text-center ${activeTab === 'leagues' ? 'text-geo-green' : 'text-gray-400'}`}>
+            <Text className={`font-semibold text-center text-xs ${activeTab === 'leagues' ? 'text-geo-green' : 'text-gray-400'}`}>
               Ligas
             </Text>
           </TouchableOpacity>
@@ -98,9 +125,16 @@ export default function ExploreScreen() {
             onPress={() => setActiveTab('teams')}
             className={`py-2 px-2 flex-1 rounded-xl ${activeTab === 'teams' ? 'bg-geo-green/15' : ''}`}
           >
-            <Text className={`font-semibold text-center ${activeTab === 'teams' ? 'text-geo-green' : 'text-gray-400'}`}>
+            <Text className={`font-semibold text-center text-xs ${activeTab === 'teams' ? 'text-geo-green' : 'text-gray-400'}`}>
               Equipos
             </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/playersList' as any)}
+            className="py-2 px-2 flex-1 rounded-xl"
+          >
+            <Text className="font-semibold text-center text-xs text-gray-400">Jugadores</Text>
           </TouchableOpacity>
         </View>
       </View>

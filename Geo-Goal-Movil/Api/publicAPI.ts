@@ -163,3 +163,129 @@ export async function getAIServiceHealth(): Promise<AIServiceHealth> {
   const res = await fetch(`${AI_SERVICE_URL}/health`);
   return res.json();
 }
+
+// ── Fase 8: Dashboards agregados ────────────────────────────────────────────
+
+export interface PlayerCareerStats {
+  player: { id: number; name: string; username?: string | null };
+  matchesPlayed: number;
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  keyPasses: number;
+  tackles: number;
+  fouls: number;
+  yellowCards: number;
+  redCards: number;
+  avgRating: number;
+  mvpCount: number;
+  xG: number;
+  xT: number;
+  heatmapData: Array<{ x: number; y: number; value: number }>;
+  ratingHistory: Array<{ date: string; rating: number }>;
+  recentMatches: Array<{
+    matchId: number;
+    date: string;
+    opponent: string;
+    goals: number;
+    assists: number;
+    rating: number | null;
+    result: 'W' | 'D' | 'L' | '—';
+  }>;
+  topTeams: Array<{ teamId: number; teamName: string; matches: number; goals: number; avgRating: number }>;
+}
+
+export interface TeamCareerStats {
+  team: { id: number; name: string; logoUrl?: string | null };
+  matchesPlayed: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number;
+  pointsPerMatch: number;
+  eloHistory: Array<{ date: string; elo: number }>;
+  formStreak: Array<'W' | 'D' | 'L'>;
+  topScorers: Array<{ playerId: number; name: string; goals: number; avgRating: number }>;
+  topAssistants: Array<{ playerId: number; name: string; assists: number }>;
+  formations: Array<{ formation: string; count: number }>;
+}
+
+export interface CoachStats {
+  coach: { id: number; name: string };
+  totalMatches: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  winRate: number;
+  avgGoalsFor: number;
+  avgGoalsAgainst: number;
+  recentResults: Array<{ matchId: number; date: string; result: 'W' | 'D' | 'L'; goalsFor: number; goalsAgainst: number }>;
+  teamsManaged: Array<{ teamId: number; teamName: string; matches: number; wins: number }>;
+  formationDistribution: Record<string, number>;
+  topFormedPlayers: Array<{ playerId: number; name: string; avgRating: number; goals: number }>;
+}
+
+export async function getPlayerDashboard(
+  playerId: number,
+  opts: { seasonId?: number; leagueId?: number; teamId?: number; last?: number } = {}
+): Promise<PlayerCareerStats> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  if (opts.teamId) params.team = opts.teamId;
+  if (opts.last) params.last = opts.last;
+  const { data } = await api.get<PlayerCareerStats>(`${BASE}/players/${playerId}/dashboard`, { params });
+  return data;
+}
+
+export async function getTeamDashboard(
+  teamId: number,
+  opts: { seasonId?: number; leagueId?: number } = {}
+): Promise<TeamCareerStats> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  const { data } = await api.get<TeamCareerStats>(`${BASE}/teams/${teamId}/dashboard`, { params });
+  return data;
+}
+
+export async function getCoachDashboard(coachId: number): Promise<CoachStats> {
+  const { data } = await api.get<CoachStats>(`${BASE}/coaches/${coachId}/dashboard`);
+  return data;
+}
+
+// ── Listado público de jugadores ─────────────────────────────────────────────
+
+export interface PublicPlayerListItem {
+  playerId: number;
+  name: string;
+  username: string | null;
+  team: { id: number; name: string; logoUrl?: string | null } | null;
+  avgRating: number;
+  totalGoals: number;
+  totalAssists: number;
+  totalMinutes: number;
+  matchCount: number;
+}
+
+export interface PublicPlayersListResponse {
+  players: PublicPlayerListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getPublicPlayersList(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  league?: number;
+  team?: number;
+  minRating?: number;
+  sortBy?: 'rating' | 'goals' | 'assists' | 'matches';
+} = {}): Promise<PublicPlayersListResponse> {
+  const { data } = await api.get<PublicPlayersListResponse>(`${BASE}/players`, { params: opts });
+  return data;
+}
