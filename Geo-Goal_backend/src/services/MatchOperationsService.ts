@@ -3,6 +3,7 @@ import { Match } from "../models/Match";
 import { Season } from "../models/Season";
 import { TeamLeagueStat } from "../models/TeamLeagueStat";
 import { MatchDetail } from "../models/MatchDetail";
+import { Team } from "../models/Team";
 import { AppError } from "../types/errors";
 import { AuditService } from "./AuditService";
 import { NotificationService } from "./NotificationService";
@@ -222,8 +223,7 @@ export class MatchOperationsService {
     match.played = true;
     await match.save();
 
-    await AuditService.log({
-      actorUserId: audit.actorUserId,
+    await AuditService.log({      actorUserId: audit.actorUserId,
       leagueId: match.leagueId,
       seasonId: match.seasonId ?? null,
       entityType: "match",
@@ -243,6 +243,43 @@ export class MatchOperationsService {
     ]);
 
     await MatchAnalyticsService.recalculateForMatch(match.id);
+
+    // ── Elo: actualizar ratings tras el resultado ──────────────────────────
+    setImmediate(() => {
+      import("./EloService.js").then(({ EloService }) =>
+        EloService.updateAfterMatch(match.id).catch((e: Error) =>
+          console.error(`[elo] match ${match.id} update failed:`, e)
+        )
+      );
+    });
+
+    // ── Notificación: resultado final → followers de ambos equipos ───────────
+    setImmediate(async () => {
+      try {
+        const fullMatch = await Match.findByPk(match.id, {
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+          ],
+        });
+        if (!fullMatch) return;
+        const homeName = (fullMatch as any).homeTeam?.name ?? "Local";
+        const awayName = (fullMatch as any).awayTeam?.name ?? "Visitante";
+        const score = `${fullMatch.homeScore} - ${fullMatch.awayScore}`;
+        const notifPayload = {
+          type: "match_finished",
+          title: `${homeName} ${score} ${awayName}`,
+          message: fullMatch.roundName ?? "Partido terminado",
+          payload: { matchId: fullMatch.id },
+        };
+        await Promise.all([
+          NotificationService.broadcastToTeamFollowers(fullMatch.homeTeamId, notifPayload),
+          NotificationService.broadcastToTeamFollowers(fullMatch.awayTeamId, notifPayload),
+        ]);
+      } catch (err) {
+        console.error("[notif] match_finished broadcast failed:", err);
+      }
+    });
 
     return { message: "Marcador actualizado y tabla recalculada con regla de penales" };
   }

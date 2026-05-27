@@ -641,12 +641,21 @@ export default function LeagueDetailView() {
                     </div>
                     <div>
                       <p className="font-semibold text-[var(--geo-text)]">{team.name}</p>
-                      <Link
-                        to={`/teams/${team.id}`}
-                        className="text-xs font-semibold text-geo-green hover:text-geo-green-hover"
-                      >
-                        Ver detalle del equipo
-                      </Link>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                        <Link
+                          to={`/teams/${team.id}`}
+                          className="font-semibold text-geo-green hover:text-geo-green-hover"
+                        >
+                          Detalle
+                        </Link>
+                        <Link
+                          to={`/teams/${team.id}/dashboard`}
+                          className="inline-flex items-center gap-1 font-semibold text-sky-400 hover:text-sky-300"
+                          title="Ver dashboard del equipo"
+                        >
+                          📊 Dashboard
+                        </Link>
+                      </div>
                     </div>
                   </div>
                   <button

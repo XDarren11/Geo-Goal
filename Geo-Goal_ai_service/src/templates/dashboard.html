@@ -183,6 +183,35 @@
       flex-shrink: 0;
     }
 
+    /* ── History ── */
+    .history-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    @media (max-width: 900px) {
+      .history-grid { grid-template-columns: 1fr; }
+    }
+    .history-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background 0.15s, border 0.15s;
+    }
+    .history-item:hover { background: rgba(255,255,255,0.02); }
+    .history-item.active {
+      background: rgba(57,255,20,0.05);
+      border-left: 3px solid var(--green);
+    }
+    .history-title { font-size: 13px; font-weight: 700; color: #fff; }
+    .history-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+    .history-detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .history-detail-row:last-child { border-bottom: none; }
+    .detail-label { font-size: 12px; color: var(--text-muted); }
+    .detail-value { font-size: 13px; font-weight: 600; color: #fff; text-align: right; }
+    .detail-link { color: var(--green); text-decoration: none; word-break: break-all; }
+    .detail-link:hover { text-decoration: underline; }
+
     /* ── Buttons ── */
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
@@ -387,12 +416,50 @@
         <p class="timestamp" style="text-align:center;width:100%;display:block;margin-top:16px;" id="lastUpdate">—</p>
       </div>
     </div>
+
+    <!-- Analysis history -->
+    <div class="history-grid" id="historyGrid">
+      <div class="section">
+        <div class="section-header">
+          <h2 class="section-title">Historial de análisis</h2>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="historyCount" class="section-badge badge-gray">0 análisis</span>
+            <button class="btn btn-ghost" onclick="refreshHistory()" id="btnHistoryRefresh">
+              Actualizar
+            </button>
+          </div>
+        </div>
+        <div class="section-body no-pad" id="historyList" style="max-height:420px;overflow-y:auto;">
+          <div class="empty-state">
+            <div class="empty-icon">🗂️</div>
+            <div class="empty-title">Sin historial</div>
+            <div class="empty-desc">Tus análisis aparecerán aquí cuando subas videos.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <h2 class="section-title">Detalle del análisis</h2>
+        </div>
+        <div class="section-body" id="historyDetail">
+          <div class="empty-state">
+            <div class="empty-icon">📄</div>
+            <div class="empty-title">Selecciona un análisis</div>
+            <div class="empty-desc">Haz clic en un elemento del historial para ver los detalles.</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
+    const isAdmin = String("{{ user.role }}").toLowerCase() === 'admin';
     let refreshTimer;
+    let historyCache = [];
+    let selectedJobId = null;
 
     function showToast(msg, error = false) {
       const t = document.getElementById('toast');
@@ -407,6 +474,7 @@
     }
 
     async function refresh() {
+      if (!isAdmin) return;
       try {
         const [healthRes, queueRes] = await Promise.all([
           fetch('/dashboard/api/health').then(r => r.json()),
@@ -502,6 +570,119 @@
       }
     }
 
+    function formatMatchName(job) {
+      const match = job.match || {};
+      const home = match.homeTeam?.name || '';
+      const away = match.awayTeam?.name || '';
+      if (home || away) return `${home} vs ${away}`.trim();
+      return 'Partido #' + job.matchId;
+    }
+
+    function renderHistoryList(jobs) {
+      const list = document.getElementById('historyList');
+      const count = document.getElementById('historyCount');
+      count.textContent = jobs.length + ' análisis';
+
+      if (!jobs.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🗂️</div>
+            <div class="empty-title">Sin historial</div>
+            <div class="empty-desc">Tus análisis aparecerán aquí cuando subas videos.</div>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = jobs.map(j => {
+        const badgeClass = j.status === 'queued' ? 'badge-amber' :
+                           j.status === 'processing' ? 'badge-green' :
+                           j.status === 'completed' ? 'badge-green' :
+                           j.status === 'failed' ? 'badge-red' : 'badge-gray';
+        const statusLabel = {uploaded:'Subido',annotating:'Anotando',queued:'En cola',processing:'Procesando',completed:'Completado',failed:'Fallido'}[j.status] || j.status;
+        const matchName = formatMatchName(j);
+        const createdAt = j.createdAt ? new Date(j.createdAt).toLocaleString() : '—';
+        return `
+          <div class="history-item ${Number(j.jobId) === Number(selectedJobId) ? 'active' : ''}" data-job-id="${j.jobId}">
+            <div class="job-status-dot ${j.status === 'failed' ? 'dot-failed' : j.status === 'processing' ? 'dot-processing' : j.status === 'completed' ? 'dot-completed' : 'dot-queued'}"></div>
+            <div style="flex:1;min-width:0;">
+              <div class="history-title">${matchName}</div>
+              <div class="history-meta">Job #${j.jobId} · ${createdAt}</div>
+            </div>
+            <span class="job-badge ${badgeClass}">${statusLabel}</span>
+          </div>`;
+      }).join('');
+    }
+
+    async function refreshHistory(selectFirst = false) {
+      const btn = document.getElementById('btnHistoryRefresh');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Actualizando…';
+      }
+      try {
+        const res = await fetch('/dashboard/api/history');
+        if (!res.ok) throw new Error('No se pudo cargar el historial');
+        const data = await res.json();
+        historyCache = data.jobs || [];
+        renderHistoryList(historyCache);
+
+        const stillExists = historyCache.some(j => Number(j.jobId) === Number(selectedJobId));
+        if (selectFirst || (!stillExists && historyCache.length)) {
+          await loadHistoryDetail(historyCache[0].jobId);
+        }
+      } catch (err) {
+        console.error('History error:', err);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Actualizar';
+        }
+      }
+    }
+
+    async function loadHistoryDetail(jobId) {
+      selectedJobId = Number(jobId);
+      renderHistoryList(historyCache);
+
+      const detail = document.getElementById('historyDetail');
+      detail.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Cargando…</div><div class="empty-desc">Obteniendo detalle del análisis.</div></div>';
+
+      try {
+        const res = await fetch(`/dashboard/api/history/${jobId}`);
+        if (!res.ok) throw new Error('No se pudo cargar el detalle');
+        const data = await res.json();
+        const j = data.job;
+        const matchName = formatMatchName(j);
+        const leagueName = j.match?.league?.name || '—';
+        const statusLabel = {uploaded:'Subido',annotating:'Anotando',queued:'En cola',processing:'Procesando',completed:'Completado',failed:'Fallido'}[j.status] || j.status;
+
+        detail.innerHTML = `
+          <div style="margin-bottom:14px;">
+            <div style="font-size:16px;font-weight:800;color:#fff;">${matchName}</div>
+            <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Liga: ${leagueName}</div>
+          </div>
+          <div class="history-detail-row"><span class="detail-label">Estado</span><span class="detail-value">${statusLabel}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Progreso</span><span class="detail-value">${j.progress ?? 0}%</span></div>
+          <div class="history-detail-row"><span class="detail-label">Paso actual</span><span class="detail-value">${j.currentStep || '—'}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Frames</span><span class="detail-value">${j.framesProcessed ?? 0} / ${j.totalFrames ?? '—'}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Job</span><span class="detail-value">#${j.jobId}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Creado</span><span class="detail-value">${j.createdAt ? new Date(j.createdAt).toLocaleString() : '—'}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Actualizado</span><span class="detail-value">${j.updatedAt ? new Date(j.updatedAt).toLocaleString() : '—'}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Video</span><span class="detail-value">${j.videoSupabaseUrl ? `<a class="detail-link" href="${j.videoSupabaseUrl}" target="_blank" rel="noreferrer">Abrir</a>` : '—'}</span></div>
+          <div class="history-detail-row"><span class="detail-label">Error</span><span class="detail-value" style="color:${j.error ? '#f87171' : '#fff'};">${j.error || '—'}</span></div>
+        `;
+      } catch (err) {
+        detail.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Error</div><div class="empty-desc">No se pudo cargar el detalle.</div></div>';
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const item = e.target.closest('.history-item');
+      if (!item) return;
+      const jobId = item.getAttribute('data-job-id');
+      if (jobId) loadHistoryDetail(jobId);
+    });
+
     async function forcePoll() {
       const btn = document.getElementById('btnPoll');
       btn.disabled = true;
@@ -519,8 +700,22 @@
       refresh();
     }
 
+    if (!isAdmin) {
+      const mainGrid = document.querySelector('.main-grid');
+      if (mainGrid) mainGrid.style.display = 'none';
+      const badge = document.getElementById('workerStatusBadge');
+      if (badge) {
+        badge.className = 'section-badge badge-gray';
+        badge.textContent = 'Sesión activa';
+      }
+    }
+
     refresh();
-    refreshTimer = setInterval(refresh, 8000);
+    refreshHistory(true);
+    refreshTimer = setInterval(() => {
+      refresh();
+      refreshHistory();
+    }, 8000);
   </script>
 </body>
 </html>

@@ -5,6 +5,7 @@ import { body, param } from "express-validator";
 import { handleInputError } from "../middleware/validation";
 import { TeamController } from "../controllers/TeamController";
 import { TeamInvitationController } from "../controllers/TeamInvitationController";
+import { TeamFollowerController } from "../controllers/TeamFollowerController";
 import { MatchDetailController } from "../controllers/MatchDetailController";
 import { upload, uploadAvatar } from "../middleware/upload";
 import { asyncHandler } from "../middleware/asyncHandler";
@@ -241,11 +242,26 @@ router.delete('/:teamId/invitation',
  */
 router.post('/join-by-code',
   hasRole('player'),
-    body('code').notEmpty().withMessage('El código es obligatorio'),
+    body('code').notEmpty().withMessage('El cdigo es obligatorio'),
     body('playerName').isString().trim().notEmpty().withMessage('El nombre de jugador es obligatorio'),
-    body('jerseyNumber').isInt({ min: 1, max: 99 }).withMessage('El dorsal debe ser un número entre 1 y 99'),
+    body('jerseyNumber').isInt({ min: 1, max: 99 }).withMessage('El dorsal debe ser un nmero entre 1 y 99'),
     handleInputError,
     asyncHandler(TeamInvitationController.joinByCode)
+);
+
+// ── Seguir / dejar de seguir equipos (cualquier usuario autenticado) ──────────
+router.post(
+  "/:teamId/follow",
+  param("teamId").isInt().withMessage("ID de equipo inválido"),
+  handleInputError,
+  asyncHandler(TeamFollowerController.follow)
+);
+
+router.delete(
+  "/:teamId/follow",
+  param("teamId").isInt().withMessage("ID de equipo inválido"),
+  handleInputError,
+  asyncHandler(TeamFollowerController.unfollow)
 );
 
 export default router;

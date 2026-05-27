@@ -9,6 +9,25 @@ import { Team } from "../models/Team";
 import { User } from "../models/User";
 import { AppError } from "../types/errors";
 
+// ── Posición y pesos ─────────────────────────────────────────────────────────
+
+type Position = "GK" | "DEF" | "MID" | "ATT";
+
+const POS_WEIGHTS: Record<Position, { g: number; a: number; pass: number; t: number }> = {
+  GK:  { g: 0.0, a: 0.5, pass: 0.30, t: 0.05 },
+  DEF: { g: 0.8, a: 0.6, pass: 0.40, t: 0.20 },
+  MID: { g: 1.0, a: 0.7, pass: 0.60, t: 0.15 },
+  ATT: { g: 1.2, a: 0.5, pass: 0.30, t: 0.05 },
+};
+
+function detectPosition(pos: string | null | undefined): Position {
+  const p = (pos ?? "").toLowerCase();
+  if (p.includes("portero") || p.includes("gk") || p.includes("goalkeeper") || p.includes("arquero")) return "GK";
+  if (p.includes("defensa") || p.includes("def") || p.includes("back") || p.includes("central") || p.includes("lateral")) return "DEF";
+  if (p.includes("delant") || p.includes("forward") || p.includes("striker") || p.includes("att") || p.includes("extremo") || p.includes("winger")) return "ATT";
+  return "MID";
+}
+
 type MutablePlayerStats = {
   matchId: number;
   teamId: number;
@@ -50,20 +69,36 @@ function normalizeCell(v: number): number {
 }
 
 export class MatchAnalyticsService {
-  private static computeRating(s: MutablePlayerStats): number {
-    const passAccuracy = s.passes > 0 ? s.passesCompleted / s.passes : 0;
-    const score =
-      5 +
-      s.goals * 1.8 +
-      s.assists * 1.2 +
-      s.keyPasses * 0.5 +
-      s.shotsOnTarget * 0.35 +
-      Math.min(1.2, passAccuracy * 1.2) +
-      Math.min(1.0, s.distanceMeters / 9500) -
-      s.yellowCards * 0.45 -
-      s.redCards * 1.6;
+  private static computeRating(s: MutablePlayerStats, pos: Position = "MID"): number {
+    const w = POS_WEIGHTS[pos];
 
-    return Number(Math.max(0, Math.min(10, score)).toFixed(2));
+    let r = 6.0;
+
+    // Contribuciones ofensivas (ponderadas por posición)
+    r += (s.goals ?? 0) * w.g;
+    r += (s.assists ?? 0) * w.a;
+    r += (s.keyPasses ?? 0) * 0.10;
+    r += (s.shotsOnTarget ?? 0) * 0.15;
+
+    // Precisión de pase (solo si tiene volumen mínimo)
+    if ((s.passes ?? 0) >= 10) {
+      const acc = s.passesCompleted / s.passes;
+      r += (acc - 0.75) * w.pass;
+    }
+
+    // Sanciones
+    r -= (s.yellowCards ?? 0) * 0.20;
+    r -= (s.redCards ?? 0) * 1.00;
+
+    // Bonus por minutos jugados
+    if ((s.minutesPlayed ?? 0) >= 70) r += 0.2;
+
+    // Bonus por distancia recorrida
+    const km = (s.distanceMeters ?? 0) / 1000;
+    if (km >= 10) r += 0.3;
+    else if (km >= 7) r += 0.1;
+
+    return Math.max(1.0, Math.min(10.0, Number(r.toFixed(2))));
   }
 
   private static countLineupMinutes(squadRole: MatchSquadPlayer["squadRole"], minutesPlanned: number | null): number {
@@ -165,7 +200,7 @@ export class MatchAnalyticsService {
     const [squadRows, eventRows, trackingRows] = await Promise.all([
       MatchSquadPlayer.findAll({
         where: { matchId },
-        attributes: ["teamId", "playerId", "squadRole", "minutesPlanned"],
+        attributes: ["teamId", "playerId", "squadRole", "minutesPlanned", "position"],
       }),
       MatchEvent.findAll({
         where: { matchId },
@@ -243,7 +278,12 @@ export class MatchAnalyticsService {
     const rows = Array.from(store.values()).map((row) => {
       const copy = { ...row };
       copy.distanceMeters = Number(copy.distanceMeters.toFixed(2));
-      copy.rating = this.computeRating(copy);
+      // Detectar posición desde MatchSquadPlayer.position (lo cargamos abajo)
+      const squadEntry = squadRows.find(
+        (s) => s.playerId === row.playerId && s.teamId === row.teamId
+      );
+      const pos = detectPosition((squadEntry as any)?.position);
+      copy.rating = this.computeRating(copy, pos);
       return copy;
     });
 
@@ -269,6 +309,13 @@ export class MatchAnalyticsService {
         "rating",
         "updatedAt",
       ],
+    });
+
+    // ── 4.B: MVP del partido ──────────────────────────────────────────────
+    setImmediate(() => {
+      this.assignMVP(matchId).catch((e: Error) =>
+        console.error(`[mvp] match ${matchId} failed:`, e)
+      );
     });
 
     const teamStatsMap = new Map<
@@ -539,5 +586,52 @@ export class MatchAnalyticsService {
     });
 
     return { frames, total, page: safePage, pageSize: safePageSize };
+  }
+
+  // ── 4.B: MVP del partido ────────────────────────────────────────────────────
+
+  private static async assignMVP(matchId: number): Promise<void> {
+    const top = await PlayerMatchStat.findOne({
+      where: { matchId },
+      order: [["rating", "DESC"], ["goals", "DESC"], ["assists", "DESC"]],
+    });
+
+    if (!top || top.rating < 7.0) return; // sin MVP si nadie supera 7.0
+
+    // Guardar mvpPlayerId en el partido
+    await Match.update({ mvpPlayerId: top.playerId }, { where: { id: matchId } });
+
+    // Notificar al jugador MVP
+    const { NotificationService } = await import("./NotificationService.js");
+    await NotificationService.sendToUser(top.playerId, {
+      type: "mvp_match",
+      title: "🏆 ¡Fuiste el MVP del partido!",
+      message: `Tu rating fue ${top.rating} — sigue así`,
+      payload: { matchId, rating: top.rating },
+    });
+
+    console.log(`[mvp] match ${matchId} → playerId ${top.playerId} (rating ${top.rating})`);
+  }
+
+  // ── 4.C: Forma reciente ─────────────────────────────────────────────────────
+
+  static async getPlayerForm(
+    playerId: number,
+    last = 5
+  ): Promise<Array<{ matchId: number; rating: number; date: Date | null }>> {
+    const stats = await PlayerMatchStat.findAll({
+      where: { playerId },
+      include: [{ model: Match, attributes: ["id", "date"] }],
+      order: [[{ model: Match, as: "match" }, "date", "DESC"]],
+      limit: last,
+    });
+
+    return stats
+      .map((s: any) => ({
+        matchId: s.matchId,
+        rating: s.rating,
+        date: s.match?.date ?? null,
+      }))
+      .reverse();
   }
 }

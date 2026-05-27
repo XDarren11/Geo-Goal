@@ -32,6 +32,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PushNotificationsProvider />
       <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -43,3 +44,10 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+/** Componente auxiliar para que usePushNotifications viva dentro del QueryClientProvider */
+function PushNotificationsProvider() {
+  usePushNotifications();
+  return null;
+}
+

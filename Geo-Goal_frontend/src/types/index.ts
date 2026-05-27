@@ -111,6 +111,7 @@ export interface Match {
     fieldAddress?: string
   } | null
 
+  mvpPlayerId?: number | null;
   detail?: {
     field?: {
       id?: number;
@@ -554,7 +555,7 @@ export interface MatchAnalyticsTeamStat {
 }
 
 export interface MatchAnalyticsResponse {
-  match: Match
+  match: Match & { mvpPlayerId?: number | null }
   summary: {
     totalPlayersWithStats: number
     totalPassEdges: number

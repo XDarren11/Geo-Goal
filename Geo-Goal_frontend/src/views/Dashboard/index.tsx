@@ -177,12 +177,17 @@ export default function DashboardView() {
               ) : adminDashboard?.nextMatches.length ? (
                 <ul className="space-y-2">
                   {adminDashboard.nextMatches.slice(0, 6).map((match) => (
-                    <li key={match.id} className="rounded-lg border border-white/10 p-3">
-                      <p className="text-xs text-[var(--geo-text-muted)]">{match.league?.name || "Liga"} · {match.roundName}</p>
-                      <p className="font-semibold text-[var(--geo-text)]">
-                        {match.homeTeam?.name || "Local"} vs {match.awayTeam?.name || "Visitante"}
-                      </p>
-                      <p className="text-xs text-geo-green">{formatDateTime(match.date)}</p>
+                    <li key={match.id} className="group">
+                      <Link
+                        to={`/public/matches/${match.id}/detail`}
+                        className="block rounded-lg border border-white/10 p-3 transition-colors hover:border-geo-green/50 hover:bg-white/5"
+                      >
+                        <p className="text-xs text-[var(--geo-text-muted)]">{match.league?.name || "Liga"} · {match.roundName}</p>
+                        <p className="font-semibold text-[var(--geo-text)]">
+                          {match.homeTeam?.name || "Local"} vs {match.awayTeam?.name || "Visitante"}
+                        </p>
+                        <p className="text-xs text-geo-green">{formatDateTime(match.date)}</p>
+                      </Link>
                     </li>
                   ))}
                 </ul>

@@ -25,6 +25,9 @@ import {
   RegisterTrackingFrameRequest,
 } from "../application/matchDetail/requests/MatchDetailRequests";
 import { Match } from "../models/Match";
+import { Team } from "../models/Team";
+import { League } from "../models/League";
+import { LeagueAdmin } from "../models/LeagueAdmin";
 import { MatchAnalysisJob } from "../models/MatchAnalysisJob";
 import { MatchDetailService } from "../services/MatchDetailService";
 import {
@@ -568,6 +571,23 @@ export class MatchDetailController {
 
     await job.update(updates);
 
+    // ── Notificación: análisis listo → participantes del partido ──────────
+    if (status === "completed") {
+      const { NotificationService } = await import("../services/NotificationService");
+      setImmediate(async () => {
+        try {
+          await NotificationService.notifyMatchParticipants(Number(matchId), {
+            type: "analysis_ready",
+            title: "Análisis de tu partido disponible",
+            message: "Ya puedes ver heatmaps, estadísticas y rating de jugadores",
+            payload: { matchId: Number(matchId) },
+          });
+        } catch (err) {
+          console.error("[notif] analysis_ready failed:", err);
+        }
+      });
+    }
+
     res.json({ jobId: job.id, ...updates });
   };
 
@@ -636,9 +656,12 @@ export class MatchDetailController {
         "videoSupabaseUrl",   // se mantiene como fallback (otra máquina)
         "srcPts", "playerTags", "identityMap", "createdAt",
       ],
+      include: [
+        { model: League, attributes: ["id", "lineupMode"], required: false },
+      ],
     });
 
-    res.json(jobs.map((j) => ({
+    res.json(jobs.map((j: any) => ({
       jobId: j.id,
       matchId: j.matchId,
       leagueId: j.leagueId,
@@ -647,6 +670,10 @@ export class MatchDetailController {
       srcPts: j.srcPts,
       playerTags: j.playerTags,
       identityMap: j.identityMap,
+      // lineupMode del partido (11 o 7). El AI service lo usa para limitar
+      // el número de tracks por equipo y evitar saltos visuales por
+      // detecciones espurias (banca, árbitros, fotógrafos).
+      lineupMode: j.league?.lineupMode ?? 11,
       createdAt: j.createdAt,
     })));
   };
@@ -710,33 +737,360 @@ export class MatchDetailController {
   static claimAnalysisJob = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
 
+    // Buscar el último job (sin importar status). Esto hace el endpoint idempotente:
+    //   - Si está "queued" → claim y devolver datos
+    //   - Si está "processing" → devolver datos (el worker puede haber sido reiniciado)
+    //   - Si está "completed"/"failed" → 410 Gone (no hay nada que procesar)
+    //   - Si no existe → 404
     const job = await MatchAnalysisJob.findOne({
-      where: {
-        matchId: Number(matchId),
-        status: "queued",
-      },
+      where: { matchId: Number(matchId) },
       order: [["createdAt", "DESC"]],
     });
 
     if (!job) {
-      res.status(409).json({ error: "No hay un job queued para este partido, o ya fue reclamado" });
+      res.status(404).json({ error: "No existe ningún análisis para este partido" });
       return;
     }
 
-    await job.update({ status: "processing", error: null });
+    if (job.status === "completed") {
+      res.status(410).json({ error: "Este análisis ya fue completado", jobId: job.id });
+      return;
+    }
 
-    console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
+    if (job.status === "failed") {
+      // Permitimos reintentar: lo movemos a processing
+      await job.update({ status: "processing", error: null });
+      console.log(`[claim-job] match ${matchId} job ${job.id} — re-claimed (previously failed)`);
+    } else if (job.status === "processing") {
+      // Ya está en processing — el worker probablemente se reinició. Devolvemos los datos.
+      console.log(`[claim-job] match ${matchId} job ${job.id} — already processing, returning data idempotently`);
+    } else {
+      // queued / uploaded / annotating → claim normal
+      await job.update({ status: "processing", error: null });
+      console.log(`[claim-job] match ${matchId} job ${job.id} — claimed by AI service`);
+    }
+
+    // Cargar lineupMode de la liga para que el worker sepa cuántos jugadores
+    // máximos puede haber en cada equipo (limita falsos positivos: banca, etc.)
+    const league = await League.findByPk(job.leagueId, {
+      attributes: ["id", "lineupMode"],
+    });
 
     res.json({
       jobId: job.id,
       matchId: job.matchId,
       leagueId: job.leagueId,
-      videoPath: job.videoPath,                  // ← path local compartido con AI service
+      videoPath: job.videoPath,                  // path local compartido con AI service
       videoSupabaseUrl: job.videoSupabaseUrl,    // fallback si AI corre en otra máquina
       srcPts: job.srcPts,
       playerTags: job.playerTags,
       identityMap: job.identityMap,
+      lineupMode: league?.lineupMode ?? 11,      // 11 o 7 — el AI lo usa como cap por equipo
       status: "processing",
+    });
+  };
+
+  static getUserAnalysisHistory = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const jobs = await MatchAnalysisJob.findAll({
+      where: { createdBy: userId },
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    res.json({
+      jobs: jobs.map((j) => ({
+        jobId: j.id,
+        matchId: j.matchId,
+        leagueId: j.leagueId,
+        status: j.status,
+        progress: j.progress,
+        currentStep: j.currentStep,
+        framesProcessed: j.framesProcessed,
+        totalFrames: j.totalFrames,
+        error: j.error,
+        videoSupabaseUrl: j.videoSupabaseUrl,
+        videoFilename: j.videoFilename,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        match: j.match ? {
+          id: j.match.id,
+          date: j.match.date,
+          roundName: j.match.roundName,
+          homeTeam: j.match.homeTeam ? { id: j.match.homeTeam.id, name: j.match.homeTeam.name } : null,
+          awayTeam: j.match.awayTeam ? { id: j.match.awayTeam.id, name: j.match.awayTeam.name } : null,
+          league: j.match.league ? { id: j.match.league.id, name: j.match.league.name } : null,
+        } : null,
+      })),
+    });
+  };
+
+  static getUserAnalysisDetail = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    const { jobId } = req.params;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const job = await MatchAnalysisJob.findOne({
+      where: { id: Number(jobId), createdBy: userId },
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "srcPts",
+        "playerTags",
+        "identityMap",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    if (!job) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    res.json({
+      job: {
+        jobId: job.id,
+        matchId: job.matchId,
+        leagueId: job.leagueId,
+        status: job.status,
+        progress: job.progress,
+        currentStep: job.currentStep,
+        framesProcessed: job.framesProcessed,
+        totalFrames: job.totalFrames,
+        error: job.error,
+        videoSupabaseUrl: job.videoSupabaseUrl,
+        videoFilename: job.videoFilename,
+        srcPts: job.srcPts,
+        playerTags: job.playerTags,
+        identityMap: job.identityMap,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        match: job.match ? {
+          id: job.match.id,
+          date: job.match.date,
+          roundName: job.match.roundName,
+          homeTeam: job.match.homeTeam ? { id: job.match.homeTeam.id, name: job.match.homeTeam.name } : null,
+          awayTeam: job.match.awayTeam ? { id: job.match.awayTeam.id, name: job.match.awayTeam.name } : null,
+          league: job.match.league ? { id: job.match.league.id, name: job.match.league.name } : null,
+        } : null,
+      },
+    });
+  };
+
+  static getAdminAnalysisHistory = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const adminLeagues = await LeagueAdmin.findAll({
+      where: { userId },
+      attributes: ["leagueId"],
+    });
+    const leagueIds = adminLeagues.map((l) => l.leagueId);
+
+    if (!leagueIds.length) {
+      res.json({ jobs: [] });
+      return;
+    }
+
+    const jobs = await MatchAnalysisJob.findAll({
+      where: { leagueId: leagueIds },
+      order: [["createdAt", "DESC"]],
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    res.json({
+      jobs: jobs.map((j) => ({
+        jobId: j.id,
+        matchId: j.matchId,
+        leagueId: j.leagueId,
+        status: j.status,
+        progress: j.progress,
+        currentStep: j.currentStep,
+        framesProcessed: j.framesProcessed,
+        totalFrames: j.totalFrames,
+        error: j.error,
+        videoSupabaseUrl: j.videoSupabaseUrl,
+        videoFilename: j.videoFilename,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        match: j.match ? {
+          id: j.match.id,
+          date: j.match.date,
+          roundName: j.match.roundName,
+          homeTeam: j.match.homeTeam ? { id: j.match.homeTeam.id, name: j.match.homeTeam.name } : null,
+          awayTeam: j.match.awayTeam ? { id: j.match.awayTeam.id, name: j.match.awayTeam.name } : null,
+          league: j.match.league ? { id: j.match.league.id, name: j.match.league.name } : null,
+        } : null,
+      })),
+    });
+  };
+
+  static getAdminAnalysisDetail = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    const { jobId } = req.params;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const adminLeagues = await LeagueAdmin.findAll({
+      where: { userId },
+      attributes: ["leagueId"],
+    });
+    const leagueIds = adminLeagues.map((l) => l.leagueId);
+
+    if (!leagueIds.length) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    const job = await MatchAnalysisJob.findOne({
+      where: { id: Number(jobId), leagueId: leagueIds },
+      attributes: [
+        "id",
+        "matchId",
+        "leagueId",
+        "status",
+        "progress",
+        "currentStep",
+        "framesProcessed",
+        "totalFrames",
+        "error",
+        "videoSupabaseUrl",
+        "videoFilename",
+        "srcPts",
+        "playerTags",
+        "identityMap",
+        "createdAt",
+        "updatedAt",
+      ],
+      include: [
+        {
+          model: Match,
+          attributes: ["id", "date", "roundName"],
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+            { model: League, attributes: ["id", "name"] },
+          ],
+        },
+      ],
+    });
+
+    if (!job) {
+      res.status(404).json({ error: "No se encontró el análisis" });
+      return;
+    }
+
+    res.json({
+      job: {
+        jobId: job.id,
+        matchId: job.matchId,
+        leagueId: job.leagueId,
+        status: job.status,
+        progress: job.progress,
+        currentStep: job.currentStep,
+        framesProcessed: job.framesProcessed,
+        totalFrames: job.totalFrames,
+        error: job.error,
+        videoSupabaseUrl: job.videoSupabaseUrl,
+        videoFilename: job.videoFilename,
+        srcPts: job.srcPts,
+        playerTags: job.playerTags,
+        identityMap: job.identityMap,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        match: job.match ? {
+          id: job.match.id,
+          date: job.match.date,
+          roundName: job.match.roundName,
+          homeTeam: job.match.homeTeam ? { id: job.match.homeTeam.id, name: job.match.homeTeam.name } : null,
+          awayTeam: job.match.awayTeam ? { id: job.match.awayTeam.id, name: job.match.awayTeam.name } : null,
+          league: job.match.league ? { id: job.match.league.id, name: job.match.league.name } : null,
+        } : null,
+      },
     });
   };
 }
