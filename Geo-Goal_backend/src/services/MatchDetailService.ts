@@ -261,7 +261,10 @@ export class MatchDetailService {
         updatedBy: actorUserId,
       };
     });
-
+    // Delete existing squad records for this match and team to avoid unique constraint violations
+    await MatchSquadPlayer.destroy({
+      where: { matchId, teamId },
+    });
     await MatchSquadPlayer.bulkCreate(rows, {
       updateOnDuplicate: [
         "squadRole",

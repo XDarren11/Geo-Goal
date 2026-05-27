@@ -78,6 +78,10 @@ router.get(
   asyncHandler(PublicController.getMatchPrediction)
 );
 
+// ── Listado público de jugadores (descubrir perfiles) ────────────────────────
+
+router.get("/players", asyncHandler(PublicController.getPlayersList));
+
 router.get(
   "/players/:userId/form",
   param("userId").isInt().withMessage("ID de usuario no válido"),
@@ -138,6 +142,29 @@ router.get(
   param("id").isInt().withMessage("ID de jugador no válido"),
   handleInputError,
   asyncHandler(PublicController.getSimilarPlayers)
+);
+
+// ── Fase 8: Dashboards agregados (público — cualquier usuario puede verlos) ──
+
+router.get(
+  "/players/:id/dashboard",
+  param("id").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getPlayerDashboard)
+);
+
+router.get(
+  "/teams/:id/dashboard",
+  param("id").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getTeamDashboard)
+);
+
+router.get(
+  "/coaches/:id/dashboard",
+  param("id").isInt().withMessage("ID de coach no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getCoachDashboard)
 );
 
 // ── Fase 7: Revisión de eventos inferidos ────────────────────────────────────

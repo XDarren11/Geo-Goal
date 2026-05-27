@@ -229,8 +229,19 @@ export default function TeamDetailView() {
             </label>
           )}
         </div>
-        <div>
-          <h1 className="text-3xl font-black text-geo-green">{team.name}</h1>
+        <div className="flex-1">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h1 className="text-3xl font-black text-geo-green">{team.name}</h1>
+            {team.id ? (
+              <Link
+                to={`/teams/${team.id}/dashboard`}
+                className="inline-flex items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sm font-bold text-sky-300 hover:bg-sky-500/20 transition"
+                title="Ver dashboard del equipo (stats agregadas, Elo, top jugadores)"
+              >
+                Dashboard del equipo
+              </Link>
+            ) : null}
+          </div>
           {team.fieldAddress && (
             <p className="text-[var(--geo-text-muted)]">{team.fieldAddress}</p>
           )}
@@ -289,7 +300,23 @@ export default function TeamDetailView() {
       ) : null}
 
       <div className="grid gap-4 opacity-0 animate-in-up stagger-2 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Coach" value={team.trainer?.name ?? "—"} accent="text-[var(--geo-text)]" />
+        {/* Coach: si tiene id, lo hacemos clicable al dashboard del coach */}
+        <div className="card-pitch p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--geo-text-muted)]">Coach</p>
+          <div className="mt-1 text-lg font-bold">
+            {team.trainerId ? (
+              <Link
+                to={`/coaches/${team.trainerId}/dashboard`}
+                className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 hover:underline transition"
+                title="Ver dashboard del entrenador"
+              >
+                {team.trainer?.name ?? "—"} <span className="text-xs"></span>
+              </Link>
+            ) : (
+              <span className="text-[var(--geo-text)]">{team.trainer?.name ?? "—"}</span>
+            )}
+          </div>
+        </div>
         <MetricCard label="Cancha" value={team.fieldAddress ?? "—"} accent="text-[var(--geo-text)]" />
         <MetricCard label="Liga" value={team.league?.name ?? "Sin liga"} accent="text-[var(--geo-text)]" />
         <MetricCard label="Puntos" value={String(stats.points)} accent="text-geo-green" />
@@ -443,7 +470,15 @@ export default function TeamDetailView() {
                     )}
                   </div>
                   <span className="font-medium text-[var(--geo-text)]">
-                    {p.playerName || p.name}
+                    {p.id ? (
+                      <Link
+                        to={`/players/${p.id}/dashboard`}
+                        className="hover:text-emerald-300 hover:underline transition"
+                        title="Ver dashboard del jugador"
+                      >
+                        {p.playerName || p.name}
+                      </Link>
+                    ) : (p.playerName || p.name)}
                     {p.jerseyNumber ? (
                       <span className="ml-2 rounded bg-geo-green/15 px-2 py-0.5 text-xs font-bold text-geo-green">
                         #{p.jerseyNumber}

@@ -566,3 +566,213 @@ export async function updateInferredEvent(
   const { data } = await api.patch<InferredEvent>(`${BASE}/events/${eventId}`, changes);
   return data;
 }
+
+// ─── Fase 8: Dashboards agregados (jugador / equipo / coach) ─────────────────
+
+export interface PlayerCareerStats {
+  player: { id: number; name: string };
+  scope: { seasonId?: number; leagueId?: number; teamId?: number };
+
+  matchesPlayed: number;
+  minutesPlayed: number;
+  goals: number;
+  assists: number;
+  keyPasses: number;
+  shots: number;
+  shotsOnTarget: number;
+  passes: number;
+  passesCompleted: number;
+  passAccuracy: number;
+  yellowCards: number;
+  redCards: number;
+  fouls: number;
+  distanceKm: number;
+  avgRating: number;
+  topRating: number;
+  mvpCount: number;
+  weeklyAwards: number;
+  totalXG: number;
+  goalsMinusXG: number;
+
+  recentForm: Array<{
+    matchId: number;
+    date: string | null;
+    opponent: string;
+    rating: number;
+    goals: number;
+    assists: number;
+    minutes: number;
+    result: "W" | "D" | "L" | "—";
+    scoreFor: number;
+    scoreAgainst: number;
+  }>;
+
+  aggregatedHeatmap: number[][];
+
+  teamRank: {
+    rating: number | null;
+    goals: number | null;
+    assists: number | null;
+  };
+}
+
+export interface TeamCareerStats {
+  team: { id: number; name: string; logoUrl: string | null };
+  scope: { seasonId?: number; leagueId?: number };
+
+  matchesPlayed: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDiff: number;
+  pointsPerMatch: number;
+  avgPossession: number;
+  avgShotsPerMatch: number;
+  avgPassAccuracy: number;
+  avgDistanceTeamKm: number;
+  avgConvexHull: number;
+  avgDefensiveLine: number;
+  eloRating: number;
+  eloHistory: Array<{
+    matchId: number;
+    date: string | null;
+    before: number;
+    after: number;
+    opponent: number;
+  }>;
+  formationDistribution: Record<string, number>;
+  mostUsedFormation: string;
+  topScorers: Array<{ playerId: number; name: string; goals: number }>;
+  topAssistants: Array<{ playerId: number; name: string; assists: number }>;
+  topRated: Array<{ playerId: number; name: string; avgRating: number; matches: number }>;
+  recentForm: Array<{
+    matchId: number;
+    date: string | null;
+    result: "W" | "D" | "L";
+    scoreFor: number;
+    scoreAgainst: number;
+    opponent: string;
+  }>;
+  formStreak: string;
+  upcomingMatches: Array<{
+    matchId: number;
+    date: string | null;
+    opponent: string;
+    isHome: boolean;
+  }>;
+}
+
+export interface CoachStats {
+  coach: { id: number; name: string };
+  teamsManaged: Array<{
+    id: number;
+    name: string;
+    logoUrl: string | null;
+    currentElo: number;
+  }>;
+  totalMatches: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  winRate: number;
+  pointsPerMatch: number;
+  formationDistribution: Record<string, number>;
+  mostUsedFormation: string;
+  avgGoalsScored: number;
+  avgGoalsConceded: number;
+  attackingIndex: number;
+  topPlayersFormed: Array<{
+    playerId: number;
+    name: string;
+    teamId: number;
+    teamName: string;
+    avgRating: number;
+    matchesUnderCoach: number;
+  }>;
+  recentResults: Array<{
+    matchId: number;
+    date: string | null;
+    result: "W" | "D" | "L";
+    teamId: number;
+    opponentName: string;
+    score: string;
+  }>;
+}
+
+export async function getPlayerDashboard(
+  playerId: number,
+  opts: { seasonId?: number; leagueId?: number; teamId?: number; last?: number } = {}
+): Promise<PlayerCareerStats> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  if (opts.teamId) params.team = opts.teamId;
+  if (opts.last) params.last = opts.last;
+  const { data } = await api.get<PlayerCareerStats>(
+    `${BASE}/players/${playerId}/dashboard`,
+    { params }
+  );
+  return data;
+}
+
+export async function getTeamDashboard(
+  teamId: number,
+  opts: { seasonId?: number; leagueId?: number } = {}
+): Promise<TeamCareerStats> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  const { data } = await api.get<TeamCareerStats>(
+    `${BASE}/teams/${teamId}/dashboard`,
+    { params }
+  );
+  return data;
+}
+
+export async function getCoachDashboard(coachId: number): Promise<CoachStats> {
+  const { data } = await api.get<CoachStats>(`${BASE}/coaches/${coachId}/dashboard`);
+  return data;
+}
+
+// ── Listado público de jugadores ─────────────────────────────────────────────
+
+export interface PublicPlayerListItem {
+  playerId: number;
+  name: string;
+  username: string | null;
+  team: { id: number; name: string; logoUrl?: string | null } | null;
+  avgRating: number;
+  totalGoals: number;
+  totalAssists: number;
+  totalMinutes: number;
+  matchCount: number;
+}
+
+export interface PublicPlayersListResponse {
+  players: PublicPlayerListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PublicPlayersListFilters {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  league?: number;
+  team?: number;
+  minRating?: number;
+  sortBy?: "rating" | "goals" | "assists" | "matches";
+}
+
+export async function getPublicPlayersList(
+  filters: PublicPlayersListFilters = {}
+): Promise<PublicPlayersListResponse> {
+  const { data } = await api.get<PublicPlayersListResponse>(`${BASE}/players`, {
+    params: filters,
+  });
+  return data;
+}

@@ -105,7 +105,7 @@ export class PublicController {
     const award = await WeeklyAward.findOne({
       where: { leagueId },
       include: [
-        { model: User, as: "player", attributes: ["id", "name", "avatarUrl"] },
+        { model: User, as: "player", attributes: ["id", "name"] },
         { model: Team, attributes: ["id", "name", "logoUrl"] },
       ],
       order: [["weekStart", "DESC"]],
@@ -399,6 +399,68 @@ export class PublicController {
     res.json(ev);
   };
 
+  // ─── Fase 8: Dashboards agregados (jugador, equipo, coach) ──────────────
+
+  static getPlayerDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { PlayerCareerService } = await import("../services/PlayerCareerService");
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ error: "ID de jugador no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+      teamId: req.query.team ? Number(req.query.team) : undefined,
+    };
+    const recentLimit = req.query.last ? Math.max(1, Math.min(50, Number(req.query.last))) : 10;
+    try {
+      const stats = await PlayerCareerService.getStats(playerId, scope, recentLimit);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[player-dashboard] ${playerId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo cargar el dashboard del jugador" });
+    }
+  };
+
+  static getTeamDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { TeamCareerService } = await import("../services/TeamCareerService");
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ error: "ID de equipo no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+    };
+    try {
+      const stats = await TeamCareerService.getStats(teamId, scope);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[team-dashboard] ${teamId} failed:`, err.message);
+      const status = err?.message?.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: err.message || "No se pudo cargar el dashboard del equipo" });
+    }
+  };
+
+  static getCoachDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { CoachStatsService } = await import("../services/CoachStatsService");
+    const coachId = Number(req.params.id);
+    if (!Number.isInteger(coachId) || coachId <= 0) {
+      res.status(400).json({ error: "ID de coach no válido" });
+      return;
+    }
+    try {
+      const stats = await CoachStatsService.getStats(coachId);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[coach-dashboard] ${coachId} failed:`, err.message);
+      const status = err?.message?.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: err.message || "No se pudo cargar el dashboard del coach" });
+    }
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;
@@ -407,5 +469,138 @@ export class PublicController {
       new ExportPublicFramesRequest(matchId, page, pageSize)
     );
     res.json(data);
+  };
+
+  // ─── Fase 8: Listado público de jugadores ──────────────────────────────
+  //
+  // Permite descubrir perfiles sin tener que navegar por equipos/partidos.
+  // Filtros: search (por nombre), leagueId, teamId, minRating.
+  //
+  // Cálculo de stats agregadas: agrupa PlayerMatchStat por playerId, opcionalmente
+  // restringido por liga/equipo.
+  static getPlayersList = async (req: Request, res: Response): Promise<void> => {
+    const { PlayerMatchStat } = await import("../models/PlayerMatchStat");
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
+    const { Match } = await import("../models/Match");
+    const { Sequelize, Op } = await import("sequelize");
+
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string, 10) || 30));
+    const offset = (page - 1) * pageSize;
+
+    const search = (req.query.search as string | undefined)?.trim() ?? "";
+    const leagueId = req.query.league ? Number(req.query.league) : undefined;
+    const teamId = req.query.team ? Number(req.query.team) : undefined;
+    const minRating = req.query.minRating ? Number(req.query.minRating) : undefined;
+    const sortBy = (req.query.sortBy as string | undefined) || "rating"; // rating | goals | assists | matches
+
+    // 1. Filtros sobre PlayerMatchStat (vía include en Match si hay leagueId)
+    const statWhere: any = {};
+    if (teamId) statWhere.teamId = teamId;
+
+    const matchInclude: any = { model: Match, attributes: [], required: !!leagueId };
+    if (leagueId) matchInclude.where = { leagueId };
+
+    // 2. Sort
+    const sortField: Record<string, string> = {
+      rating: '"avgRating"',
+      goals: '"totalGoals"',
+      assists: '"totalAssists"',
+      matches: '"matchCount"',
+    };
+    const orderColumn = sortField[sortBy] || sortField.rating;
+
+    // 3. Agregar por playerId
+    const rows: any[] = await PlayerMatchStat.findAll({
+      where: statWhere,
+      include: [matchInclude],
+      attributes: [
+        "playerId",
+        [Sequelize.fn("AVG", Sequelize.col("rating")), "avgRating"],
+        [Sequelize.fn("SUM", Sequelize.col("goals")), "totalGoals"],
+        [Sequelize.fn("SUM", Sequelize.col("assists")), "totalAssists"],
+        [Sequelize.fn("SUM", Sequelize.col("PlayerMatchStat.minutesPlayed")), "totalMinutes"],
+        [Sequelize.fn("COUNT", Sequelize.col("PlayerMatchStat.matchId")), "matchCount"],
+      ],
+      group: ["playerId"],
+      having: minRating
+        ? Sequelize.literal(`AVG(rating) >= ${minRating}`)
+        : undefined,
+      order: [[Sequelize.literal(orderColumn), "DESC NULLS LAST"]],
+      subQuery: false,
+      raw: true,
+    });
+
+    if (!rows.length) {
+      res.json({ players: [], total: 0, page, pageSize });
+      return;
+    }
+
+    // 4. Cargar info de usuarios + equipo principal (último jugado)
+    const ids = rows.map((r) => Number(r.playerId)).filter((n) => Number.isInteger(n) && n > 0);
+
+    const userWhere: any = { id: { [Op.in]: ids } };
+    if (search) userWhere.name = { [Op.iLike]: `%${search}%` };
+
+    const users = await User.findAll({
+      where: userWhere,
+      attributes: ["id", "name", "email", "username"],
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    // 5. Para cada jugador, qué equipo es el que más jugó (recientes)
+    const lastTeamRows: any[] = await PlayerMatchStat.findAll({
+      where: { playerId: { [Op.in]: ids } },
+      attributes: [
+        "playerId",
+        "teamId",
+        [Sequelize.fn("COUNT", Sequelize.col("matchId")), "n"],
+      ],
+      group: ["playerId", "teamId"],
+      raw: true,
+    });
+    const dominantTeam = new Map<number, number>(); // playerId → teamId (más frecuente)
+    for (const r of lastTeamRows) {
+      const pid = Number(r.playerId);
+      const tid = Number(r.teamId);
+      const n = Number(r.n);
+      const prev = dominantTeam.get(pid);
+      if (!prev || (lastTeamRows.find((x: any) => Number(x.playerId) === pid && Number(x.teamId) === prev)?.n ?? 0) < n) {
+        dominantTeam.set(pid, tid);
+      }
+    }
+    const teamIds = [...new Set([...dominantTeam.values()].filter((x) => x))];
+    const teams = teamIds.length
+      ? await Team.findAll({ where: { id: { [Op.in]: teamIds } }, attributes: ["id", "name", "logoUrl"] })
+      : [];
+    const teamMap = new Map(teams.map((t) => [t.id, t]));
+
+    // 6. Combinar + filtrar por search (que se aplicó al lookup de users)
+    let players = rows
+      .map((r: any) => {
+        const pid = Number(r.playerId);
+        const u = userMap.get(pid);
+        if (!u) return null; // search filtró
+        const teamIdDom = dominantTeam.get(pid);
+        const t = teamIdDom ? teamMap.get(teamIdDom) : null;
+        return {
+          playerId: pid,
+          name: u.name,
+          username: u.username ?? null,
+          team: t ? { id: t.id, name: t.name, logoUrl: t.logoUrl } : null,
+          avgRating: Number(Number(r.avgRating).toFixed(2)),
+          totalGoals: Number(r.totalGoals) || 0,
+          totalAssists: Number(r.totalAssists) || 0,
+          totalMinutes: Number(r.totalMinutes) || 0,
+          matchCount: Number(r.matchCount) || 0,
+        };
+      })
+      .filter((p) => p != null) as Array<NonNullable<unknown>>;
+
+    const total = players.length;
+    players = players.slice(offset, offset + pageSize);
+
+    res.json({ players, total, page, pageSize });
   };
 }

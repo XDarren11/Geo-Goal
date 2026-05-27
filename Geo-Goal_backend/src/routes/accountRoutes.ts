@@ -6,6 +6,7 @@ import { asyncHandler } from "../middleware/asyncHandler";
 import { AccountController } from "../controllers/AccountController";
 import { TeamFollowerController } from "../controllers/TeamFollowerController";
 import { DeviceTokenController } from "../controllers/DeviceTokenController";
+import { FavoritesController } from "../controllers/FavoritesController";
 
 const router = Router();
 
@@ -57,5 +58,37 @@ router.delete(
   handleInputError,
   asyncHandler(DeviceTokenController.unregister)
 );
+
+// ── Favoritos (equipos, jugadores, coaches, ligas — para menú lateral) ────────
+router.get("/favorites", asyncHandler(FavoritesController.list));
+router.get("/favorites/ids", asyncHandler(FavoritesController.listIds));
+
+router.post(
+  "/favorites",
+  body("entityType").isString().withMessage("entityType es requerido"),
+  body("entityId").isInt({ gt: 0 }).withMessage("entityId debe ser un entero positivo"),
+  body("label").optional({ nullable: true }).isString(),
+  body("sortOrder").optional().isInt(),
+  handleInputError,
+  asyncHandler(FavoritesController.create)
+);
+
+router.patch(
+  "/favorites/:id",
+  param("id").isInt({ gt: 0 }).withMessage("id inválido"),
+  body("label").optional({ nullable: true }).isString(),
+  body("sortOrder").optional().isInt(),
+  handleInputError,
+  asyncHandler(FavoritesController.update)
+);
+
+router.delete(
+  "/favorites/:id",
+  param("id").isInt({ gt: 0 }).withMessage("id inválido"),
+  handleInputError,
+  asyncHandler(FavoritesController.remove)
+);
+
+router.delete("/favorites", asyncHandler(FavoritesController.remove));
 
 export default router;

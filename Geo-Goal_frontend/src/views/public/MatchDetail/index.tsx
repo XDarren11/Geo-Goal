@@ -838,6 +838,9 @@ function TeamLineupCard({
   roster,
   unavailable,
   formation,
+  teamId,
+  coachId,
+  coachName,
 }: {
   title: string;
   starters?: MatchDetailLineupEntry[];
@@ -845,30 +848,88 @@ function TeamLineupCard({
   roster?: MatchSquadPlayerView[];
   unavailable?: MatchSquadPlayerView[];
   formation?: string | null;
+  teamId?: number | null;
+  coachId?: number | null;
+  coachName?: string | null;
 }) {
   const safeStarters = Array.isArray(starters) ? starters : [];
   const safeBench = Array.isArray(bench) ? bench : [];
 
+  // Render de cada jugador: si tiene userId, lo hace clickable al dashboard del jugador
+  const renderPlayerListItem = (
+    p: MatchDetailLineupEntry,
+    idx: number,
+    keyPrefix: string,
+  ) => {
+    const label = listLabel(p, idx);
+    const userId = typeof p.userId === "number" && p.userId > 0 ? p.userId : null;
+    const className = "rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]";
+    if (userId) {
+      return (
+        <li key={`${keyPrefix}-${idx}`} className={className}>
+          <Link
+            to={`/players/${userId}/dashboard`}
+            className="flex items-center justify-between gap-2 hover:text-emerald-300 transition"
+            title="Ver dashboard del jugador"
+          >
+            <span className="truncate">{label}</span>
+            <span className="text-[10px] text-emerald-400 opacity-0 group-hover:opacity-100"></span>
+          </Link>
+        </li>
+      );
+    }
+    return (
+      <li key={`${keyPrefix}-${idx}`} className={className}>
+        {label}
+      </li>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
-      <h3 className="font-black text-[var(--geo-text)]">
-        {title}
-        {formation ? (
-          <span className="ml-2 inline-flex items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-200">
-            {formation}
-          </span>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <h3 className="font-black text-[var(--geo-text)]">
+          {title}
+          {formation ? (
+            <span className="ml-2 inline-flex items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-200">
+              {formation}
+            </span>
+          ) : null}
+        </h3>
+        {typeof teamId === "number" && teamId > 0 ? (
+          <Link
+            to={`/teams/${teamId}/dashboard`}
+            className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20 transition"
+            title="Ver dashboard del equipo"
+          >
+            Dashboard
+          </Link>
         ) : null}
-      </h3>
+      </div>
+
+      {/* Coach con link a su dashboard */}
+      {coachName ? (
+        <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
+          DT:{" "}
+          {coachId ? (
+            <Link
+              to={`/coaches/${coachId}/dashboard`}
+              className="font-semibold text-sky-300 hover:text-sky-200 hover:underline transition"
+              title="Ver dashboard del coach"
+            >
+              {coachName}
+            </Link>
+          ) : (
+            <span className="font-semibold text-[var(--geo-text)]">{coachName}</span>
+          )}
+        </p>
+      ) : null}
 
       <div className="mt-4">
         <p className="text-sm font-bold text-geo-green">11 en cancha</p>
         {safeStarters.length ? (
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {safeStarters.map((p, idx) => (
-              <li key={`s-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabel(p, idx)}
-              </li>
-            ))}
+            {safeStarters.map((p, idx) => renderPlayerListItem(p, idx, "s"))}
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin titulares registrados.</p>
@@ -879,11 +940,7 @@ function TeamLineupCard({
         <p className="text-sm font-bold text-geo-green">Banca</p>
         {safeBench.length ? (
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {safeBench.map((p, idx) => (
-              <li key={`b-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabel(p, idx)}
-              </li>
-            ))}
+            {safeBench.map((p, idx) => renderPlayerListItem(p, idx, "b"))}
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin banca registrada.</p>
@@ -894,11 +951,19 @@ function TeamLineupCard({
         <div className="mt-4">
           <p className="text-sm font-bold text-geo-green">Plantilla disponible</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {roster.map((p, idx) => (
-              <li key={`r-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabelStructured(p, idx)}
-              </li>
-            ))}
+            {roster.map((p, idx) => {
+              const userId = typeof p.id === "number" && p.id > 0 ? p.id : null;
+              const label = listLabelStructured(p, idx);
+              return (
+                <li key={`r-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                  {userId ? (
+                    <Link to={`/players/${userId}/dashboard`} className="hover:text-emerald-300 transition" title="Ver dashboard del jugador">
+                      {label}
+                    </Link>
+                  ) : label}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -907,11 +972,19 @@ function TeamLineupCard({
         <div className="mt-4">
           <p className="text-sm font-bold text-red-400">No disponibles</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {unavailable.map((p, idx) => (
-              <li key={`u-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabelStructured(p, idx)}
-              </li>
-            ))}
+            {unavailable.map((p, idx) => {
+              const userId = typeof p.id === "number" && p.id > 0 ? p.id : null;
+              const label = listLabelStructured(p, idx);
+              return (
+                <li key={`u-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                  {userId ? (
+                    <Link to={`/players/${userId}/dashboard`} className="hover:text-red-300 transition" title="Ver dashboard del jugador">
+                      {label}
+                    </Link>
+                  ) : label}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -1916,7 +1989,29 @@ export default function PublicMatchDetailView() {
           </div>
           </div>
           <p className="mt-2 text-lg text-[var(--geo-text)]">
-            {match.homeTeam?.name ?? "Local"} vs {match.awayTeam?.name ?? "Visitante"}
+            {(match.homeTeamId ?? match.homeTeam?.id) ? (
+              <Link
+                to={`/teams/${match.homeTeamId ?? match.homeTeam?.id}/dashboard`}
+                className="hover:text-emerald-300 hover:underline transition"
+                title="Ver dashboard del equipo local"
+              >
+                {match.homeTeam?.name ?? "Local"}
+              </Link>
+            ) : (
+              <span>{match.homeTeam?.name ?? "Local"}</span>
+            )}
+            {" vs "}
+            {(match.awayTeamId ?? match.awayTeam?.id) ? (
+              <Link
+                to={`/teams/${match.awayTeamId ?? match.awayTeam?.id}/dashboard`}
+                className="hover:text-emerald-300 hover:underline transition"
+                title="Ver dashboard del equipo visitante"
+              >
+                {match.awayTeam?.name ?? "Visitante"}
+              </Link>
+            ) : (
+              <span>{match.awayTeam?.name ?? "Visitante"}</span>
+            )}
           </p>
           <p className="mt-1 text-sm text-[var(--geo-text-muted)]">{match.roundName}</p>
           <div className="mt-3 inline-flex rounded-lg border border-white/15 bg-white/[0.03] p-1 text-xs">
@@ -2020,11 +2115,31 @@ export default function PublicMatchDetailView() {
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Entrenador local</p>
-              <p className="mt-1 font-semibold">{detail.homeCoach?.name || "—"}</p>
+              <p className="mt-1 font-semibold">
+                {detail.homeCoach?.id ? (
+                  <Link
+                    to={`/coaches/${detail.homeCoach.id}/dashboard`}
+                    className="text-sky-300 hover:text-sky-200 hover:underline transition"
+                    title="Ver dashboard del entrenador"
+                  >
+                    {detail.homeCoach.name}
+                  </Link>
+                ) : detail.homeCoach?.name || "—"}
+              </p>
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Entrenador visitante</p>
-              <p className="mt-1 font-semibold">{detail.awayCoach?.name || "—"}</p>
+              <p className="mt-1 font-semibold">
+                {detail.awayCoach?.id ? (
+                  <Link
+                    to={`/coaches/${detail.awayCoach.id}/dashboard`}
+                    className="text-sky-300 hover:text-sky-200 hover:underline transition"
+                    title="Ver dashboard del entrenador"
+                  >
+                    {detail.awayCoach.name} 
+                  </Link>
+                ) : detail.awayCoach?.name || "—"}
+              </p>
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Asistencia</p>
@@ -2384,6 +2499,9 @@ export default function PublicMatchDetailView() {
             roster={detail.squads?.home?.roster}
             unavailable={detail.squads?.home?.unavailable}
             formation={detail.homeFormation}
+            teamId={match.homeTeamId ?? match.homeTeam?.id ?? null}
+            coachId={detail.homeCoach?.id ?? detail.homeCoachId ?? null}
+            coachName={detail.homeCoach?.name ?? null}
           />
           <TeamLineupCard
             title={`Alineación ${match.awayTeam?.name ?? "Visitante"}`}
@@ -2392,6 +2510,9 @@ export default function PublicMatchDetailView() {
             roster={detail.squads?.away?.roster}
             unavailable={detail.squads?.away?.unavailable}
             formation={detail.awayFormation}
+            teamId={match.awayTeamId ?? match.awayTeam?.id ?? null}
+            coachId={detail.awayCoach?.id ?? detail.awayCoachId ?? null}
+            coachName={detail.awayCoach?.name ?? null}
           />
         </section>
 

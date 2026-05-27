@@ -89,7 +89,7 @@ export default function AppLayout() {
               </div>
               {desktopMenuOpen && (
                 <div className="hidden lg:block">
-                  <NavMenu name={data.name} role={data.role} />
+                  <NavMenu name={data.name} role={data.role} userId={data.id} />
                 </div>
               )}
             </div>
@@ -114,7 +114,7 @@ export default function AppLayout() {
                   <XMarkIcon className="h-5 w-5" />
                 </button>
               </div>
-              <NavMenu name={data.name} role={data.role} onNavigate={() => setMobileMenuOpen(false)} />
+              <NavMenu name={data.name} role={data.role} userId={data.id} onNavigate={() => setMobileMenuOpen(false)} />
             </div>
           </div>
         )}
