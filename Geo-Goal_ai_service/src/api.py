@@ -103,10 +103,8 @@ if _cors_origins_env.strip():
     _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 else:
     _cors_origins = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:4000",
-        "http://127.0.0.1:5173",
+        "https://geo-goal.onrender.com",
+        "https://geo-goal-1.onrender.com,
     ]
 
 app.add_middleware(

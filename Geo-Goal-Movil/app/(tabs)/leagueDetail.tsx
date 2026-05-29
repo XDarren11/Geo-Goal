@@ -130,12 +130,22 @@ export default function LeagueDetailScreen() {
   });
 
   if ((leagueLoading && isAdmin) || (publicLeagueLoading && !isAdmin)) {
-    return <Loader fullScreen label="Cargando liga..." />;
+    return (
+      <View className="flex-1 bg-geo-black">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
+        <Loader fullScreen label="Cargando liga..." />
+      </View>
+    );
   }
 
   if (isAdmin && !league) {
     return (
       <View className="flex-1 bg-geo-black justify-center items-center">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
         <Text className="text-geo-green">Liga no encontrada</Text>
       </View>
     );

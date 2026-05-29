@@ -65,7 +65,7 @@ def main() -> None:
         _legacy_flat_args()
         return
 
-    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:4000/api"
+    API_BASE = os.environ.get("GEO_API_URL")
 
     if args.command == "api":
         _cmd_api(args, API_BASE)
@@ -179,7 +179,7 @@ def _legacy_flat_args() -> None:
     parser.add_argument("--check-connection", action="store_true")
     args = parser.parse_args()
 
-    API_BASE = os.environ.get("GEO_API_URL") or "http://localhost:4000/api"
+    API_BASE = os.environ.get("GEO_API_URL")
     CLIENT_ID = os.environ.get("M2M_CLIENT_ID")
     CLIENT_SECRET = os.environ.get("M2M_CLIENT_SECRET")
 

@@ -533,17 +533,27 @@ export default function MatchDetailMobileScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-geo-black items-center justify-center">
-        <ActivityIndicator color="#39FF14" />
-        <Text className="text-gray-400 mt-3">Cargando detalle...</Text>
+      <View className="flex-1 bg-geo-black">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#39FF14" />
+          <Text className="text-gray-400 mt-3">Cargando detalle...</Text>
+        </View>
       </View>
     );
   }
 
   if (isError || !data?.match) {
     return (
-      <View className="flex-1 bg-geo-black items-center justify-center px-6">
-        <Text className="text-red-400 font-semibold text-center">No se pudo cargar el partido.</Text>
+      <View className="flex-1 bg-geo-black">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-red-400 font-semibold text-center">No se pudo cargar el partido.</Text>
+        </View>
       </View>
     );
   }
