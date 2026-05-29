@@ -738,6 +738,27 @@ export interface CoachStats {
   }>;
 }
 
+export interface PlayerHeatmapResponse {
+  heatmap: number[][];
+  matchesWithData: number;
+  totalMatches: number;
+}
+
+export async function getPlayerHeatmap(
+  playerId: number,
+  opts: { seasonId?: number; leagueId?: number; teamId?: number } = {}
+): Promise<PlayerHeatmapResponse> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  if (opts.teamId)   params.team   = opts.teamId;
+  const { data } = await api.get<PlayerHeatmapResponse>(
+    `${BASE}/players/${playerId}/heatmap`,
+    { params }
+  );
+  return data;
+}
+
 export async function getPlayerDashboard(
   playerId: number,
   opts: { seasonId?: number; leagueId?: number; teamId?: number; last?: number } = {}

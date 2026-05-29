@@ -1573,6 +1573,9 @@ function MobileAdvancedAnalyticsSection({ matchId, homeTeamId, awayTeamId, homeN
                 />
               </View>
 
+              {/* Mapa de calor por jugador */}
+              <MatchHeatmapBlock heatmaps={adv.heatmaps} playerNames={playerNames} />
+
               {/* Stats por jugador */}
               <PlayerAdvStatsTable
                 speeds={adv.speeds}
@@ -1646,6 +1649,118 @@ function AdvStatCard({ label, homeVal, awayVal, note }: { label: string; homeVal
   );
 }
 
+// ── Heatmap por jugador (solo convocados del partido) ───────────────────────
+function MatchHeatmapBlock({ heatmaps, playerNames }: {
+  heatmaps: Record<string, number[][]>;
+  playerNames: Record<number, string>;
+}) {
+  // Solo IDs que pertenecen a la convocatoria (titulares + banca)
+  const lineupIds = React.useMemo(
+    () => Object.keys(heatmaps).map(Number).filter((pid) => pid in playerNames),
+    [heatmaps, playerNames]
+  );
+
+  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+
+  // Inicializar / resetear cuando cambian los jugadores disponibles
+  React.useEffect(() => {
+    setSelectedId((prev) =>
+      prev != null && lineupIds.includes(prev) ? prev : (lineupIds[0] ?? null)
+    );
+  }, [lineupIds]);
+
+  if (!lineupIds.length) return null;
+
+  const effectiveId = selectedId != null && lineupIds.includes(selectedId)
+    ? selectedId
+    : lineupIds[0];
+  const grid = heatmaps[String(effectiveId)];
+  const CELL = 15;
+  const ROWS = 14;
+
+  return (
+    <AdvSection label="🔥 Mapa de calor">
+      {/* Selector de jugador — chips horizontales */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 6 }}>
+          {lineupIds.map((pid) => {
+            const active = pid === effectiveId;
+            return (
+              <TouchableOpacity
+                key={pid}
+                onPress={() => setSelectedId(pid)}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 12,
+                  backgroundColor: active ? '#39FF14' : '#1f2937',
+                  borderWidth: 1,
+                  borderColor: active ? '#39FF14' : '#374151',
+                }}
+              >
+                <Text
+                  style={{ fontSize: 11, fontWeight: '600', color: active ? '#000' : '#d1d5db' }}
+                  numberOfLines={1}
+                >
+                  {playerNames[pid] ?? `#${pid}`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      {/* Grilla del mapa */}
+      {Array.isArray(grid) && grid.length === ROWS ? (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: '#39FF1440',
+            borderRadius: 4,
+            overflow: 'hidden',
+            backgroundColor: '#061410',
+            alignSelf: 'center',
+          }}
+        >
+          {grid.map((row, rIdx) => (
+            <View key={rIdx} style={{ flexDirection: 'row' }}>
+              {Array.isArray(row) && row.map((val, cIdx) => {
+                const op = val < 0.02 ? 0 : Math.min(0.92, val);
+                return (
+                  <View
+                    key={cIdx}
+                    style={{
+                      width: CELL,
+                      height: CELL,
+                      backgroundColor:
+                        op === 0 ? 'transparent' : `rgba(57, 255, 20, ${op.toFixed(2)})`,
+                    }}
+                  />
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={{ color: '#6b7280', fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>
+          Sin datos de posicionamiento para este jugador.
+        </Text>
+      )}
+
+      {/* Leyenda */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 }}>
+        {[0.08, 0.25, 0.55, 0.85].map((op, i) => (
+          <View
+            key={i}
+            style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: `rgba(57, 255, 20, ${op})` }}
+          />
+        ))}
+        <Text style={{ color: '#6b7280', fontSize: 9, marginLeft: 2 }}>baja → alta actividad</Text>
+      </View>
+    </AdvSection>
+  );
+}
+
 function PlayerAdvStatsTable({ speeds, zones, passNodes, playerNames, homeTeamId }: {
   speeds: Record<string, any>;
   zones: Record<string, any>;
@@ -1653,7 +1768,8 @@ function PlayerAdvStatsTable({ speeds, zones, passNodes, playerNames, homeTeamId
   playerNames: Record<number, string>;
   homeTeamId: number | null;
 }) {
-  const ids = Object.keys(speeds).map(Number).filter((n) => !isNaN(n));
+  // Filtrar a solo jugadores de la convocatoria — excluye tracker IDs sin identificar
+  const ids = Object.keys(speeds).map(Number).filter((n) => !isNaN(n) && n in playerNames);
   if (!ids.length) return null;
 
   const sorted = ids

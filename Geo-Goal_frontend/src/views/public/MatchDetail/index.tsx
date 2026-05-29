@@ -2078,11 +2078,20 @@ export default function PublicMatchDetailView() {
                 homeName={match.homeTeam?.name ?? "Local"}
                 awayName={match.awayTeam?.name ?? "Visitante"}
                 playerNames={
+                  // Construido a partir de los convocados reales (titulares + banca)
+                  // de ambos equipos — solo ellos deben aparecer en el selector.
                   Object.fromEntries(
-                    (analytics?.playerStats ?? []).map((ps: any) => [
-                      ps.userId ?? ps.playerId,
-                      ps.playerName ?? ps.name ?? `#${ps.userId ?? ps.playerId}`,
-                    ])
+                    [
+                      ...(homeStarters ?? []),
+                      ...(homeBench    ?? []),
+                      ...(awayStarters ?? []),
+                      ...(awayBench    ?? []),
+                    ]
+                      .filter((p: any) => p.userId != null)
+                      .map((p: any) => [
+                        p.userId,
+                        p.name ?? `#${p.userId}`,
+                      ])
                   )
                 }
               />
