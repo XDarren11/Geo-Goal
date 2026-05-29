@@ -303,7 +303,7 @@ export default function CoachCareerDashboardScreen() {
                     key={`${t.teamId ?? 'team'}-${i}`}
                     onPress={() =>
                       router.push({
-                        pathname: '/(tabs)/teamCareerDashboard',
+                        pathname: '/teamCareerDashboard',
                         params: { teamId: String(t.teamId), name: t.teamName },
                       } as any)
                     }
@@ -385,7 +385,7 @@ export default function CoachCareerDashboardScreen() {
                   key={p.playerId}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/playerCareerDashboard',
+                      pathname: '/playerCareerDashboard',
                       params: { playerId: String(p.playerId), name: p.name },
                     } as any)
                   }

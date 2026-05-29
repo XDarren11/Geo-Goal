@@ -276,7 +276,7 @@ export default function AdminCareerDashboardScreen() {
                     item={league}
                     onPress={() =>
                       router.push({
-                        pathname: '/(tabs)/leagueDetail',
+                        pathname: '/leagueDetail',
                         params: { leagueId: String(league.leagueId) },
                       } as any)
                     }

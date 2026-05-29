@@ -76,11 +76,10 @@ export default function PlayerCareerDashboardScreen() {
     staleTime: 60_000,
   });
 
-  // Deferred — only starts after main dashboard loads; reads cache-only, no heavy compute
   const { data: heatmapRes, isLoading: heatmapLoading } = useQuery({
     queryKey: ['playerHeatmap', id],
     queryFn: () => getPublicPlayerHeatmap(id),
-    enabled: !!id && !isLoading,
+    enabled: !!id,
     staleTime: 5 * 60_000,
   });
 
@@ -511,7 +510,7 @@ export default function PlayerCareerDashboardScreen() {
                   key={t.teamId}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/teamCareerDashboard',
+                      pathname: '/teamCareerDashboard',
                       params: { teamId: String(t.teamId), name: t.teamName },
                     } as any)
                   }

@@ -287,7 +287,7 @@ export default function LeagueDetailScreen() {
                 <TouchableOpacity
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/teamCareerDashboard' as any,
+                      pathname: '/teamCareerDashboard' as any,
                       params: { teamId: String(item.id), name: item.name },
                     })
                   }
@@ -393,7 +393,7 @@ export default function LeagueDetailScreen() {
                     {user?.role === 'admin' ? (
                       <View className="mt-3 flex-row justify-end gap-2">
                         <TouchableOpacity
-                          onPress={() => router.push(`/(tabs)/matchDetail?id=${item.id}`)}
+                          onPress={() => router.push(`/matchDetail?id=${item.id}`)}
                           className="rounded-lg border border-geo-green px-3 py-1"
                         >
                           <Text className="text-geo-green text-xs font-bold">Ver detalle táctico</Text>
@@ -414,7 +414,7 @@ export default function LeagueDetailScreen() {
                       </View>
                     ) : (
                       <TouchableOpacity
-                        onPress={() => router.push(`/(tabs)/matchDetail?id=${item.id}`)}
+                        onPress={() => router.push(`/matchDetail?id=${item.id}`)}
                         className="mt-3 self-end rounded-lg border border-geo-green px-3 py-1"
                       >
                         <Text className="text-geo-green text-xs font-bold">Ver detalle táctico</Text>

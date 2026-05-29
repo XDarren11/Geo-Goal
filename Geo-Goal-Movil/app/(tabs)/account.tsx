@@ -79,11 +79,11 @@ export default function AccountScreen() {
   function favoriteRoute(f: FavoriteItem): { pathname: string; params: Record<string, string> } | null {
     switch (f.entityType) {
       case 'team':
-        return { pathname: '/(tabs)/teamCareerDashboard', params: { teamId: String(f.entityId), name: f.label ?? '' } };
+        return { pathname: '/teamCareerDashboard', params: { teamId: String(f.entityId), name: f.label ?? '' } };
       case 'player':
-        return { pathname: '/(tabs)/playerCareerDashboard', params: { playerId: String(f.entityId), name: f.label ?? '' } };
+        return { pathname: '/playerCareerDashboard', params: { playerId: String(f.entityId), name: f.label ?? '' } };
       case 'coach':
-        return { pathname: '/(tabs)/coachCareerDashboard', params: { coachId: String(f.entityId), name: f.label ?? '' } };
+        return { pathname: '/coachCareerDashboard', params: { coachId: String(f.entityId), name: f.label ?? '' } };
       default:
         return null;
     }
