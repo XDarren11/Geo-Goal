@@ -98,7 +98,7 @@ app = FastAPI(
 # CORS: permite que el frontend llame directo al AI service (para health checks
 # y, en deploy, podría llamar también /analysis/preview si decides exponerlo).
 # Orígenes configurables via env, default permisivo para dev local.
-_cors_origins_env = os.environ.get("AI_CORS_ORIGINS")
+_cors_origins_env = os.environ.get("AI_CORS_ORIGINS", "")
 if _cors_origins_env.strip():
     _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 else:
