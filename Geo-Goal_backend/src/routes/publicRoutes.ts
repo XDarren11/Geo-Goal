@@ -59,9 +59,161 @@ router.get(
 
 router.get(
   "/matches/:matchId/analytics",
-  param("matchId").isInt().withMessage("ID de partido no válido"),
+  param("matchId").isInt().withMessage("ID de partido no vlido"),
   handleInputError,
   asyncHandler(PublicController.getMatchAnalytics)
+);
+
+router.get(
+  "/matches/:matchId/analytics/advanced",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getAdvancedAnalytics)
+);
+
+router.get(
+  "/matches/:matchId/prediction",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchPrediction)
+);
+
+// ── Listado público de jugadores (descubrir perfiles) ────────────────────────
+
+router.get("/players", asyncHandler(PublicController.getPlayersList));
+router.get(
+  "/players/:id/heatmap",
+  [param("id").isInt({ min: 1 })],
+  handleInputError,
+  asyncHandler(PublicController.getPlayerHeatmap)
+);
+router.get("/teams", asyncHandler(PublicController.getTeamsList));
+router.get("/coaches", asyncHandler(PublicController.getCoachesList));
+
+router.get(
+  "/players/:userId/form",
+  param("userId").isInt().withMessage("ID de usuario no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getPlayerForm)
+);
+
+router.get(
+  "/leagues/:leagueId/weekly-award",
+  param("leagueId").isInt().withMessage("ID de liga no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getWeeklyAward)
+);
+
+// ── Fase 5: xG y xT ──────────────────────────────────────────────────────────
+
+router.get(
+  "/matches/:matchId/xg",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchXG)
+);
+
+router.get(
+  "/matches/:matchId/xt",
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getMatchXT)
+);
+
+// ── Fase 6: Comparativas ──────────────────────────────────────────────────────
+
+router.get(
+  "/teams/:teamA/h2h/:teamB",
+  param("teamA").isInt().withMessage("ID de equipo no válido"),
+  param("teamB").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getH2H)
+);
+
+router.get(
+  "/teams/:teamId/form",
+  param("teamId").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getTeamForm)
+);
+
+router.get(
+  "/players/:id1/compare/:id2",
+  param("id1").isInt().withMessage("ID de jugador no válido"),
+  param("id2").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.comparePlayers)
+);
+
+router.get(
+  "/players/:id/similar",
+  param("id").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getSimilarPlayers)
+);
+
+// ── Fase 8: Dashboards agregados (público — cualquier usuario puede verlos) ──
+
+router.get(
+  "/players/:id/dashboard",
+  param("id").isInt().withMessage("ID de jugador no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getPlayerDashboard)
+);
+
+router.get(
+  "/teams/:id/dashboard",
+  param("id").isInt().withMessage("ID de equipo no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getTeamDashboard)
+);
+
+router.get(
+  "/coaches/:id/dashboard",
+  param("id").isInt().withMessage("ID de coach no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getCoachDashboard)
+);
+
+router.get(
+  "/admins/:id/dashboard",
+  param("id").isInt().withMessage("ID de admin no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getAdminDashboard)
+);
+
+// ── Fase 7: Revisión de eventos inferidos ────────────────────────────────────
+
+router.get(
+  "/matches/:matchId/events/inferred",
+  authenticate,
+  param("matchId").isInt().withMessage("ID de partido no válido"),
+  handleInputError,
+  asyncHandler(PublicController.getInferredEvents)
+);
+
+router.post(
+  "/events/:id/confirm",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.confirmInferredEvent)
+);
+
+router.delete(
+  "/events/:id/reject",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.rejectInferredEvent)
+);
+
+router.patch(
+  "/events/:id",
+  authenticate,
+  param("id").isInt().withMessage("ID de evento no válido"),
+  handleInputError,
+  asyncHandler(PublicController.updateInferredEvent)
 );
 
 router.get(
@@ -125,10 +277,11 @@ router.put(
   authenticate,
   param("matchId").isInt().withMessage("ID de partido no válido"),
   body("srcPts")
-    .isArray({ min: 4, max: 4 })
-    .withMessage("srcPts debe ser un arreglo de exactamente 4 puntos"),
-  body("srcPts.*.x").isNumeric().withMessage("Cada punto debe tener x numérico"),
-  body("srcPts.*.y").isNumeric().withMessage("Cada punto debe tener y numérico"),
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("srcPts debe ser un arreglo de puntos"),
+  body("srcPts.*.x").optional().isNumeric().withMessage("Cada punto debe tener x numérico"),
+  body("srcPts.*.y").optional().isNumeric().withMessage("Cada punto debe tener y numérico"),
   body("playerTags")
     .optional()
     .isArray()
@@ -189,7 +342,6 @@ router.put(
   handleInputError,
   asyncHandler(MatchDetailController.claimAnalysisJob)
 );
-
 
 router.get("/:leagueId/top-scorers", LeagueController.getTopScorers);
 

@@ -718,4 +718,11 @@ router.put(
 
 router.get("/matches/:matchId/players", LeagueController.getMatchPlayers);
 
+router.post('/:id/second-round',
+    hasRole('admin'),
+    param('id').isInt().withMessage('ID de liga no válido'),
+    handleInputError,
+    asyncHandler(LeagueController.generateSecondRound)
+);
+
 export default router

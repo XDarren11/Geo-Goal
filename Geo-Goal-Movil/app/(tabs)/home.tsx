@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -9,6 +9,13 @@ import { getRefereeDashboardSummary } from '@/Api/refereeAPI';
 import { Ionicons } from '@expo/vector-icons';
 import Loader from '@/components/Loader';
 import { getMyNotifications, markAllNotificationsAsRead } from '@/Api/notificationAPI';
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  coach: 'Entrenador',
+  player: 'Jugador',
+  referee: 'Árbitro',
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -100,7 +107,7 @@ export default function HomeScreen() {
           <View className="flex-1">
             <Text className="text-gray-400 text-xs">Bienvenido</Text>
             <Text className="text-geo-green text-2xl font-extrabold" numberOfLines={1}>{user.name}</Text>
-            <Text className="text-gray-500 text-xs mt-1 capitalize">{user.role}</Text>
+            <Text className="text-gray-500 text-xs mt-1">{ROLE_LABEL[user.role] ?? user.role}</Text>
           </View>
           <View className="flex-row items-center gap-2">
             <TouchableOpacity
@@ -132,15 +139,29 @@ export default function HomeScreen() {
             <Text className="text-white text-lg font-bold mb-2">Administrador</Text>
             <TouchableOpacity
               onPress={() => router.push('/league/create')}
-              className="bg-gradient-to-r from-geo-green/20 to-geo-green/5 border border-geo-green rounded-xl p-4 flex-row items-center justify-between"
+              className="border border-geo-green rounded-xl p-4 flex-row items-center justify-between bg-geo-green/10"
             >
               <View className="flex-1">
                 <Text className="text-geo-green font-bold">Crear Liga</Text>
-                <Text className="text-gray-400 text-sm">Organiza torneo</Text>
+                <Text className="text-gray-400 text-sm">Configura nombre, descripción y formato</Text>
               </View>
-              <Ionicons name="add-circle" size={24} color="#39FF14" />
+              <Ionicons name="add-circle-outline" size={24} color="#39FF14" />
             </TouchableOpacity>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Admin</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Admin</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/adminCareerDashboard',
+                    params: { adminId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Text className="text-geo-green text-xs font-bold">Ver ligas</Text>
+                <Ionicons name="chevron-forward" size={12} color="#39FF14" />
+              </TouchableOpacity>
+            </View>
             <View className="flex-row gap-2">
               <KPI label="Ligas" value={adminDashboard?.stats?.leagues ?? 0} />
               <KPI label="Próximos" value={adminDashboard?.stats?.nextMatches ?? 0} />
@@ -173,7 +194,21 @@ export default function HomeScreen() {
 
         {user.role === 'coach' && (
           <>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Entrenador</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Entrenador</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/coachCareerDashboard',
+                    params: { coachId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Ionicons name="stats-chart" size={14} color="#39FF14" />
+                <Text className="text-geo-green text-xs font-bold">Mi carrera</Text>
+              </TouchableOpacity>
+            </View>
             <View className="flex-row gap-2 flex-wrap">
               <KPI label="PJ" value={coachDashboard?.stats?.playedMatches ?? 0} />
               <KPI label="PTS" value={coachDashboard?.stats?.points ?? 0} />
@@ -181,6 +216,17 @@ export default function HomeScreen() {
               <KPI label="GC" value={coachDashboard?.stats?.goalsAgainst ?? 0} />
               <KPI label="Racha" value={coachDashboard?.stats?.streak ?? '-'} />
             </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/team/create')}
+              className="border border-sky-500/60 rounded-xl p-4 flex-row items-center justify-between bg-sky-500/10"
+            >
+              <View className="flex-1">
+                <Text className="text-sky-400 font-bold">Crear Equipo</Text>
+                <Text className="text-gray-400 text-sm">Registra tu equipo con nombre y cancha</Text>
+              </View>
+              <Ionicons name="add-circle-outline" size={24} color="#38bdf8" />
+            </TouchableOpacity>
 
             <Section title="Próximos partidos">
               {coachLoading ? <Loader label="Cargando..." /> : (coachDashboard?.upcomingMatches ?? []).slice(0, 4).map((m: any) => (
@@ -251,7 +297,21 @@ export default function HomeScreen() {
 
         {user.role === 'player' && (
           <>
-            <Text className="text-white text-lg font-bold mb-2">Dashboard Jugador</Text>
+            <View className="flex-row items-center justify-between mb-2">
+              <Text className="text-white text-lg font-bold">Dashboard Jugador</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/playerCareerDashboard',
+                    params: { playerId: String(user.id), name: user.name },
+                  } as any)
+                }
+                className="flex-row items-center gap-1 rounded-xl border border-geo-green/40 bg-geo-green/10 px-3 py-1.5"
+              >
+                <Ionicons name="stats-chart" size={14} color="#39FF14" />
+                <Text className="text-geo-green text-xs font-bold">Mi carrera</Text>
+              </TouchableOpacity>
+            </View>
             <Section title="Próximo juego">
               {playerLoading ? <Loader label="Cargando..." /> : playerDashboard?.nextMatch ? (
                 <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-3">

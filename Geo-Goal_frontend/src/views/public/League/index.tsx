@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getPublicLeagueDetail } from "@/api/publicAPI";
 import { useTheme } from "@/context/ThemeContext";
+import { WeeklyAwardCard } from "@/components/WeeklyAwardCard";
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
@@ -286,7 +287,7 @@ export default function PublicLeagueView() {
           </div>
         </section>
 
-        {/* 👇 2. AQUÍ INTEGRAMOS LA TABLA DE GOLEADORES */}
+        {/* 👇 2. AQU INTEGRAMOS LA TABLA DE GOLEADORES */}
         <section className="mt-8">
           <div className="card-pitch p-5 lg:p-8">
             <div className="flex items-center justify-between mb-6">
@@ -295,6 +296,11 @@ export default function PublicLeagueView() {
             </div>
             <TopScorersTable leagueId={parsedLeagueId} />
           </div>
+        </section>
+
+        {/* 🌟 Jugador de la Jornada */}
+        <section className="mt-6">
+          <WeeklyAwardCard leagueId={parsedLeagueId} />
         </section>
 
         <section className="mt-8 grid gap-6 lg:grid-cols-3">

@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useCallback } from 'react';
 import { View } from 'react-native';
 import 'react-native-reanimated';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -17,7 +18,8 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
+    // Registrar bajo el nombre exacto que usa el componente Ionicons internamente
+    Ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
   });
 
   const onLayoutRootView = useCallback(async () => {
@@ -32,6 +34,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <PushNotificationsProvider />
       <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -43,3 +46,10 @@ export default function RootLayout() {
     </QueryClientProvider>
   );
 }
+
+/** Componente auxiliar para que usePushNotifications viva dentro del QueryClientProvider */
+function PushNotificationsProvider() {
+  usePushNotifications();
+  return null;
+}
+

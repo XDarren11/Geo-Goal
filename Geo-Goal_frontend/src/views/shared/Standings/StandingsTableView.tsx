@@ -89,7 +89,18 @@ export default function StandingsTableView() {
                     
                     {/* Nombre del Equipo */}
                     <td className="whitespace-nowrap px-6 py-4 font-bold">
-                      {team.team.name}
+                      {team.team?.id ? (
+                        <Link
+                          to={`/teams/${team.team.id}/dashboard`}
+                          className="inline-flex items-center gap-1.5 hover:text-emerald-400 hover:underline transition"
+                          title="Ver dashboard del equipo"
+                        >
+                          {team.team.name}
+                          <span className="text-[10px] text-emerald-400/80"></span>
+                        </Link>
+                      ) : (
+                        team.team?.name
+                      )}
                     </td>
                     
                     {/* Estadísticas */}

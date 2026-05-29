@@ -6,7 +6,7 @@ import path from 'path'
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), override: true })
 
 const db = new Sequelize(process.env.DATABASE_URL!, {
-    models: [__dirname + '/../models/**/*.ts'],
+    models: [__dirname + '/../models/**/*.*'],
     logging: process.env.SQL_LOG === 'true' ? console.log : false,   // bonus: silenciar logs
     // Pool y timeouts robustos para Supabase Postgres (corta conexiones idle agresivamente)
     pool: {

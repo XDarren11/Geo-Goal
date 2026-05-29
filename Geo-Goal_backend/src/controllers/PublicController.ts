@@ -68,6 +68,445 @@ export class PublicController {
     res.json(data);
   };
 
+  static getAdvancedAnalytics = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { TrackingAnalyticsService } = await import("../services/TrackingAnalyticsService");
+    const data = await TrackingAnalyticsService.getOrCompute(matchId);
+    res.json(data);
+  };
+
+  static getMatchPrediction = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { EloService } = await import("../services/EloService");
+    const { DixonColesService } = await import("../services/DixonColesService");
+
+    const [elo, poisson] = await Promise.all([
+      EloService.predictMatch(matchId).catch(() => null),
+      DixonColesService.predictMatch(matchId).catch(() => null),
+    ]);
+
+    res.json({ elo, poisson });
+  };
+
+  static getPlayersList = async (req: Request, res: Response): Promise<void> => {
+    const { User } = await import("../models/User");
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+
+    const result = await User.findAndCountAll({
+      where: { role: "player" },
+      attributes: ["id", "name", "username"],
+      order: [["name", "ASC"], ["id", "ASC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    res.json({
+      page,
+      pageSize,
+      total: result.count,
+      items: result.rows,
+    });
+  };
+
+  static getPlayerForm = async (req: Request, res: Response): Promise<void> => {
+    const playerId = Number(req.params.userId);
+    const last = Math.min(Number(req.query.last) || 5, 20);
+    const { MatchAnalyticsService } = await import("../services/MatchAnalyticsService");
+    const form = await MatchAnalyticsService.getPlayerForm(playerId, last);
+    res.json(form);
+  };
+
+  static getWeeklyAward = async (req: Request, res: Response): Promise<void> => {
+    const { WeeklyAward } = await import("../models/WeeklyAward");
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
+    const leagueId = Number(req.params.leagueId);
+
+    const award = await WeeklyAward.findOne({
+      where: { leagueId },
+      include: [
+        { model: User, as: "player", attributes: ["id", "name", "avatarUrl"] },
+        { model: Team, attributes: ["id", "name", "logoUrl"] },
+      ],
+      order: [["weekStart", "DESC"]],
+    });
+
+    if (!award) {
+      res.status(404).json({ error: "No hay premio disponible aún" });
+      return;
+    }
+    res.json(award);
+  };
+
+  // ── Fase 5: xG ───────────────────────────────────────────────────────────
+
+  static getMatchXG = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { XGService } = await import("../services/XGService");
+    const [shots, perPlayer] = await Promise.all([
+      XGService.shotsForMatch(matchId),
+      XGService.playerXGForMatch(matchId),
+    ]);
+    // totalXG por equipo derivado de los tiros
+    const teamTotals: Record<number, number> = {};
+    shots.forEach((s: any) => {
+      if (s.teamId) teamTotals[s.teamId] = Number(((teamTotals[s.teamId] || 0) + s.xg).toFixed(3));
+    });
+    res.json({ shots, perPlayer, teamTotals });
+  };
+
+  // ── Fase 5: xT ───────────────────────────────────────────────────────────
+
+  static getMatchXT = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { XTService } = await import("../services/XTService");
+    const result = await XTService.computeForMatch(matchId);
+    res.json(result);
+  };
+
+  // ── Fase 6: H2H ──────────────────────────────────────────────────────────
+
+  static getH2H = async (req: Request, res: Response): Promise<void> => {
+    const teamA = Number(req.params.teamA);
+    const teamB = Number(req.params.teamB);
+    const { Match } = await import("../models/Match");
+    const { Team } = await import("../models/Team");
+    const { Op } = await import("sequelize");
+
+    const matches = await Match.findAll({
+      where: {
+        played: true,
+        [Op.or]: [
+          { homeTeamId: teamA, awayTeamId: teamB },
+          { homeTeamId: teamB, awayTeamId: teamA },
+        ],
+      },
+      order: [["date", "DESC"]],
+      limit: 20,
+      include: [
+        { model: Team, as: "homeTeam", attributes: ["id", "name", "logoUrl"] },
+        { model: Team, as: "awayTeam", attributes: ["id", "name", "logoUrl"] },
+      ],
+    });
+
+    let teamAWins = 0, teamBWins = 0, draws = 0, goalsA = 0, goalsB = 0;
+    for (const m of matches) {
+      const aHome = m.homeTeamId === teamA;
+      const scoreA = aHome ? m.homeScore : m.awayScore;
+      const scoreB = aHome ? m.awayScore : m.homeScore;
+      goalsA += scoreA; goalsB += scoreB;
+      if (scoreA > scoreB) teamAWins++;
+      else if (scoreA < scoreB) teamBWins++;
+      else draws++;
+    }
+
+    res.json({
+      summary: {
+        played: matches.length,
+        teamAWins, teamBWins, draws,
+        avgGoalsPerMatch: matches.length ? +((goalsA + goalsB) / matches.length).toFixed(2) : 0,
+        goalsFor: { teamA: goalsA, teamB: goalsB },
+      },
+      recent: matches.slice(0, 10).map((m) => ({
+        matchId: m.id,
+        date: m.date,
+        homeTeam: (m as any).homeTeam?.name ?? "",
+        awayTeam: (m as any).awayTeam?.name ?? "",
+        score: `${m.homeScore}-${m.awayScore}`,
+        winner:
+          m.homeScore > m.awayScore ? (m as any).homeTeam?.name :
+          m.homeScore < m.awayScore ? (m as any).awayTeam?.name : "Empate",
+      })),
+    });
+  };
+
+  // ── Fase 6: Forma reciente ────────────────────────────────────────────────
+
+  static getTeamForm = async (req: Request, res: Response): Promise<void> => {
+    const teamId = Number(req.params.teamId);
+    const last = Math.min(Number(req.query.last) || 5, 20);
+    const { Match } = await import("../models/Match");
+    const { Op } = await import("sequelize");
+
+    const matches = await Match.findAll({
+      where: {
+        played: true,
+        [Op.or]: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+      },
+      order: [["date", "DESC"]],
+      limit: last,
+    });
+
+    let wins = 0, drawsN = 0, losses = 0, gf = 0, ga = 0;
+    const recent = matches.map((m) => {
+      const isHome = m.homeTeamId === teamId;
+      const scoreFor = isHome ? m.homeScore : m.awayScore;
+      const scoreAgainst = isHome ? m.awayScore : m.homeScore;
+      gf += scoreFor; ga += scoreAgainst;
+      let result: "W" | "D" | "L";
+      if (scoreFor > scoreAgainst) { wins++; result = "W"; }
+      else if (scoreFor < scoreAgainst) { losses++; result = "L"; }
+      else { drawsN++; result = "D"; }
+      return { matchId: m.id, date: m.date, scoreFor, scoreAgainst, result };
+    });
+
+    res.json({
+      summary: {
+        pointsPerMatch: matches.length ? +((wins * 3 + drawsN) / matches.length).toFixed(2) : 0,
+        wins, draws: drawsN, losses,
+        goalsFor: gf, goalsAgainst: ga,
+        streak: recent.map((r) => r.result).reverse().join(""),
+      },
+      recent: recent.reverse(),
+    });
+  };
+
+  // ── Fase 6: Radar comparativo de jugadores ────────────────────────────────
+
+  static comparePlayers = async (req: Request, res: Response): Promise<void> => {
+    const idA = Number(req.params.id1);
+    const idB = Number(req.params.id2);
+    const { PlayerMatchStat } = await import("../models/PlayerMatchStat");
+    const { Sequelize } = await import("sequelize");
+
+    const buildAgg = async (pid: number) =>
+      PlayerMatchStat.findOne({
+        where: { playerId: pid },
+        attributes: [
+          [Sequelize.fn("SUM", Sequelize.col("goals")), "goals"],
+          [Sequelize.fn("SUM", Sequelize.col("assists")), "assists"],
+          [Sequelize.fn("SUM", Sequelize.col("passesCompleted")), "passesCompleted"],
+          [Sequelize.fn("SUM", Sequelize.col("distanceMeters")), "distanceMeters"],
+          [Sequelize.fn("AVG", Sequelize.col("rating")), "rating"],
+          [Sequelize.fn("SUM", Sequelize.col("shots")), "shots"],
+        ],
+        raw: true,
+      }) as Promise<Record<string, any> | null>;
+
+    const maxes = await PlayerMatchStat.findOne({
+      attributes: [
+        [Sequelize.fn("MAX", Sequelize.fn("SUM", Sequelize.col("goals"))), "goals"],
+        [Sequelize.fn("MAX", Sequelize.fn("SUM", Sequelize.col("assists"))), "assists"],
+        [Sequelize.fn("MAX", Sequelize.fn("SUM", Sequelize.col("passesCompleted"))), "passesCompleted"],
+        [Sequelize.fn("MAX", Sequelize.fn("SUM", Sequelize.col("distanceMeters"))), "distanceMeters"],
+        [Sequelize.fn("MAX", Sequelize.fn("SUM", Sequelize.col("shots"))), "shots"],
+      ],
+      group: ["playerId"],
+      order: [[Sequelize.fn("SUM", Sequelize.col("goals")), "DESC"]],
+      raw: true,
+    }) as Record<string, any> | null;
+
+    const [aggA, aggB] = await Promise.all([buildAgg(idA), buildAgg(idB)]);
+
+    const norm = (val: any, max: any) => max ? Math.min(100, Math.round((Number(val) / Number(max)) * 100)) : 0;
+
+    const toRadar = (agg: Record<string, any> | null) => ({
+      goals: norm(agg?.goals, maxes?.goals),
+      assists: norm(agg?.assists, maxes?.assists),
+      passing: norm(agg?.passesCompleted, maxes?.passesCompleted),
+      distance: norm(agg?.distanceMeters, maxes?.distanceMeters),
+      rating: agg?.rating ? Math.round((Number(agg.rating) / 10) * 100) : 0,
+      shots: norm(agg?.shots, maxes?.shots),
+    });
+
+    res.json({ playerA: toRadar(aggA), playerB: toRadar(aggB) });
+  };
+
+  // ── Fase 6: Player similarity ─────────────────────────────────────────────
+
+  static getSimilarPlayers = async (req: Request, res: Response): Promise<void> => {
+    const playerId = Number(req.params.id);
+    const n = Math.min(Number(req.query.n) || 5, 20);
+    const { PlayerSimilarityService } = await import("../services/PlayerSimilarityService");
+    const similar = await PlayerSimilarityService.findSimilar(playerId, n);
+    res.json(similar);
+  };
+
+  // ── Fase 7: Eventos inferidos (revisión) ─────────────────────────────────
+
+  static getInferredEvents = async (req: Request, res: Response): Promise<void> => {
+    const matchId = Number(req.params.matchId);
+    const { MatchEvent } = await import("../models/MatchEvent");
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
+
+    // Traer TODOS los inferred y filtrar el flag de revisión en JS.
+    // Hacer la query JSONB-aware en Sequelize es engorroso y los volúmenes
+    // por partido son <500 eventos típicamente.
+    const events = await MatchEvent.findAll({
+      where: { matchId, source: "inferred" },
+      include: [
+        { model: User, as: "player", attributes: ["id", "name"], required: false },
+        { model: User, as: "relatedPlayer", attributes: ["id", "name"], required: false },
+        { model: Team, attributes: ["id", "name"], required: false },
+      ],
+      order: [["minute", "ASC"], ["matchTimestampSec", "ASC"]],
+    });
+
+    const pending = [];
+    const autoApplied = [];
+    for (const ev of events) {
+      const meta: any = ev.metadata ?? {};
+      if (meta.requiresReview === true) {
+        pending.push(ev);
+      } else {
+        autoApplied.push(ev);
+      }
+    }
+
+    // Separar también por confianza para que la UI agrupe por urgencia
+    const highConf = pending.filter((e: any) => Number(e.confidence ?? 0) >= 0.6);
+    const lowConf = pending.filter((e: any) => Number(e.confidence ?? 0) < 0.6);
+
+    res.json({
+      totalInferred: events.length,
+      pendingCount: pending.length,
+      autoAppliedCount: autoApplied.length,
+      pending: pending,                // todos los pendientes
+      pendingByConfidence: {
+        high: highConf,                // ≥60% confianza
+        low: lowConf,                  // <60% — revisar primero
+      },
+      autoApplied: autoApplied,        // ya aplicados, mostrar solo para referencia
+    });
+  };
+
+  static confirmInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+
+    const meta = (ev.metadata as Record<string, unknown>) ?? {};
+    await ev.update({
+      source: "manual",
+      confidence: 1.0,
+      metadata: { ...meta, requiresReview: false, confirmedBy: (req as any).user?.id ?? null },
+      recordedBy: (req as any).user?.id ?? null,
+    });
+    res.json({ confirmed: true });
+  };
+
+  static rejectInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+    await ev.destroy();
+    res.json({ rejected: true });
+  };
+
+  static updateInferredEvent = async (req: Request, res: Response): Promise<void> => {
+    const { MatchEvent } = await import("../models/MatchEvent");
+    const ev = await MatchEvent.findByPk(req.params.id);
+    if (!ev) { res.status(404).json({ error: "Evento no encontrado" }); return; }
+
+    const { eventType, minute, teamId, playerId, xStart, yStart, xEnd, yEnd, outcome } = req.body;
+    const meta = (ev.metadata as Record<string, unknown>) ?? {};
+    await ev.update({
+      ...(eventType != null && { eventType }),
+      ...(minute != null && { minute }),
+      ...(teamId !== undefined && { teamId }),
+      ...(playerId !== undefined && { playerId }),
+      ...(xStart !== undefined && { xStart }),
+      ...(yStart !== undefined && { yStart }),
+      ...(xEnd !== undefined && { xEnd }),
+      ...(yEnd !== undefined && { yEnd }),
+      ...(outcome !== undefined && { outcome }),
+      source: "manual",
+      confidence: 1.0,
+      metadata: { ...meta, requiresReview: false, editedBy: (req as any).user?.id ?? null },
+      recordedBy: (req as any).user?.id ?? null,
+    });
+    res.json(ev);
+  };
+
+  // ─── Fase 8: Dashboards agregados (jugador, equipo, coach) ──────────────
+
+  static getPlayerDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { PlayerCareerService } = await import("../services/PlayerCareerService");
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ error: "ID de jugador no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+      teamId: req.query.team ? Number(req.query.team) : undefined,
+    };
+    const recentLimit = req.query.last ? Math.max(1, Math.min(50, Number(req.query.last))) : 10;
+    try {
+      const stats = await PlayerCareerService.getStats(playerId, scope, recentLimit);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[player-dashboard] ${playerId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo cargar el dashboard del jugador" });
+    }
+  };
+
+  // ── Heatmap diferido — solo lee cache, nunca re-computa ──────────────────────
+  static getPlayerHeatmap = async (req: Request, res: Response): Promise<void> => {
+    const { PlayerCareerService } = await import("../services/PlayerCareerService");
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ error: "ID de jugador no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+      teamId:   req.query.team   ? Number(req.query.team)   : undefined,
+    };
+    try {
+      const result = await PlayerCareerService.getHeatmapCached(playerId, scope);
+      // Cache 5 min en el cliente — el heatmap no cambia frecuentemente
+      res.set("Cache-Control", "public, max-age=300");
+      res.json(result);
+    } catch (err: any) {
+      console.error(`[player-heatmap] ${playerId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo calcular el heatmap" });
+    }
+  };
+
+  static getTeamDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { TeamCareerService } = await import("../services/TeamCareerService");
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ error: "ID de equipo no válido" });
+      return;
+    }
+    const scope = {
+      seasonId: req.query.season ? Number(req.query.season) : undefined,
+      leagueId: req.query.league ? Number(req.query.league) : undefined,
+    };
+    try {
+      const stats = await TeamCareerService.getStats(teamId, scope);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[team-dashboard] ${teamId} failed:`, err.message);
+      const status = err?.message?.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: err.message || "No se pudo cargar el dashboard del equipo" });
+    }
+  };
+
+  static getCoachDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { CoachStatsService } = await import("../services/CoachStatsService");
+    const coachId = Number(req.params.id);
+    if (!Number.isInteger(coachId) || coachId <= 0) {
+      res.status(400).json({ error: "ID de coach no válido" });
+      return;
+    }
+    try {
+      const stats = await CoachStatsService.getStats(coachId);
+      res.json(stats);
+    } catch (err: any) {
+      console.error(`[coach-dashboard] ${coachId} failed:`, err.message);
+      const status = err?.message?.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: err.message || "No se pudo cargar el dashboard del coach" });
+    }
+  };
+
   static exportFrames = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
     const page = parseInt(req.query.page as string, 10) || 1;
@@ -76,5 +515,174 @@ export class PublicController {
       new ExportPublicFramesRequest(matchId, page, pageSize)
     );
     res.json(data);
+  };
+
+  // ── Public teams list with optional search ────────────────────────────────
+  static getTeamsList = async (req: Request, res: Response): Promise<void> => {
+    const { Team } = await import("../models/Team");
+    const { League } = await import("../models/League");
+    const { Op } = await import("sequelize");
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: Record<string, unknown> = {};
+    if (search) where["name"] = { [Op.iLike]: `%${search}%` };
+
+    const result = await Team.findAndCountAll({
+      where,
+      attributes: ["id", "name", "logoUrl"],
+      include: [{ model: League, as: "league", attributes: ["id", "name"] }],
+      order: [["name", "ASC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    res.json({
+      page,
+      pageSize,
+      total: result.count,
+      items: result.rows.map((t: any) => ({
+        teamId: t.id,
+        name: t.name,
+        logoUrl: t.logoUrl ?? null,
+        league: t.league ? { id: t.league.id, name: t.league.name } : null,
+      })),
+    });
+  };
+
+  // ── Public coaches list with optional search ──────────────────────────────
+  static getCoachesList = async (req: Request, res: Response): Promise<void> => {
+    const { User } = await import("../models/User");
+    const { Team } = await import("../models/Team");
+    const { Op } = await import("sequelize");
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+    const offset = (page - 1) * pageSize;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    const where: Record<string, unknown> = { role: "coach" };
+    if (search) {
+      where[Op.or as any] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { username: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const result = await User.findAndCountAll({
+      where,
+      attributes: ["id", "name", "username"],
+      include: [{
+        model: Team,
+        as: "teamsManaged",
+        attributes: ["id", "name"],
+        required: false,
+      }],
+      order: [["name", "ASC"]],
+      limit: pageSize,
+      offset,
+    });
+
+    res.json({
+      page,
+      pageSize,
+      total: result.count,
+      items: result.rows.map((u: any) => ({
+        coachId: u.id,
+        name: u.name,
+        username: u.username ?? null,
+        teams: (u.teamsManaged ?? []).map((t: any) => ({ id: t.id, name: t.name })),
+      })),
+    });
+  };
+
+  // ── Dashboard de administrador — historial de ligas creadas ──────────────
+  static getAdminDashboard = async (req: Request, res: Response): Promise<void> => {
+    const { User }    = await import("../models/User");
+    const { League }  = await import("../models/League");
+    const { Team }    = await import("../models/Team");
+    const { Match }   = await import("../models/Match");
+    const { Op, Sequelize } = await import("sequelize");
+
+    const adminId = Number(req.params.id);
+    if (!Number.isInteger(adminId) || adminId <= 0) {
+      res.status(400).json({ error: "ID de admin no válido" });
+      return;
+    }
+
+    try {
+      const admin = await User.findByPk(adminId, { attributes: ["id", "name", "username"] });
+      if (!admin) { res.status(404).json({ error: "Admin no encontrado" }); return; }
+
+      // Ligas creadas por el admin (más recientes primero)
+      const leagues = await League.findAll({
+        where: { managerId: adminId },
+        attributes: ["id", "name", "logoUrl", "createdAt"],
+        include: [{ model: Team, attributes: ["id"], required: false }],
+        order: [["createdAt", "DESC"]],
+      });
+
+      const leagueIds = (leagues as any[]).map((l) => l.id);
+
+      // Conteo de partidos por liga (1 query batch)
+      let matchStats: Record<number, { total: number; played: number }> = {};
+      if (leagueIds.length > 0) {
+        const rows = await Match.findAll({
+          where: { leagueId: { [Op.in]: leagueIds } },
+          attributes: [
+            "leagueId",
+            [Sequelize.fn("COUNT", Sequelize.col("id")), "total"],
+            [Sequelize.fn("SUM",
+              Sequelize.literal("CASE WHEN played = true THEN 1 ELSE 0 END")), "played"],
+          ],
+          group: ["leagueId"],
+          raw: true,
+        }) as any[];
+
+        for (const r of rows) {
+          matchStats[Number(r.leagueId)] = {
+            total:  Number(r.total  ?? 0),
+            played: Number(r.played ?? 0),
+          };
+        }
+      }
+
+      let totalMatches = 0;
+      let totalTeams   = 0;
+
+      const leagueList = (leagues as any[]).map((l) => {
+        const ms         = matchStats[l.id] ?? { total: 0, played: 0 };
+        const teamsCount = (l.teams ?? []).length;
+        totalMatches += ms.total;
+        totalTeams   += teamsCount;
+        return {
+          leagueId:       l.id,
+          name:           l.name,
+          logoUrl:        l.logoUrl ?? null,
+          teamsCount,
+          matchesTotal:   ms.total,
+          matchesPlayed:  ms.played,
+          createdAt:      l.createdAt ? new Date(l.createdAt).toISOString() : null,
+        };
+      });
+
+      res.json({
+        admin: {
+          id:       admin.id,
+          name:     admin.name,
+          username: (admin as any).username ?? null,
+        },
+        totalLeagues: leagues.length,
+        totalTeams,
+        totalMatches,
+        leagues: leagueList,
+      });
+    } catch (err: any) {
+      console.error(`[admin-dashboard] ${adminId} failed:`, err.message);
+      res.status(500).json({ error: "No se pudo cargar el dashboard del admin" });
+    }
   };
 }

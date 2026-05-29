@@ -11,6 +11,7 @@ import numpy as np
 from api_client import APIClient
 from m2m_client import M2MClient
 from video_processor import VideoProcessor
+from event_detector import detect_all_events, detect_all_exhaustive, FrameSnapshot, PlayerPos
 
 
 class AnalysisWorker:
@@ -129,6 +130,16 @@ class AnalysisWorker:
             identity_map = {int(k): int(v) for k, v in identity_map_raw.items()}
             print(f"[worker] Job {job_id}: identity_map has {len(identity_map)} entries")
 
+            frame_skip_val = int(os.environ.get("ANALYSIS_FRAME_SKIP", "4"))
+            # Calcular fps efectivos para el modelo Kalman interno de ByteTrack
+            base_fps = 25.0  # fps típico de broadcast de fútbol
+            effective_fps = max(1, int(round(base_fps / (frame_skip_val + 1))))
+
+            # lineupMode del partido: 11 (estándar) o 7 (cancha chica).
+            # Si el backend no lo envía (compat. hacia atrás), default 11.
+            lineup_mode = int(job.get("lineupMode") or 11)
+            print(f"[worker] Job {job_id}: lineup_mode={lineup_mode} (jugadores por equipo)")
+
             vp = VideoProcessor(
                 model_name=self.model_name,
                 device=self.device,
@@ -136,17 +147,23 @@ class AnalysisWorker:
                 output_dir=output_dir,
                 player_tags=player_tags,
                 identity_map=identity_map,
+                frame_rate=effective_fps,
+                max_gap_frames=int(os.environ.get("INTERP_MAX_GAP_FRAMES", "15")),
+                ball_predict_frames=int(os.environ.get("INTERP_BALL_PREDICT_FRAMES", "8")),
+                lineup_mode=lineup_mode,
             )
             vp.load_video(video_path)
             vp.set_homography(src_pts=src_pts, method="cv2")
 
             # Override progress reporting to go through our API client
-            self._instrument_progress(vp, match_id)
+            self._instrument_progress(vp, match_id, job_id, effective_fps)
 
-            vp.process(
+            await asyncio.to_thread(
+                vp.process,
+                job_id=job_id,
                 export_json="match_data.json",
                 push_match_id=match_id,
-                frame_skip=int(os.environ.get("ANALYSIS_FRAME_SKIP", "4")),  # 5 fps en lugar de 25 → 5× más rápido
+                frame_skip=frame_skip_val,  # 5 fps en lugar de 25 → 5× más rápido
             )
 
             # 5. Mark completed
@@ -241,7 +258,7 @@ class AnalysisWorker:
         print(f"[worker] Job {job_id}: probe HTTP OK en {result['elapsed']:.2f}s → streaming viable")
         return True
 
-    def _instrument_progress(self, vp: VideoProcessor, match_id: int) -> None:
+    def _instrument_progress(self, vp: VideoProcessor, match_id: int, job_id: int, effective_fps: float) -> None:
         """Wrap the exporter to use our API client for progress reporting."""
 
         def _report(
@@ -270,9 +287,58 @@ class AnalysisWorker:
         vp.exporter.report_progress = _report  # type: ignore
 
         def _push(_match_id: int, _m2m_token: str) -> Any:
+            # Construir FrameSnapshots para el detector de eventos (Fase 7)
+            raw_frames = vp.exporter._frames
+            snapshots = []
+            for f in raw_frames:
+                ball = None
+                if f.get("ballX") is not None and f.get("ballY") is not None:
+                    # coordenadas del exporter están en 0-100 (normalizadas) → convertir a metros
+                    ball = (f["ballX"] * 105.0 / 100.0, f["ballY"] * 68.0 / 100.0)
+                players = []
+                for p in f.get("players", []):
+                    players.append(PlayerPos(
+                        player_id=p.get("trackerId", p.get("id", 0)),
+                        team=p.get("team", "unknown"),
+                        x=p.get("x", 0.0) * 105.0 / 100.0,
+                        y=p.get("y", 0.0) * 68.0 / 100.0,
+                    ))
+                snapshots.append(FrameSnapshot(
+                    frame_idx=f.get("frameIdx", 0),
+                    timestamp_ms=f.get("timestampMs", 0),
+                    ball=ball,
+                    players=players,
+                ))
+
+            # Detectar eventos automáticos.
+            # Cambiamos al modo EXHAUSTIVO: además de ball_out/goal/pass detecta
+            # shot, key_pass, cross, clearance, dribble, foul, yellow_card,
+            # red_card, substitution, own_goal, penalty_scored.
+            #
+            # Para volver al modo legacy (solo 3 detectores), usar la env var:
+            #   EVENTS_MODE=legacy
+            inferred_events = []
+            try:
+                events_mode = os.environ.get("EVENTS_MODE", "exhaustive").lower()
+                if events_mode == "exhaustive":
+                    inferred_events = detect_all_exhaustive(snapshots, fps=effective_fps)
+                else:
+                    inferred_events = detect_all_events(
+                        snapshots,
+                        fps=effective_fps,
+                        detect_out=True,
+                        detect_goals=True,
+                        detect_passes=True,
+                    )
+                print(f"[worker] Job {job_id}: {len(inferred_events)} eventos inferidos detectados (mode={events_mode})")
+            except Exception as detect_err:
+                print(f"[worker] Job {job_id}: error en detección de eventos: {detect_err}")
+                import traceback; traceback.print_exc()
+
             payload = {
                 "pitch": {"length_m": 105.0, "width_m": 68.0},
-                "frames": vp.exporter._frames,
+                "frames": raw_frames,
+                "inferredEvents": inferred_events,
             }
             return self.api.push_tracking_batch(match_id, payload)
 

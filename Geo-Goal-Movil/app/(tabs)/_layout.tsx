@@ -62,8 +62,7 @@ export default function TabLayout() {
         return true;
       }
 
-      // Pantalla de detalle (leagueDetail, teamDetail, matchDetail, etc.)
-      // → dejar que el Stack nativo maneje el pop
+      // Pantalla de detalle → dejar que el Stack nativo maneje el pop
       return false;
     };
 
@@ -76,6 +75,7 @@ export default function TabLayout() {
   }
 
   const isGuest = !user;
+  const isReferee = user?.role === 'referee';
 
   return (
     <Tabs
@@ -96,91 +96,73 @@ export default function TabLayout() {
           fontWeight: '600',
         },
       }}>
-      {!isGuest ? (
-        <>
-          {/* Dashboard — todos los roles */}
-          <Tabs.Screen
-            name="home"
-            options={{
-              title: 'Dashboard',
-              tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
-            }}
-          />
 
-          {/* Explore (ligas/equipos) — admin, coach, player */}
-          {user?.role !== 'referee' && (
-            <Tabs.Screen
-              name="explore"
-              options={{
-                title: 'Explore',
-                tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
-              }}
-            />
-          )}
-
-          {/* Códigos — todos los roles */}
-          <Tabs.Screen
-            name="codes"
-            options={{
-              title: 'Códigos',
-              tabBarIcon: ({ color, size }) => <Ionicons name="key" size={size} color={color} />,
-            }}
-          />
-
-          {/* Cuenta — todos los roles */}
-          <Tabs.Screen
-            name="account"
-            options={{
-              title: 'Cuenta',
-              tabBarIcon: ({ color, size }) => <Ionicons name="settings" size={size} color={color} />,
-            }}
-          />
-
-          {/* Árbitro — solo referee */}
-          {user?.role === 'referee' && (
-            <Tabs.Screen
-              name="referee"
-              options={{
-                href: undefined,
-                title: 'Árbitro',
-                tabBarIcon: ({ color, size }) => <Ionicons name="clipboard" size={size} color={color} />,
-              }}
-            />
-          )}
-        </>
-      ) : null}
+      {/* Dashboard — todos los roles autenticados */}
       <Tabs.Screen
-        name="public"
+        name="home"
         options={{
-          title: 'Resultados',
-          tabBarIcon: ({ color, size }) => <Ionicons name="trophy" size={size} color={color} />,
+          title: 'Dashboard',
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          href: isGuest ? null : undefined,
         }}
       />
+
+      {/* Explorar — solo autenticados */}
       <Tabs.Screen
-        name="leagueDetail"
+        name="explore"
         options={{
-          href: null,
+          title: 'Explorar',
+          tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />,
+          href: isGuest ? null : undefined,
         }}
       />
+
+      {/* Códigos — todos los roles autenticados */}
       <Tabs.Screen
-        name="teamDetail"
+        name="codes"
         options={{
-          href: null,
+          title: 'Códigos',
+          tabBarIcon: ({ color, size }) => <Ionicons name="key" size={size} color={color} />,
+          href: isGuest ? null : undefined,
         }}
       />
+
+      {/* Cuenta — todos los roles autenticados */}
       <Tabs.Screen
-        name="matchDetail"
+        name="account"
         options={{
-          href: null,
+          title: 'Cuenta',
+          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          href: isGuest ? null : undefined,
         }}
       />
+
+      {/* Árbitro — solo referee */}
+      <Tabs.Screen
+        name="referee"
+        options={{
+          title: 'Árbitro',
+          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard" size={size} color={color} />,
+          href: (isGuest || !isReferee) ? null : undefined,
+        }}
+      />
+
+      {/* Resultados — eliminado (contenido unificado en Explorar) */}
+      <Tabs.Screen name="public" options={{ href: null }} />
+
+      {/* ── Pantallas ocultas de la barra de tabs ── */}
+      <Tabs.Screen name="leagueDetail" options={{ href: null }} />
+      <Tabs.Screen name="teamDetail" options={{ href: null }} />
+      <Tabs.Screen name="matchDetail" options={{ href: null }} />
       <Tabs.Screen
         name="navigation"
-        options={{
-          href: null,
-          headerShown: false,
-        }}
+        options={{ href: null, headerShown: false }}
       />
+      <Tabs.Screen name="playerCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="teamCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="coachCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="adminCareerDashboard" options={{ href: null }} />
+      <Tabs.Screen name="playersList" options={{ href: null }} />
     </Tabs>
   );
 }

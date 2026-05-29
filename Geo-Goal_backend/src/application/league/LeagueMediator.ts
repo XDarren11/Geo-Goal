@@ -17,6 +17,8 @@ import {
   RestructureLeagueFixtureHandler,
   UpdateLeagueHandler,
   UpdateLeagueLogoHandler,
+  // 👇 1. IMPORTA TU NUEVO HANDLER
+  GenerateSecondRoundHandler,
 } from "./handlers/LeagueHandlers";
 import {
   AddTeamToLeagueRequest,
@@ -35,6 +37,7 @@ import {
   RestructureLeagueFixtureRequest,
   UpdateLeagueLogoRequest,
   UpdateLeagueRequest,
+  GenerateSecondRoundRequest,
 } from "./requests/LeagueRequests";
 
 export function buildLeagueMediator(leagueService: ILeagueService): Mediator {
@@ -56,6 +59,7 @@ export function buildLeagueMediator(leagueService: ILeagueService): Mediator {
   mediator.register("league.getLeagueMatchesGrouped", new GetLeagueMatchesGroupedHandler(leagueService));
   mediator.register("league.restructureFixture", new RestructureLeagueFixtureHandler(leagueService));
   mediator.register("league.updateLogo", new UpdateLeagueLogoHandler(leagueService));
+  mediator.register("league.generateSecondRound", new GenerateSecondRoundHandler(leagueService));
 
   return mediator;
 }
@@ -76,4 +80,5 @@ export type LeagueRequests =
   | GetStandingsRequest
   | GetLeagueMatchesGroupedRequest
   | RestructureLeagueFixtureRequest
-  | UpdateLeagueLogoRequest;
+  | UpdateLeagueLogoRequest
+  | GenerateSecondRoundRequest;

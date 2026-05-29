@@ -5,6 +5,7 @@ import {
   CreateLeagueRequest,
   DeleteLeagueRequest,
   GenerateFixtureRequest,
+  GenerateSecondRoundRequest,
   GetAllLeaguesRequest,
   GetFixtureWithLocationsRequest,
   GetLeagueByIdRequest,
@@ -18,6 +19,7 @@ import {
   UpdateLeagueLogoRequest,
   UpdateLeagueRequest,
 } from "../requests/LeagueRequests";
+import { MatchOperationsService } from "../../../services/MatchOperationsService";
 
 export class CreateLeagueHandler implements RequestHandler<CreateLeagueRequest, string> {
   constructor(private readonly leagueService: ILeagueService) {}
@@ -196,3 +198,11 @@ export class UpdateLeagueLogoHandler
   }
 }
 
+export class GenerateSecondRoundHandler {
+  // Recibe el leagueService igual que los demás
+  constructor(private leagueService: ILeagueService) {}
+
+  async handle(request: GenerateSecondRoundRequest) {
+    return this.leagueService.generateSecondRound(request.leagueId);
+  }
+}

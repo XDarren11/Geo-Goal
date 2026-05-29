@@ -10,6 +10,16 @@ function resolveMediaUrl(value: string | null | undefined): string {
   return `${base.replace(/\/$/, "")}/uploads/${value}`;
 }
 
+export async function createTeam(body: {
+  name: string;
+  fieldAddress?: string;
+  lat?: number;
+  lng?: number;
+}): Promise<string> {
+  const { data } = await api.post<string>(BASE, body);
+  return data;
+}
+
 export async function getMyTeams(): Promise<Team[]> {
   const { data } = await api.get<Team[]>(BASE);
   return data;

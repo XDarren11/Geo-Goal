@@ -261,7 +261,10 @@ export class MatchDetailService {
         updatedBy: actorUserId,
       };
     });
-
+    // Delete existing squad records for this match and team to avoid unique constraint violations
+    await MatchSquadPlayer.destroy({
+      where: { matchId, teamId },
+    });
     await MatchSquadPlayer.bulkCreate(rows, {
       updateOnDuplicate: [
         "squadRole",
@@ -566,23 +569,53 @@ export class MatchDetailService {
       throw new AppError(404, "Partido no encontrado");
     }
 
-    const league = await League.findByPk(match.leagueId, {
-      attributes: ["id", "lineupMode"],
-    });
-    const expectedStarters = Number(league?.lineupMode);
-    if (!league || ![7, 11].includes(expectedStarters)) {
-      throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
-    }
-
-    this.validateCoachLineup(input, expectedStarters);
-
     const teams = await Team.findAll({
       where: { id: [match.homeTeamId, match.awayTeamId] },
-      attributes: ["id", "trainerId"],
+      attributes: ["id", "trainerId", "leagueId"],
     });
 
     const homeTeam = teams.find((t) => Number(t.id) === match.homeTeamId);
     const awayTeam = teams.find((t) => Number(t.id) === match.awayTeamId);
+
+    let expectedStarters = 0;
+    if (match.type === "league") {
+      const league = await League.findByPk(match.leagueId, {
+        attributes: ["id", "lineupMode"],
+      });
+      expectedStarters = Number(league?.lineupMode);
+      if (!league || ![7, 11].includes(expectedStarters)) {
+        throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
+      }
+    } else {
+      const leagueIds = [homeTeam?.leagueId, awayTeam?.leagueId].filter(
+        (id): id is number => typeof id === "number"
+      );
+
+      if (leagueIds.length !== 2) {
+        throw new AppError(409, "Los partidos amistosos requieren equipos con liga definida");
+      }
+
+      const leagues = await League.findAll({
+        where: { id: leagueIds },
+        attributes: ["id", "lineupMode"],
+      });
+
+      if (leagues.length !== 2) {
+        throw new AppError(409, "No se pudo resolver el formato de la liga para el amistoso");
+      }
+
+      const modes = leagues
+        .map((l) => Number(l.lineupMode))
+        .filter((m) => [7, 11].includes(m));
+
+      if (modes.length !== 2) {
+        throw new AppError(409, "La liga debe definir si el formato es 7 u 11");
+      }
+
+      expectedStarters = Math.min(...modes);
+    }
+
+    this.validateCoachLineup(input, expectedStarters);
     const isHomeCoach = homeTeam?.trainerId === actorUserId;
     const isAwayCoach = awayTeam?.trainerId === actorUserId;
 
@@ -639,6 +672,33 @@ export class MatchDetailService {
     });
 
     await NotificationService.notifyLineupUpdated(match.id, teamId);
+
+    // ── Notificación: lineup publicada → followers del equipo ──────────────
+    setImmediate(async () => {
+      try {
+        const fullMatch = await Match.findByPk(match.id, {
+          include: [
+            { model: Team, as: "homeTeam", attributes: ["id", "name"] },
+            { model: Team, as: "awayTeam", attributes: ["id", "name"] },
+          ],
+        });
+        if (!fullMatch) return;
+        const teamName = side === "home"
+          ? ((fullMatch as any).homeTeam?.name ?? "Local")
+          : ((fullMatch as any).awayTeam?.name ?? "Visitante");
+        const rivalName = side === "home"
+          ? ((fullMatch as any).awayTeam?.name ?? "Visitante")
+          : ((fullMatch as any).homeTeam?.name ?? "Local");
+        await NotificationService.broadcastToTeamFollowers(teamId, {
+          type: "lineup_published",
+          title: `Alineación lista: ${teamName}`,
+          message: `Para el partido vs ${rivalName}`,
+          payload: { matchId: fullMatch.id, teamId, side },
+        });
+      } catch (err) {
+        console.error("[notif] lineup_published broadcast failed:", err);
+      }
+    });
 
     const reloaded = await this.getByMatchId(matchId);
     return {

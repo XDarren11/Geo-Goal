@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { body, param } from "express-validator";
 import { AdminController } from "../controllers/AdminController";
+import { MatchDetailController } from "../controllers/MatchDetailController";
 import { authenticate } from "../middleware/auth";
 import { hasRole } from "../middleware/role";
 import { handleInputError } from "../middleware/validation";
@@ -12,6 +13,18 @@ router.use(authenticate);
 router.use(hasRole("admin"));
 
 router.get("/dashboard", asyncHandler(AdminController.dashboardSummary));
+
+router.get(
+  "/analysis/history",
+  asyncHandler(MatchDetailController.getAdminAnalysisHistory)
+);
+
+router.get(
+  "/analysis/history/:jobId",
+  param("jobId").isInt().withMessage("ID de análisis no válido"),
+  handleInputError,
+  asyncHandler(MatchDetailController.getAdminAnalysisDetail)
+);
 
 // --- Gestión completa de usuarios ---
 router.get(

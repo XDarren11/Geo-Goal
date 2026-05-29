@@ -328,3 +328,35 @@ async def dashboard_force_poll(request: Request):
         return {"message": f"Job encontrado y procesamiento iniciado — Job #{pending[0].get('jobId')}", "jobId": pending[0].get("jobId")}
 
     return {"message": "No hay trabajos pendientes en tus ligas"}
+
+
+@router.get("/dashboard/api/history")
+async def dashboard_history(request: Request):
+    """Return analysis history for the admin's leagues."""
+    token = _get_token(request)
+    await _verify_admin(request)
+
+    try:
+        data = await _call_backend("GET", "/admin/analysis/history", token, timeout=12)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Error al consultar historial")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Error al consultar historial")
+
+    return data
+
+
+@router.get("/dashboard/api/history/{job_id}")
+async def dashboard_history_detail(request: Request, job_id: int):
+    """Return analysis detail for a specific job in the admin's leagues."""
+    token = _get_token(request)
+    await _verify_admin(request)
+
+    try:
+        data = await _call_backend("GET", f"/admin/analysis/history/{job_id}", token, timeout=12)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Error al consultar detalle")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Error al consultar detalle")
+
+    return data

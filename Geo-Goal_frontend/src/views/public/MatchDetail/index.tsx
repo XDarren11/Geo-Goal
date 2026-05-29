@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, getPublicMatchFramesExport, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, getPublicMatchFramesExport, getAnalysisFrame, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
 import { PitchPreview2D } from "@/components/Pitch/PitchPreview2D";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -8,9 +8,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LiveRouteMap } from "@/views/Maps/LiveRouteMap";
 import { useAuth } from "@/hooks/useAuth";
 import { getPlayersTeam, updateCoachLineup } from "@/api/teamAPI";
+import { AdvancedAnalyticsPanel } from "@/components/AdvancedAnalytics/AdvancedAnalyticsPanel";
+import { MatchPrediction } from "@/components/MatchPrediction";
+import { H2HCard } from "@/components/Comparativas/H2HCard";
+import { TeamFormBadges } from "@/components/Comparativas/TeamFormBadges";
+import { InferredEventsPanel } from "@/components/InferredEvents/InferredEventsPanel";
 
 type Side = "home" | "away";
-type MatchViewMode = "normal" | "pro";
+type MatchViewMode = "normal" | "pro" | "advanced";
 
 type Incident = {
   yellow: number;
@@ -348,6 +353,7 @@ function buildIncidentMap(
 }
 
 function TacticalPitch({
+  matchId,
   homeStarters,
   awayStarters,
   homeName,
@@ -355,7 +361,10 @@ function TacticalPitch({
   analytics,
   homeFormation,
   awayFormation,
+  homeTeamId,
+  awayTeamId,
 }: {
+  matchId: number;
   homeStarters?: MatchDetailLineupEntry[];
   awayStarters?: MatchDetailLineupEntry[];
   homeName: string;
@@ -363,123 +372,322 @@ function TacticalPitch({
   analytics: Awaited<ReturnType<typeof getPublicMatchAnalytics>> | undefined;
   homeFormation?: string | null;
   awayFormation?: string | null;
+  homeTeamId?: number | null;
+  awayTeamId?: number | null;
 }) {
+  const PAGE_SIZE = 500;
+  const totalFrames = analytics?.summary?.totalFrames ?? 0;
+  const legacyFrames = analytics?.trackingFrames ?? [];
+  const useLegacyMode = totalFrames > 0 && totalFrames <= legacyFrames.length;
+
   const home = normalizeLineup(homeStarters);
   const away = normalizeLineup(awayStarters);
   const lineupMode: 7 | 11 = home.length === 7 || away.length === 7 ? 7 : 11;
   const incidents = buildIncidentMap(analytics);
-  const frames = analytics?.trackingFrames ?? [];
+
+  const maxIndex = Math.max(0, totalFrames - 1);
   const [frameIndex, setFrameIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [density, setDensity] = useState(1);
 
   useEffect(() => {
-    setFrameIndex(frames.length ? frames.length - 1 : 0);
+    setFrameIndex(maxIndex);
     setIsPlaying(false);
-  }, [frames.length]);
+  }, [totalFrames]);
 
+  // ---- Paginated frame loading (sliding window) ----
+  const currentPage = useMemo(
+    () => Math.floor(frameIndex / PAGE_SIZE) + 1,
+    [frameIndex],
+  );
+  const maxPage = Math.max(1, Math.ceil(totalFrames / PAGE_SIZE));
+
+  const { data: pageData, isFetching: pageLoading } = useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0,
+    staleTime: 120_000,
+  });
+
+  // Prefetch next page for smooth forward scrubbing
+  useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage + 1],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage + 1, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0 && currentPage < maxPage,
+    staleTime: 120_000,
+  });
+
+  // Prefetch previous page for smooth backward scrubbing
+  useQuery({
+    queryKey: ["frames-tactical", matchId, currentPage - 1],
+    queryFn: () => getPublicMatchFramesExport(matchId, currentPage - 1, PAGE_SIZE),
+    enabled: !useLegacyMode && totalFrames > 0 && currentPage > 1,
+    staleTime: 120_000,
+  });
+
+  const currentFrame = useMemo(() => {
+    if (useLegacyMode) {
+      return legacyFrames.length > 0
+        ? legacyFrames[Math.min(frameIndex, legacyFrames.length - 1)]
+        : null;
+    }
+    if (!pageData?.frames?.length) return null;
+    const localIndex = frameIndex - (currentPage - 1) * PAGE_SIZE;
+    return (pageData.frames[localIndex] ?? null) as typeof legacyFrames[0] | null;
+  }, [useLegacyMode, legacyFrames, frameIndex, pageData, currentPage]);
+
+  // ---- Playback ----
   useEffect(() => {
-    if (!isPlaying || frames.length <= 1) return;
+    if (!isPlaying || maxIndex <= 0) return;
     const timer = setInterval(() => {
       setFrameIndex((prev) => {
-        if (prev >= frames.length - 1) {
-          return 0;
-        }
-        return prev + 1;
+        const next = prev + density;
+        return next > maxIndex ? 0 : next;
       });
     }, 650);
-
     return () => clearInterval(timer);
-  }, [isPlaying, frames.length]);
+  }, [isPlaying, maxIndex, density]);
 
-  const currentFrame = frames.length ? frames[Math.min(frameIndex, frames.length - 1)] : null;
+  // ---- Time helpers ----
+  const ESTIMATED_FPS = 10;
+  const currentTimeMs = currentFrame?.timestampMs ?? frameIndex * (1000 / ESTIMATED_FPS);
 
+  const formatTime = (ms: number) => {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${min}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const jumpByTime = (seconds: number) => {
+    setFrameIndex((prev) =>
+      Math.max(0, Math.min(maxIndex, prev + Math.round(seconds * ESTIMATED_FPS))),
+    );
+  };
+
+  // ---- Player position calculations ----
   const homeIds = useMemo(() => new Set(home.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [home]);
   const awayIds = useMemo(() => new Set(away.map((p) => p.userId).filter((id): id is number => typeof id === "number")), [away]);
 
+  type TrackedPlayer = { userId: number | null; x: number; y: number; side: Side | "neutral"; trackerId: number | null; teamId: number | null; interpolated: boolean };
+
   const trackedPlayers = useMemo(() => {
-    if (!currentFrame || !Array.isArray(currentFrame.players)) return [] as Array<{ userId: number | null; x: number; y: number; side: Side | "neutral" }>;
+    if (!currentFrame || !Array.isArray(currentFrame.players)) return [] as TrackedPlayer[];
 
     const toNumber = (value: unknown) => {
       const n = Number(value);
       return Number.isFinite(n) ? n : null;
     };
 
-    return currentFrame.players
-      .map((entry) => {
-        const row = entry as Record<string, unknown>;
+    return (currentFrame.players as Array<Record<string, unknown>>)
+      .map((row) => {
         const userId = toNumber(row.userId ?? row.playerId);
+        const trackerId = toNumber(row.playerId ?? row.tracker_id);
+        const teamId = toNumber(row.teamId ?? row.teamID ?? row.team_id);
         const x = toNumber(row.x);
         const y = toNumber(row.y);
         if (x == null || y == null) return null;
 
         let side: Side | "neutral" = "neutral";
+        // Try userId match first (manual/legacy frames)
         if (userId != null && homeIds.has(userId)) side = "home";
         else if (userId != null && awayIds.has(userId)) side = "away";
+        // Fallback: use teamId (AI-processed frames have teamId = real DB team ID)
+        else if (teamId != null && homeTeamId != null && teamId === homeTeamId) side = "home";
+        else if (teamId != null && awayTeamId != null && teamId === awayTeamId) side = "away";
 
         return {
           userId,
+          trackerId,
+          teamId,
           x: Math.max(0, Math.min(100, x)),
           y: Math.max(0, Math.min(100, y)),
+          interpolated: row.interpolated === true,
           side,
         };
       })
-      .filter((v): v is { userId: number | null; x: number; y: number; side: Side | "neutral" } => v != null);
-  }, [currentFrame, homeIds, awayIds]);
+      .filter((v): v is TrackedPlayer => v != null);
+  }, [currentFrame, homeIds, awayIds, homeTeamId, awayTeamId]);
 
   const trackedPositionByPlayerId = useMemo(() => {
-    const map = new Map<number, { x: number; y: number }>();
+    const map = new Map<number, { x: number; y: number; interpolated: boolean }>();
+    // Direct userId matches (manual frames or identity-resolved AI frames)
     trackedPlayers.forEach((tp) => {
       if (typeof tp.userId === "number" && !map.has(tp.userId)) {
-        map.set(tp.userId, { x: tp.x, y: tp.y });
+        map.set(tp.userId, { x: tp.x, y: tp.y, interpolated: tp.interpolated });
       }
     });
+
+    // Auto-match by side for AI frames where userId is a tracker_id, not a real user
+    // Assign lineup players (in order) to side-matched tracked positions not yet claimed
+    const homeOpen = trackedPlayers.filter((tp) => tp.side === "home" && !(typeof tp.userId === "number" && homeIds.has(tp.userId)));
+    const awayOpen = trackedPlayers.filter((tp) => tp.side === "away" && !(typeof tp.userId === "number" && awayIds.has(tp.userId)));
+
+    let hi = 0;
+    home.forEach((p) => {
+      if (typeof p.userId !== "number") return;
+      if (map.has(p.userId)) return;
+      if (hi < homeOpen.length) { map.set(p.userId, homeOpen[hi]); hi++; }
+    });
+
+    let ai = 0;
+    away.forEach((p) => {
+      if (typeof p.userId !== "number") return;
+      if (map.has(p.userId)) return;
+      if (ai < awayOpen.length) { map.set(p.userId, awayOpen[ai]); ai++; }
+    });
+
     return map;
-  }, [trackedPlayers]);
+  }, [trackedPlayers, home, away, homeIds, awayIds]);
+
+  // Tracked positions NOT matched to any lineup player — render as extra dots
+  const usedTracked = useMemo(() => {
+    const used = new Set<number>();
+    trackedPositionByPlayerId.forEach((pos) => {
+      trackedPlayers.forEach((tp, i) => {
+        if (tp.x === pos.x && tp.y === pos.y) used.add(i);
+      });
+    });
+    return used;
+  }, [trackedPlayers, trackedPositionByPlayerId]);
+
+  const unmatchedTracked = useMemo(
+    () => trackedPlayers.filter((_, i) => !usedTracked.has(i)),
+    [trackedPlayers, usedTracked],
+  );
 
   const toSpot = (idx: number, side: Side) => {
-    const formation = side === 'home' ? homeFormation : awayFormation;
+    const formation = side === "home" ? homeFormation : awayFormation;
     const spots = getFormationSpots(formation, lineupMode);
     const base = spots[Math.min(idx, spots.length - 1)] ?? spots[0];
     if (side === "home") return base;
     return { x: 100 - base.x, y: base.y };
   };
 
+  const densityOptions = [1, 5, 10, 30];
+
   return (
     <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-black text-[var(--geo-text)]">Vista táctica del partido</h2>
-        <div className="text-xs text-[var(--geo-text-muted)]">Datos arbitrales simulados</div>
+        <div className="text-xs text-[var(--geo-text-muted)]">
+          {totalFrames > 0
+            ? `${totalFrames.toLocaleString()} frames`
+            : "Sin datos de tracking"}
+        </div>
       </div>
 
       <div className="relative overflow-hidden rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-800/70 to-emerald-900/80 p-3">
-        <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-          <input
-            type="range"
-            min={0}
-            max={Math.max(0, frames.length - 1)}
-            value={Math.min(frameIndex, Math.max(0, frames.length - 1))}
-            onChange={(e) => setFrameIndex(Number(e.target.value))}
-            disabled={!frames.length}
-            className="w-full accent-emerald-400"
-          />
-          <button
-            type="button"
-            onClick={() => setIsPlaying((p) => !p)}
-            disabled={frames.length <= 1}
-            className="rounded bg-black/30 px-3 py-1 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {isPlaying ? "Pausar" : "Reproducir"}
-          </button>
-          <p className="text-right text-xs text-emerald-100/90">
-            {currentFrame ? `Frame ${Math.min(frameIndex, frames.length - 1) + 1}/${frames.length} · ${currentFrame.period ?? "—"}` : "Sin tracking"}
-          </p>
+        {/* Controls */}
+        <div className="mb-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] items-center">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, maxIndex)}
+              value={Math.min(frameIndex, maxIndex)}
+              onChange={(e) => setFrameIndex(Number(e.target.value))}
+              disabled={maxIndex <= 0}
+              className="w-full accent-emerald-400"
+            />
+            <p className="text-right text-xs tabular-nums text-emerald-100/90 min-w-[160px]">
+              {currentFrame
+                ? `Frame ${frameIndex + 1}/${totalFrames} · ${formatTime(currentTimeMs)} · ${currentFrame.period ?? "—"}`
+                : pageLoading
+                  ? "Cargando…"
+                  : maxIndex > 0
+                    ? "Moviendo…"
+                    : "Sin tracking"}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => jumpByTime(-30)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Retroceder 30s"
+              >
+                -30s
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(-10)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Retroceder 10s"
+              >
+                -10s
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPlaying((p) => !p)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-3 py-1 text-xs font-bold text-white disabled:opacity-50 hover:bg-black/50"
+              >
+                {isPlaying ? "Pausar" : "Reproducir"}
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(10)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Avanzar 10s"
+              >
+                +10s
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpByTime(30)}
+                disabled={maxIndex <= 0}
+                className="rounded bg-black/30 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30 hover:bg-black/50"
+                title="Avanzar 30s"
+              >
+                +30s
+              </button>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-[var(--geo-text-muted)]">Saltar:</span>
+              {densityOptions.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDensity(d)}
+                  disabled={maxIndex <= 0}
+                  className={`rounded px-2 py-1 text-[10px] font-bold transition ${
+                    density === d
+                      ? "bg-geo-green text-black"
+                      : "bg-black/30 text-white hover:bg-black/50"
+                  } disabled:opacity-30`}
+                >
+                  {d}x
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
+        {/* Pitch */}
         <div className="relative h-[560px] w-full rounded-lg border border-white/30">
           <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white/40" />
           <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40" />
           <div className="absolute left-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-l-0" />
           <div className="absolute right-0 top-1/2 h-40 w-16 -translate-y-1/2 border border-white/40 border-r-0" />
+
+          {/* Loading overlay while fetching page */}
+          {pageLoading && !currentFrame && maxIndex > 0 ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+              <div className="flex items-center gap-2 rounded-lg bg-black/60 px-4 py-2 text-sm text-white">
+                <div className="h-4 w-4 border-2 border-geo-green border-t-transparent rounded-full animate-spin" />
+                Cargando frames…
+              </div>
+            </div>
+          ) : null}
 
           <div className="absolute left-3 top-2 flex items-center gap-2">
             <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-emerald-200">
@@ -491,7 +699,7 @@ function TacticalPitch({
               </span>
             ) : (
               <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400/60 border border-emerald-400/20">
-                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+                {lineupMode === 7 ? "2-3-1" : "4-4-2"}
               </span>
             )}
           </div>
@@ -502,7 +710,7 @@ function TacticalPitch({
               </span>
             ) : (
               <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-400/60 border border-sky-400/20">
-                {lineupMode === 7 ? '2-3-1' : '4-4-2'}
+                {lineupMode === 7 ? "2-3-1" : "4-4-2"}
               </span>
             )}
             <span className="rounded bg-black/30 px-2 py-1 text-xs font-bold text-sky-200">
@@ -514,14 +722,18 @@ function TacticalPitch({
             const trackedPos = typeof p.userId === "number" ? trackedPositionByPlayerId.get(p.userId) : undefined;
             const pos = trackedPos ?? toSpot(p.idx, "home");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
+            const isInterpolated = trackedPos?.interpolated === true;
+            const isMvp = p.userId != null && (analytics as any)?.match?.mvpPlayerId === p.userId;
             return (
               <div
                 key={`h-${p.idx}-${p.userId ?? p.name}`}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                style={{ left: `${pos.x}%`, top: `${pos.y}%`, opacity: isInterpolated ? 0.5 : 1 }}
+                title={isInterpolated ? "Posición interpolada (estimada)" : undefined}
               >
-                <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-emerald-400 text-xs font-black text-emerald-950 shadow-lg shadow-black/40">
+                <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-emerald-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-emerald-400/60" : "border-white/80 bg-emerald-400"}`}>
                   {p.number ?? p.idx + 1}
+                  {isMvp && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-sm leading-none" title="MVP del partido">🏆</span>}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
                   {incident?.subOut ? <span className="absolute -left-2 -top-2 rounded bg-zinc-800 px-1 text-[10px] font-black text-white">⇣</span> : null}
@@ -538,14 +750,18 @@ function TacticalPitch({
             const trackedPos = typeof p.userId === "number" ? trackedPositionByPlayerId.get(p.userId) : undefined;
             const pos = trackedPos ?? toSpot(p.idx, "away");
             const incident = p.userId ? incidents.get(p.userId) : undefined;
+            const isInterpolated = trackedPos?.interpolated === true;
+            const isMvp = p.userId != null && (analytics as any)?.match?.mvpPlayerId === p.userId;
             return (
               <div
                 key={`a-${p.idx}-${p.userId ?? p.name}`}
                 className="absolute -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                style={{ left: `${pos.x}%`, top: `${pos.y}%`, opacity: isInterpolated ? 0.5 : 1 }}
+                title={isInterpolated ? "Posición interpolada (estimada)" : undefined}
               >
-                <div className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/80 bg-sky-400 text-xs font-black text-sky-950 shadow-lg shadow-black/40">
+                <div className={`relative flex h-9 w-9 items-center justify-center rounded-full border text-xs font-black text-sky-950 shadow-lg shadow-black/40 ${isInterpolated ? "border-white/40 bg-sky-400/60" : "border-white/80 bg-sky-400"}`}>
                   {p.number ?? p.idx + 1}
+                  {isMvp && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-sm leading-none" title="MVP del partido">🏆</span>}
                   {incident?.yellow ? <span className="absolute -right-2 -top-2 rounded bg-yellow-400 px-1 text-[10px] font-black text-black">Y</span> : null}
                   {incident?.red ? <span className="absolute -right-2 -bottom-2 rounded bg-red-500 px-1 text-[10px] font-black text-white">R</span> : null}
                   {incident?.subOut ? <span className="absolute -left-2 -top-2 rounded bg-zinc-800 px-1 text-[10px] font-black text-white">⇣</span> : null}
@@ -558,15 +774,49 @@ function TacticalPitch({
             );
           })}
 
-          {currentFrame && currentFrame.ballX != null && currentFrame.ballY != null ? (
-            <div
-              className="absolute -translate-x-1/2 -translate-y-1/2"
-              style={{ left: `${currentFrame.ballX}%`, top: `${currentFrame.ballY}%` }}
-            >
-              <div className="h-4 w-4 rounded-full border border-zinc-900 bg-white shadow-lg shadow-black/50" />
-              <p className="-ml-6 mt-1 w-16 text-center text-[10px] font-semibold text-white">Balón</p>
-            </div>
-          ) : null}
+          {/* Unmatched tracked positions (AI detections without identity mapping) */}
+          {unmatchedTracked.map((tp, i) => {
+            const colorClass = tp.side === "home"
+              ? "bg-emerald-400/60 border-emerald-300/60"
+              : tp.side === "away"
+                ? "bg-sky-400/60 border-sky-300/60"
+                : "bg-gray-400/40 border-gray-300/40";
+            return (
+              <div
+                key={`trk-${i}-${tp.trackerId ?? tp.userId ?? i}`}
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${tp.x}%`, top: `${tp.y}%`, opacity: tp.interpolated ? 0.5 : 1 }}
+                title={tp.interpolated ? "Posición interpolada (estimada)" : undefined}
+              >
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border text-[9px] font-bold shadow-lg shadow-black/40 ${colorClass} text-white/80`}
+                >
+                  {tp.trackerId ?? "?"}
+                </div>
+              </div>
+            );
+          })}
+
+          {(() => {
+            const frame = currentFrame as Record<string, unknown> | null | undefined;
+            // Formato legado: ballX / ballY planos en el frame
+            // Formato nuevo (AI post-interpolación): ball: { x, y, interpolated }
+            const ballObj = frame?.ball as Record<string, unknown> | null | undefined;
+            const ballX = (frame?.ballX as number | null) ?? (ballObj?.x as number | null);
+            const ballY = (frame?.ballY as number | null) ?? (ballObj?.y as number | null);
+            const ballInterpolated = ballObj?.interpolated === true;
+            if (ballX == null || ballY == null) return null;
+            return (
+              <div
+                className="absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${ballX}%`, top: `${ballY}%`, opacity: ballInterpolated ? 0.5 : 1 }}
+                title={ballInterpolated ? "Posición del balón interpolada (estimada)" : undefined}
+              >
+                <div className="h-4 w-4 rounded-full border border-zinc-900 bg-white shadow-lg shadow-black/50" />
+                <p className="-ml-6 mt-1 w-16 text-center text-[10px] font-semibold text-white">Balón</p>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -575,6 +825,7 @@ function TacticalPitch({
         <span className="rounded bg-red-500 px-2 py-1 font-bold text-white">R: Roja</span>
         <span className="rounded bg-zinc-700 px-2 py-1 font-bold text-white">⇣ Sustituido</span>
         <span className="rounded bg-zinc-700 px-2 py-1 font-bold text-white">⇡ Entró</span>
+        <span className="rounded bg-zinc-700/60 px-2 py-1 font-bold text-white/60">50% opacidad: posición interpolada</span>
       </div>
     </div>
   );
@@ -587,6 +838,9 @@ function TeamLineupCard({
   roster,
   unavailable,
   formation,
+  teamId,
+  coachId,
+  coachName,
 }: {
   title: string;
   starters?: MatchDetailLineupEntry[];
@@ -594,30 +848,88 @@ function TeamLineupCard({
   roster?: MatchSquadPlayerView[];
   unavailable?: MatchSquadPlayerView[];
   formation?: string | null;
+  teamId?: number | null;
+  coachId?: number | null;
+  coachName?: string | null;
 }) {
   const safeStarters = Array.isArray(starters) ? starters : [];
   const safeBench = Array.isArray(bench) ? bench : [];
 
+  // Render de cada jugador: si tiene userId, lo hace clickable al dashboard del jugador
+  const renderPlayerListItem = (
+    p: MatchDetailLineupEntry,
+    idx: number,
+    keyPrefix: string,
+  ) => {
+    const label = listLabel(p, idx);
+    const userId = typeof p.userId === "number" && p.userId > 0 ? p.userId : null;
+    const className = "rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]";
+    if (userId) {
+      return (
+        <li key={`${keyPrefix}-${idx}`} className={className}>
+          <Link
+            to={`/players/${userId}/dashboard`}
+            className="flex items-center justify-between gap-2 hover:text-emerald-300 transition"
+            title="Ver dashboard del jugador"
+          >
+            <span className="truncate">{label}</span>
+            <span className="text-[10px] text-emerald-400 opacity-0 group-hover:opacity-100"></span>
+          </Link>
+        </li>
+      );
+    }
+    return (
+      <li key={`${keyPrefix}-${idx}`} className={className}>
+        {label}
+      </li>
+    );
+  };
+
   return (
     <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
-      <h3 className="font-black text-[var(--geo-text)]">
-        {title}
-        {formation ? (
-          <span className="ml-2 inline-flex items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-200">
-            {formation}
-          </span>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <h3 className="font-black text-[var(--geo-text)]">
+          {title}
+          {formation ? (
+            <span className="ml-2 inline-flex items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-xs font-bold text-emerald-200">
+              {formation}
+            </span>
+          ) : null}
+        </h3>
+        {typeof teamId === "number" && teamId > 0 ? (
+          <Link
+            to={`/teams/${teamId}/dashboard`}
+            className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20 transition"
+            title="Ver dashboard del equipo"
+          >
+            Dashboard
+          </Link>
         ) : null}
-      </h3>
+      </div>
+
+      {/* Coach con link a su dashboard */}
+      {coachName ? (
+        <p className="mt-2 text-xs text-[var(--geo-text-muted)]">
+          DT:{" "}
+          {coachId ? (
+            <Link
+              to={`/coaches/${coachId}/dashboard`}
+              className="font-semibold text-sky-300 hover:text-sky-200 hover:underline transition"
+              title="Ver dashboard del coach"
+            >
+              {coachName}
+            </Link>
+          ) : (
+            <span className="font-semibold text-[var(--geo-text)]">{coachName}</span>
+          )}
+        </p>
+      ) : null}
 
       <div className="mt-4">
         <p className="text-sm font-bold text-geo-green">11 en cancha</p>
         {safeStarters.length ? (
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {safeStarters.map((p, idx) => (
-              <li key={`s-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabel(p, idx)}
-              </li>
-            ))}
+            {safeStarters.map((p, idx) => renderPlayerListItem(p, idx, "s"))}
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin titulares registrados.</p>
@@ -628,11 +940,7 @@ function TeamLineupCard({
         <p className="text-sm font-bold text-geo-green">Banca</p>
         {safeBench.length ? (
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {safeBench.map((p, idx) => (
-              <li key={`b-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabel(p, idx)}
-              </li>
-            ))}
+            {safeBench.map((p, idx) => renderPlayerListItem(p, idx, "b"))}
           </ul>
         ) : (
           <p className="mt-2 text-sm text-[var(--geo-text-muted)]">Sin banca registrada.</p>
@@ -643,11 +951,19 @@ function TeamLineupCard({
         <div className="mt-4">
           <p className="text-sm font-bold text-geo-green">Plantilla disponible</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {roster.map((p, idx) => (
-              <li key={`r-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabelStructured(p, idx)}
-              </li>
-            ))}
+            {roster.map((p, idx) => {
+              const userId = typeof p.id === "number" && p.id > 0 ? p.id : null;
+              const label = listLabelStructured(p, idx);
+              return (
+                <li key={`r-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                  {userId ? (
+                    <Link to={`/players/${userId}/dashboard`} className="hover:text-emerald-300 transition" title="Ver dashboard del jugador">
+                      {label}
+                    </Link>
+                  ) : label}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -656,11 +972,19 @@ function TeamLineupCard({
         <div className="mt-4">
           <p className="text-sm font-bold text-red-400">No disponibles</p>
           <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-            {unavailable.map((p, idx) => (
-              <li key={`u-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
-                {listLabelStructured(p, idx)}
-              </li>
-            ))}
+            {unavailable.map((p, idx) => {
+              const userId = typeof p.id === "number" && p.id > 0 ? p.id : null;
+              const label = listLabelStructured(p, idx);
+              return (
+                <li key={`u-${idx}`} className="rounded-lg bg-[var(--geo-bg)] px-3 py-2 text-sm text-[var(--geo-text)]">
+                  {userId ? (
+                    <Link to={`/players/${userId}/dashboard`} className="hover:text-red-300 transition" title="Ver dashboard del jugador">
+                      {label}
+                    </Link>
+                  ) : label}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -707,6 +1031,7 @@ export default function PublicMatchDetailView() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatusResponse | null>(null);
   const [aiHealth, setAiHealth] = useState<AIServiceHealth | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [videoMissing, setVideoMissing] = useState(false);
   // Preview state (Fase 1 + 2)
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -718,6 +1043,27 @@ export default function PublicMatchDetailView() {
   const [annotationMode, setAnnotationMode] = useState<"keypoints" | "players">("keypoints");
   const [playerTags, setPlayerTags] = useState<Array<PlayerTag>>([]);
   const [pendingPlayerLabel, setPendingPlayerLabel] = useState<{ x: number; y: number } | null>(null);
+
+  // ---- Background analysis state (survives modal close) ----
+  type BgAnalysisState =
+    | { status: "idle" }
+    | { status: "uploading"; fileName: string; progress: number }
+    | { status: "uploaded" }
+    | { status: "processing"; progress: number; currentStep: string; framesProcessed?: number; totalFrames?: number }
+    | { status: "completed" }
+    | { status: "failed"; error: string };
+
+  const [bgAnalysis, setBgAnalysis] = useState<BgAnalysisState>({ status: "idle" });
+  const [bgBarDismissed, setBgBarDismissed] = useState(false);
+  const manualSubmitRef = useRef(false);
+  const srcPtsRef = useRef(srcPts);
+  srcPtsRef.current = srcPts;
+  const uploadStepRef = useRef(uploadStep);
+  uploadStepRef.current = uploadStep;
+  const playerTagsRef = useRef(playerTags);
+  playerTagsRef.current = playerTags;
+  const identityMapRef = useRef(identityMap);
+  identityMapRef.current = identityMap;
 
   // Extract frame from local file (browser-side, instant)
   const extractFrameLocal = (file: File): Promise<string> => {
@@ -791,14 +1137,22 @@ export default function PublicMatchDetailView() {
       setFrameExtracting(false);
     });
 
-    // 2. Upload in background
+    // 2. Upload in background — track in persistent state
+    setBgAnalysis({ status: "uploading", fileName: file.name, progress: 0 });
+    setBgBarDismissed(false);
     setUploadingVideo(true);
     try {
-      await uploadMatchVideo(id, file, (pct) => setUploadProgress(pct));
+      await uploadMatchVideo(id, file, (pct) => {
+        setUploadProgress(pct);
+        setBgAnalysis((prev) => prev.status === "uploading" ? { ...prev, progress: pct } : prev);
+      });
+      // Upload succeeded — video is saved in DB. User must annotate field corners manually.
+      setBgAnalysis({ status: "uploaded" });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al subir el video";
       setUploadError(msg);
       setUploadStep("select");
+      setBgAnalysis({ status: "failed", error: msg });
     } finally {
       setUploadingVideo(false);
     }
@@ -821,56 +1175,115 @@ export default function PublicMatchDetailView() {
     img.src = frameDataUrl;
   }, [uploadStep, frameDataUrl]);
 
-  // Submit keypoints (video already uploaded)
+  // Submit keypoints (video already uploaded) — manual path
   const handleSubmitKeypoints = async () => {
     if (srcPts.length !== 4) return;
+    manualSubmitRef.current = true;
+    await doSubmitAnalysis(srcPts, playerTags, identityMap);
+  };
+
+  const doSubmitAnalysis = async (
+    pts: Array<{ x: number; y: number }>,
+    tags: Array<PlayerTag>,
+    idMap: Record<number, number>,
+  ) => {
+    const hasValidPts = pts.length === 4;
     setSubmittingKeypoints(true);
     setUploadError(null);
+    if (hasValidPts) {
+      setBgAnalysis({ status: "processing", progress: 0, currentStep: "starting" });
+    }
     try {
-      await submitAnalysisKeypoints(id, {
-        srcPts,
-        playerTags: playerTags.length > 0 ? playerTags : undefined,
-        identityMap: Object.keys(identityMap).length > 0 ? identityMap : undefined,
+      const result = await submitAnalysisKeypoints(id, {
+        srcPts: hasValidPts ? pts : [],
+        playerTags: tags.length > 0 ? tags : undefined,
+        identityMap: Object.keys(idMap).length > 0 ? idMap : undefined,
       });
-      setUploadStep("progress");
-      setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
+      if (result.status === "queued" || result.status === "processing") {
+        setUploadStep("progress");
+        setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
+      } else {
+        // "annotating" — video saved, corners still pending
+        setBgAnalysis({ status: "uploaded" });
+        setUploadStep("annotate");
+      }
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al iniciar el análisis";
       setUploadError(msg);
+      setBgAnalysis({ status: "failed", error: msg });
     } finally {
       setSubmittingKeypoints(false);
     }
   };
 
-  // Step 3: Poll progress
+  // Step 3: Poll progress — runs based on uploadStep (modal open) OR bgAnalysis (background)
   useEffect(() => {
-    if (uploadStep !== "progress") return;
-    const interval = setInterval(async () => {
+    const isProcessing = uploadStep === "progress" || bgAnalysis.status === "processing";
+    if (!isProcessing) return;
+
+    let cancelled = false;
+    let healthTick = 0;
+
+    const statusInterval = setInterval(async () => {
+      if (cancelled) return;
       try {
         const status = await getAnalysisStatus(id);
+        if (cancelled) return;
         setAnalysisStatus(status);
-        if (status.status === "completed" || status.status === "failed") {
-          setUploadResult(
-            status.status === "completed"
-              ? `Análisis completado. ${status.videoSupabaseUrl ? "Video disponible en Supabase. " : ""}Refresca la página para ver los resultados.`
-              : `Error: ${status.error ?? "Falló el análisis"}`
+
+        // Update background state
+        if (status.status === "processing") {
+          setBgAnalysis((prev) =>
+            prev.status === "processing"
+              ? { ...prev, progress: status.progress ?? prev.progress, currentStep: status.currentStep ?? prev.currentStep, framesProcessed: status.framesProcessed, totalFrames: status.totalFrames }
+              : prev,
           );
+        } else if (status.status === "completed") {
+          setBgAnalysis({ status: "completed" });
+          setBgBarDismissed(false);
+          queryClient.invalidateQueries({ queryKey: ["public-match-analytics", id] });
+          queryClient.invalidateQueries({ queryKey: ["frames-export", id] });
+          queryClient.invalidateQueries({ queryKey: ["frames-tactical", id] });
+          setUploadResult(
+            `Análisis completado. ${status.videoSupabaseUrl ? "Video disponible en Supabase. " : ""}Refresca la página para ver los resultados.`,
+          );
+        } else if (status.status === "failed") {
+          setBgAnalysis({ status: "failed", error: status.error ?? "Falló el análisis" });
+          setBgBarDismissed(false);
+          setUploadResult(`Error: ${status.error ?? "Falló el análisis"}`);
         }
       } catch {
         // ignore polling errors
       }
-      try {
-        const health = await getAIServiceHealth();
-        setAiHealth(health);
-      } catch {
-        setAiHealth(null);
+
+      healthTick += 1;
+      if (healthTick % 6 === 0) {
+        try {
+          const health = await getAIServiceHealth();
+          if (!cancelled) setAiHealth(health);
+        } catch {
+          if (!cancelled) setAiHealth(null);
+        }
       }
     }, 10000);
-    return () => clearInterval(interval);
-  }, [uploadStep, id]);
 
-  const resetUpload = () => {
+    return () => {
+      cancelled = true;
+      clearInterval(statusInterval);
+    };
+  }, [uploadStep, bgAnalysis.status, id, queryClient]);
+
+  // Close modal — preserve bgAnalysis so status bar remains visible
+  const closeUploadModal = () => {
     setUploadOpen(false);
+  };
+
+  // Full reset including background state (used by "Entendido" / final dismiss)
+  const resetUpload = () => {
+    closeUploadModal();
+    setBgAnalysis({ status: "idle" });
+    setBgBarDismissed(false);
+    manualSubmitRef.current = false;
     setUploadFile(null);
     setUploadResult(null);
     setUploadError(null);
@@ -889,6 +1302,35 @@ export default function PublicMatchDetailView() {
     setIdentityMap({});
     setSelectedTrackerId(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const openAnalysisPanel = () => {
+    setUploadOpen(true);
+    setBgBarDismissed(true);
+    if (bgAnalysis.status === "processing" || bgAnalysis.status === "completed" || bgAnalysis.status === "failed") {
+      setUploadStep("progress");
+      if (!analysisStatus && dbAnalysisStatus && dbAnalysisStatus.status !== "none") {
+        setAnalysisStatus(dbAnalysisStatus);
+      }
+      return;
+    }
+    if (bgAnalysis.status === "uploaded" && (uploadStep === "select" || uploadStep === "annotate")) {
+      setUploadStep("annotate");
+      // If local frame was lost (modal closed & reopened), fetch it from server
+      if (!frameDataUrl) {
+        setFrameExtracting(true);
+        setFrameError(null);
+        getAnalysisFrame(id)
+          .then((res) => {
+            setFrameDataUrl(`data:image/jpeg;base64,${res.frame}`);
+            setFrameExtracting(false);
+          })
+          .catch((err) => {
+            setFrameError(err?.response?.data?.error ?? "No se pudo cargar el fotograma del servidor.");
+            setFrameExtracting(false);
+          });
+      }
+    }
   };
 
   // ---- canvas annotation ----
@@ -960,23 +1402,9 @@ export default function PublicMatchDetailView() {
     }
   };
 
-  // Fase 3: auto-disparar preview cuando se completan las 4 esquinas.
-  // Si el admin vuelve a "annotate" (ajustar esquinas), previewData se limpia
-  // y el effect vuelve a disparar cuando hay 4 puntos de nuevo.
-  useEffect(() => {
-    if (
-      uploadStep === "annotate" &&
-      srcPts.length === 4 &&
-      !previewData &&
-      !previewLoading &&
-      !previewError &&
-      frameDataUrl        // frame ya disponible (extraído localmente)
-    ) {
-      runPreview();
-    }
-    // runPreview es estable entre renders → no hace falta incluirla
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [srcPts.length, uploadStep, previewData, previewLoading, previewError, frameDataUrl]);
+  // El preview ya NO se auto-dispara. El admin decide cuándo previsualizar
+  // usando el botón "Previsualizar detección", lo que permite alternar
+  // libremente entre marcar esquinas y etiquetar jugadores.
 
   // Fase 2: asignar userId real a una detección seleccionada
   const handleAssignIdentity = (userId: number) => {
@@ -1107,6 +1535,88 @@ export default function PublicMatchDetailView() {
       return (query.state.data?.timelineEvents?.length ?? 0) >= 0 ? 8000 : 8000;
     },
   });
+
+  // On mount: fetch existing analysis job status from DB so state survives refresh
+  const { data: dbAnalysisStatus } = useQuery({
+    queryKey: ["analysis-status", id],
+    queryFn: () => getAnalysisStatus(id),
+    enabled: isAdmin && Number.isInteger(id) && id > 0,
+    staleTime: 10_000,
+  });
+
+  // Sync DB status → bgAnalysis on first load (only if nothing is already in progress)
+  useEffect(() => {
+    if (!dbAnalysisStatus || dbAnalysisStatus.status === "none") return;
+    setBgAnalysis((prev) => {
+      if (prev.status !== "idle") return prev; // don't override active upload/analysis
+      const s = dbAnalysisStatus;
+      if (s.status === "completed") return { status: "completed" };
+      if (s.status === "failed") return { status: "failed", error: s.error ?? "Error desconocido" };
+      if (s.status === "processing" || s.status === "queued") {
+        return {
+          status: "processing",
+          progress: s.progress ?? 0,
+          currentStep: s.currentStep ?? "procesando",
+          framesProcessed: s.framesProcessed,
+          totalFrames: s.totalFrames,
+        };
+      }
+      if (s.status === "uploaded" || s.status === "annotating") {
+        return { status: "uploaded" };
+      }
+      return prev;
+    });
+  }, [dbAnalysisStatus]);
+
+  const lastCheckedVideoUrl = useRef<string | null>(null);
+  useEffect(() => {
+    const url = analysisStatus?.videoSupabaseUrl ?? dbAnalysisStatus?.videoSupabaseUrl ?? null;
+    if (!url) {
+      setVideoMissing(false);
+      lastCheckedVideoUrl.current = null;
+      return;
+    }
+    if (lastCheckedVideoUrl.current === url) return;
+    lastCheckedVideoUrl.current = url;
+
+    let cancelled = false;
+    fetch(url, { method: "HEAD" })
+      .then((res) => {
+        if (cancelled) return;
+        setVideoMissing(!res.ok);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVideoMissing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisStatus?.videoSupabaseUrl, dbAnalysisStatus?.videoSupabaseUrl]);
+
+  const analysisSnapshot = analysisStatus ?? dbAnalysisStatus ?? null;
+  const analysisStatusLabel = (status?: AnalysisStatusResponse["status"]) => {
+    switch (status) {
+      case "uploaded": return "Video subido";
+      case "annotating": return "Anotando";
+      case "queued": return "En cola";
+      case "processing": return "Procesando";
+      case "completed": return "Completado";
+      case "failed": return "Fallido";
+      default: return "Sin análisis";
+    }
+  };
+
+  const formatAnalysisError = (err?: string | null) => {
+    if (!err) return null;
+    const lower = err.toLowerCase();
+    if (lower.includes("client error") || lower.includes("bad request") || lower.includes("not found") || lower.includes("404")) {
+      return "El video no está disponible en el almacenamiento.";
+    }
+    if (err.length > 180) return `${err.slice(0, 180)}…`;
+    return err;
+  };
 
   const coachSide = isCoach && user?.id && data?.match
     ? data.match.homeTeam?.trainerId === user.id
@@ -1418,13 +1928,63 @@ export default function PublicMatchDetailView() {
             <h1 className="font-geo text-3xl lg:text-4xl">Detalle de partido</h1>
             <div className="flex items-center gap-3">
               {isAdmin && (
+                <>
                 <button
-                  onClick={() => setUploadOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg bg-geo-green px-4 py-2 text-sm font-semibold text-black hover:bg-geo-green/80 transition-colors"
+                  onClick={openAnalysisPanel}
+                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                    bgAnalysis.status === "processing"
+                      ? "bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
+                      : bgAnalysis.status === "completed"
+                        ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+                        : bgAnalysis.status === "failed"
+                          ? "bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30"
+                          : bgAnalysis.status === "uploaded"
+                            ? "bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30"
+                            : "bg-geo-green text-black hover:bg-geo-green/80"
+                  }`}
                 >
-                  <VideoCameraIcon className="h-5 w-5" />
-                  Analizar video
+                  {bgAnalysis.status === "uploading" ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Subiendo…
+                    </>
+                  ) : bgAnalysis.status === "uploaded" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Video subido — anotar
+                    </>
+                  ) : bgAnalysis.status === "processing" ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Analizando… {bgAnalysis.progress}%
+                    </>
+                  ) : bgAnalysis.status === "completed" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Análisis completado
+                    </>
+                  ) : bgAnalysis.status === "failed" ? (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Error en análisis
+                    </>
+                  ) : (
+                    <>
+                      <VideoCameraIcon className="h-5 w-5" />
+                      Analizar video
+                    </>
+                  )}
                 </button>
+                {(bgAnalysis.status === "processing" || bgAnalysis.status === "completed" || bgAnalysis.status === "failed") && (
+                  <span className="hidden sm:inline-flex text-[11px] text-[var(--geo-text-muted)]">
+                    {bgAnalysis.status === "processing"
+                      ? `${bgAnalysis.progress}% · ${bgAnalysis.framesProcessed ?? 0}/${bgAnalysis.totalFrames ?? "—"} frames`
+                      : bgAnalysis.status === "completed"
+                        ? "Detalle listo"
+                        : "Revisar error"}
+                  </span>
+                )}
+                </>
               )}
               <span
               className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide ${
@@ -1440,7 +2000,29 @@ export default function PublicMatchDetailView() {
           </div>
           </div>
           <p className="mt-2 text-lg text-[var(--geo-text)]">
-            {match.homeTeam?.name ?? "Local"} vs {match.awayTeam?.name ?? "Visitante"}
+            {(match.homeTeamId ?? match.homeTeam?.id) ? (
+              <Link
+                to={`/teams/${match.homeTeamId ?? match.homeTeam?.id}/dashboard`}
+                className="hover:text-emerald-300 hover:underline transition"
+                title="Ver dashboard del equipo local"
+              >
+                {match.homeTeam?.name ?? "Local"}
+              </Link>
+            ) : (
+              <span>{match.homeTeam?.name ?? "Local"}</span>
+            )}
+            {" vs "}
+            {(match.awayTeamId ?? match.awayTeam?.id) ? (
+              <Link
+                to={`/teams/${match.awayTeamId ?? match.awayTeam?.id}/dashboard`}
+                className="hover:text-emerald-300 hover:underline transition"
+                title="Ver dashboard del equipo visitante"
+              >
+                {match.awayTeam?.name ?? "Visitante"}
+              </Link>
+            ) : (
+              <span>{match.awayTeam?.name ?? "Visitante"}</span>
+            )}
           </p>
           <p className="mt-1 text-sm text-[var(--geo-text-muted)]">{match.roundName}</p>
           <div className="mt-3 inline-flex rounded-lg border border-white/15 bg-white/[0.03] p-1 text-xs">
@@ -1466,12 +2048,42 @@ export default function PublicMatchDetailView() {
             >
               Modo pro
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("advanced")}
+              className={`rounded-md px-3 py-1 font-semibold transition ${
+                viewMode === "advanced"
+                  ? "bg-geo-green text-geo-black"
+                  : "text-[var(--geo-text-muted)] hover:text-[var(--geo-text)]"
+              }`}
+            >
+            Análisis avanzado
+            </button>
           </div>
           {isLive ? (
             <p className="mt-2 text-xs text-emerald-300">
               Actualizando eventos y tracking automaticamente cada 8s.
             </p>
           ) : null}
+
+          {/* ── Panel de análisis avanzado (Fase 2) ───────────────────────── */}
+          {viewMode === "advanced" && (
+            <div className="mt-4">
+              <AdvancedAnalyticsPanel
+                matchId={id}
+                homeName={match.homeTeam?.name ?? "Local"}
+                awayName={match.awayTeam?.name ?? "Visitante"}
+                playerNames={
+                  Object.fromEntries(
+                    (analytics?.playerStats ?? []).map((ps: any) => [
+                      ps.userId ?? ps.playerId,
+                      ps.playerName ?? ps.name ?? `#${ps.userId ?? ps.playerId}`,
+                    ])
+                  )
+                }
+              />
+            </div>
+          )}
 
           <div className="bg-[var(--geo-bg-card)] rounded-2xl overflow-hidden border border-[var(--geo-border)]">
             <div className="p-4 border-b border-[var(--geo-border)]">
@@ -1514,11 +2126,31 @@ export default function PublicMatchDetailView() {
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Entrenador local</p>
-              <p className="mt-1 font-semibold">{detail.homeCoach?.name || "—"}</p>
+              <p className="mt-1 font-semibold">
+                {detail.homeCoach?.id ? (
+                  <Link
+                    to={`/coaches/${detail.homeCoach.id}/dashboard`}
+                    className="text-sky-300 hover:text-sky-200 hover:underline transition"
+                    title="Ver dashboard del entrenador"
+                  >
+                    {detail.homeCoach.name}
+                  </Link>
+                ) : detail.homeCoach?.name || "—"}
+              </p>
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Entrenador visitante</p>
-              <p className="mt-1 font-semibold">{detail.awayCoach?.name || "—"}</p>
+              <p className="mt-1 font-semibold">
+                {detail.awayCoach?.id ? (
+                  <Link
+                    to={`/coaches/${detail.awayCoach.id}/dashboard`}
+                    className="text-sky-300 hover:text-sky-200 hover:underline transition"
+                    title="Ver dashboard del entrenador"
+                  >
+                    {detail.awayCoach.name} 
+                  </Link>
+                ) : detail.awayCoach?.name || "—"}
+              </p>
             </div>
             <div className="rounded-xl bg-[var(--geo-bg)] p-3">
               <p className="text-xs uppercase tracking-[0.2em] text-[var(--geo-text-muted)]">Asistencia</p>
@@ -1526,6 +2158,60 @@ export default function PublicMatchDetailView() {
             </div>
           </div>
         </section>
+
+        {/* ── Tarjeta de predicción (Fase 3) ──────────────────────────── */}
+        <section className="mt-4">
+          <MatchPrediction
+            matchId={id}
+            homeName={match.homeTeam?.name ?? "Local"}
+            awayName={match.awayTeam?.name ?? "Visitante"}
+          />
+        </section>
+
+        {/* ── Comparativas Fase 6: H2H + Forma ─────────────────────────── */}
+        {match.homeTeamId && match.awayTeamId && (
+          <section className="mt-4 grid gap-4 sm:grid-cols-2">
+            {/* H2H */}
+            <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                Historial H2H
+              </p>
+              <H2HCard
+                teamAId={match.homeTeamId}
+                teamBId={match.awayTeamId}
+                teamAName={match.homeTeam?.name ?? "Local"}
+                teamBName={match.awayTeam?.name ?? "Visitante"}
+              />
+            </div>
+            {/* Forma reciente */}
+            <div className="grid gap-4">
+              <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                  Forma — {match.homeTeam?.name ?? "Local"}
+                </p>
+                <TeamFormBadges teamId={match.homeTeamId} last={5} />
+              </div>
+              <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[var(--geo-text-muted)]">
+                  Forma — {match.awayTeam?.name ?? "Visitante"}
+                </p>
+                <TeamFormBadges teamId={match.awayTeamId} last={5} />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Fase 7: Revisión de eventos inferidos (solo admin) ─────────── */}
+        {isAdmin && (
+          <section className="mt-4">
+            <div className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wide text-amber-400">
+                Detección automática — Eventos por revisar
+              </p>
+              <InferredEventsPanel matchId={id} />
+            </div>
+          </section>
+        )}
 
         {(isLive || liveEvents.length > 0) && (
           <section className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] p-5">
@@ -1824,6 +2510,9 @@ export default function PublicMatchDetailView() {
             roster={detail.squads?.home?.roster}
             unavailable={detail.squads?.home?.unavailable}
             formation={detail.homeFormation}
+            teamId={match.homeTeamId ?? match.homeTeam?.id ?? null}
+            coachId={detail.homeCoach?.id ?? detail.homeCoachId ?? null}
+            coachName={detail.homeCoach?.name ?? null}
           />
           <TeamLineupCard
             title={`Alineación ${match.awayTeam?.name ?? "Visitante"}`}
@@ -1832,10 +2521,14 @@ export default function PublicMatchDetailView() {
             roster={detail.squads?.away?.roster}
             unavailable={detail.squads?.away?.unavailable}
             formation={detail.awayFormation}
+            teamId={match.awayTeamId ?? match.awayTeam?.id ?? null}
+            coachId={detail.awayCoach?.id ?? detail.awayCoachId ?? null}
+            coachName={detail.awayCoach?.name ?? null}
           />
         </section>
 
         <TacticalPitch
+          matchId={id}
           homeStarters={homeStarters}
           awayStarters={awayStarters}
           homeName={match.homeTeam?.name ?? "Local"}
@@ -1843,6 +2536,8 @@ export default function PublicMatchDetailView() {
           analytics={analytics}
           homeFormation={detail.homeFormation}
           awayFormation={detail.awayFormation}
+          homeTeamId={match.homeTeam?.id}
+          awayTeamId={match.awayTeam?.id}
         />
 
         <section className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
@@ -1935,10 +2630,54 @@ export default function PublicMatchDetailView() {
             <div className="w-full max-w-md rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold">Subir video para análisis</h2>
-                <button onClick={resetUpload} className="text-[var(--geo-text-muted)] hover:text-white">
+                <button onClick={closeUploadModal} className="text-[var(--geo-text-muted)] hover:text-white">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
+
+              {analysisSnapshot && analysisSnapshot.status !== "none" && (
+                <div className="mb-4 rounded-lg border border-white/10 bg-[var(--geo-bg)] p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--geo-text-muted)]">Detalle del análisis</p>
+                    <span className={`text-xs font-semibold ${analysisSnapshot.status === "failed" ? "text-red-400" : analysisSnapshot.status === "completed" ? "text-emerald-400" : analysisSnapshot.status === "processing" ? "text-amber-400" : "text-sky-300"}`}>
+                      {analysisStatusLabel(analysisSnapshot.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Job</p>
+                      <p className="font-semibold text-white">#{analysisSnapshot.jobId ?? "—"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Progreso</p>
+                      <p className="font-semibold text-white">{analysisSnapshot.progress ?? 0}%</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Paso</p>
+                      <p className="font-semibold text-white truncate">{analysisSnapshot.currentStep || "—"}</p>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                      <p className="text-[10px] uppercase tracking-wide text-[var(--geo-text-muted)]">Frames</p>
+                      <p className="font-semibold text-white">{analysisSnapshot.framesProcessed ?? 0} / {analysisSnapshot.totalFrames ?? "—"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--geo-text-muted)]">
+                    <span>Actualizado: {formatDateTime(analysisSnapshot.updatedAt)}</span>
+                    {analysisSnapshot.videoSupabaseUrl ? (
+                      videoMissing ? (
+                        <span className="text-amber-300">Video no disponible</span>
+                      ) : (
+                        <a className="text-geo-green hover:underline" href={analysisSnapshot.videoSupabaseUrl} target="_blank" rel="noreferrer">Abrir video</a>
+                      )
+                    ) : null}
+                  </div>
+                  {formatAnalysisError(analysisSnapshot.error) ? (
+                    <div className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-300">
+                      {formatAnalysisError(analysisSnapshot.error)}
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               {uploadResult && analysisStatus?.status !== "processing" ? (
                 <div className="space-y-4">
@@ -2401,6 +3140,11 @@ export default function PublicMatchDetailView() {
                           <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-300">
                             Análisis completado con éxito.
                           </div>
+                          {videoMissing && (
+                            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-300">
+                              El video fue eliminado del almacenamiento y ya no está disponible.
+                            </div>
+                          )}
                           <button
                             onClick={resetUpload}
                             className="w-full rounded-lg bg-geo-green px-4 py-2.5 text-sm font-semibold text-black hover:bg-geo-green/80"
@@ -2431,6 +3175,35 @@ export default function PublicMatchDetailView() {
           </div>
         )}
       </main>
+
+      {/* ---- Floating background analysis status bar ---- */}
+      {bgAnalysis.status === "completed" && !bgBarDismissed && (
+        <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-right">
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/90 text-emerald-100 shadow-2xl p-4 max-w-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg shrink-0">✓</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">Análisis completado</p>
+                  <p className="text-xs opacity-70 mt-0.5">Refresca la página para ver los resultados.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBgBarDismissed(true)}
+                className="text-current opacity-50 hover:opacity-100 shrink-0"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <button
+              onClick={openAnalysisPanel}
+              className="mt-2 w-full rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-semibold transition-colors"
+            >
+              Ver detalle del análisis
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

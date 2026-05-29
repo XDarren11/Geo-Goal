@@ -40,6 +40,13 @@ import RefereeCenterView from "@/views/admin/RefereeCenter";
 import CoachTeamsView from "./views/team/TeamView/CoachTeamsView";
 import AccountManagementView from "@/views/account/AccountManagement";
 
+// Fase 8: Dashboards agregados (públicos a usuarios logueados)
+import PlayerDashboardView from "@/views/players/PlayerDashboard";
+import PlayersListView from "@/views/players/PlayersList";
+import TeamCareerDashboardView from "@/views/teams/TeamDashboard";
+import CoachDashboardView from "@/views/coaches/CoachDashboard";
+import AdminCareerDashboardView from "@/views/admin/AdminCareerDashboard";
+
 const ACCESS_TOKEN_KEY = "AUTH_TOKEN";
 const REFRESH_TOKEN_KEY = "AUTH_REFRESH_TOKEN";
 
@@ -214,6 +221,13 @@ export default function Router() {
           <Route path="/coach/teams" element={<CoachTeamsView />} />
 
           <Route path="/leagues/:leagueId/teams/:teamId/dashboard" element={<TeamDashboardView />} />
+
+          {/* Fase 8: Dashboards agregados — visibles a cualquier usuario logueado */}
+          <Route path="/players" element={<PlayersListView />} />
+          <Route path="/players/:playerId/dashboard" element={<PlayerDashboardView />} />
+          <Route path="/teams/:teamId/dashboard" element={<TeamCareerDashboardView />} />
+          <Route path="/coaches/:coachId/dashboard" element={<CoachDashboardView />} />
+          <Route path="/admins/:adminId/dashboard" element={<AdminCareerDashboardView />} />
 
           <Route path="/news" element={<NewsView />} />
           <Route
