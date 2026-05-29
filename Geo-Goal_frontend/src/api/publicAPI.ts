@@ -117,16 +117,36 @@ export interface AnalysisStatusResponse {
 // AI Service health check
 const AI_SERVICE_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined)?.trim() || "http://localhost:8000";
 
+export interface AIServiceSystemMetrics {
+  cpu_percent: number;
+  cpu_count: number;
+  cpu_freq_mhz: number | null;
+  ram_used_gb: number;
+  ram_total_gb: number;
+  ram_percent: number;
+  disk_used_gb: number;
+  disk_total_gb: number;
+  disk_percent: number;
+  gpu_name: string | null;
+  gpu_vram_used_mb: number | null;
+  gpu_vram_total_mb: number | null;
+  gpu_vram_percent: number | null;
+  proc_cpu_percent: number;
+  proc_ram_mb: number;
+  uptime_seconds: number;
+}
+
 export interface AIServiceHealth {
   status: "ok" | "error";
   worker_running: boolean;
   current_job: number | null;
   poll_interval: number;
   device: string;
+  system: AIServiceSystemMetrics | null;
 }
 
 export async function getAIServiceHealth(): Promise<AIServiceHealth> {
-  const { data } = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
+  const data = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
   return data;
 }
 

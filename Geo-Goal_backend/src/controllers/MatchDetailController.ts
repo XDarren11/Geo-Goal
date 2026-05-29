@@ -24,6 +24,7 @@ import {
   RegisterTrackingBatchRequest,
   RegisterTrackingFrameRequest,
 } from "../application/matchDetail/requests/MatchDetailRequests";
+import { Op, fn, col, literal } from "sequelize";
 import { Match } from "../models/Match";
 import { Team } from "../models/Team";
 import { League } from "../models/League";
@@ -1031,6 +1032,53 @@ export class MatchDetailController {
         } : null,
       })),
     });
+  };
+
+  /**
+   * Counts of analysis jobs by status, scoped to the leagues managed by the calling admin.
+   * Used by the AI service dashboard to show live stats (en cola / procesando / fallidos).
+   */
+  static getAdminAnalysisStats = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "No autenticado" });
+      return;
+    }
+
+    const adminLeagues = await LeagueAdmin.findAll({
+      where: { userId },
+      attributes: ["leagueId"],
+    });
+    const leagueIds = adminLeagues.map((l) => l.leagueId);
+
+    if (!leagueIds.length) {
+      res.json({ queued: 0, processing: 0, failed: 0, annotating: 0, uploaded: 0, completed: 0 });
+      return;
+    }
+
+    const rows = await MatchAnalysisJob.findAll({
+      where: {
+        leagueId: { [Op.in]: leagueIds },
+        status: { [Op.in]: ["uploaded", "annotating", "queued", "processing", "failed", "completed"] },
+      },
+      attributes: ["status", [fn("COUNT", col("id")), "cnt"]],
+      group: ["status"],
+      raw: true,
+    }) as unknown as Array<{ status: string; cnt: string }>;
+
+    const counts: Record<string, number> = {
+      uploaded: 0,
+      annotating: 0,
+      queued: 0,
+      processing: 0,
+      failed: 0,
+      completed: 0,
+    };
+    for (const row of rows) {
+      counts[row.status] = Number(row.cnt);
+    }
+
+    res.json(counts);
   };
 
   static getAdminAnalysisDetail = async (req: Request, res: Response): Promise<void> => {
