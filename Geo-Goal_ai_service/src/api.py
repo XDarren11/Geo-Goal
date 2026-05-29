@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from typing import Optional, List
 
 import os
+
+# Track process start time for uptime calculation
+_START_TIME = time.time()
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,10 +103,8 @@ if _cors_origins_env.strip():
     _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 else:
     _cors_origins = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:4000",
-        "http://127.0.0.1:5173",
+        "https://geo-goal.onrender.com",
+        "https://geo-goal-1.onrender.com,
     ]
 
 app.add_middleware(
@@ -143,12 +145,107 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Depends(secu
 # ---------------------------------------------------------------------------
 
 
+class SystemMetrics(BaseModel):
+    # CPU
+    cpu_percent: float
+    cpu_count: int
+    cpu_freq_mhz: Optional[float] = None
+    # RAM
+    ram_used_gb: float
+    ram_total_gb: float
+    ram_percent: float
+    # Disk (root)
+    disk_used_gb: float
+    disk_total_gb: float
+    disk_percent: float
+    # GPU (if available)
+    gpu_name: Optional[str] = None
+    gpu_vram_used_mb: Optional[float] = None
+    gpu_vram_total_mb: Optional[float] = None
+    gpu_vram_percent: Optional[float] = None
+    # This process
+    proc_cpu_percent: float
+    proc_ram_mb: float
+    # Uptime
+    uptime_seconds: float
+
+
+def _collect_system_metrics() -> SystemMetrics:
+    """Collect system performance metrics. Gracefully handles missing psutil/GPU."""
+    try:
+        import psutil
+        proc = psutil.Process()
+
+        cpu_pct  = psutil.cpu_percent(interval=0.1)
+        cpu_cnt  = psutil.cpu_count(logical=True) or 1
+        cpu_freq = None
+        try:
+            freq = psutil.cpu_freq()
+            if freq:
+                cpu_freq = round(freq.current, 1)
+        except Exception:
+            pass
+
+        mem  = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+
+        ram_used  = round(mem.used  / 1e9, 2)
+        ram_total = round(mem.total / 1e9, 2)
+        disk_used  = round(disk.used  / 1e9, 2)
+        disk_total = round(disk.total / 1e9, 2)
+
+        proc_cpu = proc.cpu_percent(interval=0.05)
+        proc_ram = round(proc.memory_info().rss / 1e6, 1)
+    except Exception:
+        cpu_pct = cpu_cnt = cpu_freq = 0
+        ram_used = ram_total = disk_used = disk_total = 0.0
+        proc_cpu = proc_ram = 0.0
+        mem = type("_", (), {"percent": 0})()
+        disk = type("_", (), {"percent": 0})()
+
+    # GPU via torch.cuda (already loaded for YOLO)
+    gpu_name = gpu_vram_used = gpu_vram_total = gpu_vram_pct = None
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name      = torch.cuda.get_device_name(0)
+            vram_used     = torch.cuda.memory_allocated(0) / 1e6          # MB
+            vram_reserved = torch.cuda.memory_reserved(0)  / 1e6          # MB
+            vram_total    = torch.cuda.get_device_properties(0).total_memory / 1e6
+            gpu_vram_used  = round(vram_reserved, 1)   # reserved is more representative
+            gpu_vram_total = round(vram_total, 1)
+            if vram_total > 0:
+                gpu_vram_pct = round(vram_reserved / vram_total * 100, 1)
+    except Exception:
+        pass
+
+    return SystemMetrics(
+        cpu_percent=cpu_pct,
+        cpu_count=cpu_cnt,
+        cpu_freq_mhz=cpu_freq,
+        ram_used_gb=ram_used,
+        ram_total_gb=ram_total,
+        ram_percent=getattr(mem, "percent", 0),
+        disk_used_gb=disk_used,
+        disk_total_gb=disk_total,
+        disk_percent=getattr(disk, "percent", 0),
+        gpu_name=gpu_name,
+        gpu_vram_used_mb=gpu_vram_used,
+        gpu_vram_total_mb=gpu_vram_total,
+        gpu_vram_percent=gpu_vram_pct,
+        proc_cpu_percent=proc_cpu,
+        proc_ram_mb=proc_ram,
+        uptime_seconds=round(time.time() - _START_TIME, 0),
+    )
+
+
 class HealthResponse(BaseModel):
     status: str
     worker_running: bool
     current_job: Optional[int] = None
     poll_interval: int
     device: str
+    system: Optional[SystemMetrics] = None
 
 
 class ProcessJobRequest(BaseModel):
@@ -218,8 +315,7 @@ app.include_router(dashboard_router)
 async def health():
     """
     Health check público — no requiere auth.
-    El frontend lo consulta para mostrar estado del servicio en el panel del admin.
-    No expone información sensible (solo flags de estado y device).
+    Devuelve estado del worker + métricas de sistema (CPU, RAM, GPU, disco, uptime).
     """
     import state
     w = state.worker
@@ -229,6 +325,7 @@ async def health():
         current_job=w.current_job if w else None,
         poll_interval=POLL_INTERVAL,
         device=DEVICE,
+        system=_collect_system_metrics(),
     )
 
 

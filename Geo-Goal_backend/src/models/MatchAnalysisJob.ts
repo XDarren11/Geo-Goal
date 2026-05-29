@@ -66,6 +66,10 @@ export class MatchAnalysisJob extends Model {
   @Column({ type: DataType.INTEGER, allowNull: true })
   declare pid: number | null;
 
+  /** Primer fotograma del video (base64 JPEG) — guardado al confirmar el upload directo a Supabase */
+  @Column({ type: DataType.TEXT, allowNull: true })
+  declare firstFrame: string | null;
+
   @Column({ type: DataType.TEXT, allowNull: true })
   declare error: string | null;
 

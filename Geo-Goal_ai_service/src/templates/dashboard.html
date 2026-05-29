@@ -374,9 +374,11 @@
         </div>
       </div>
 
-      <!-- Right: worker status -->
-      <div>
-        <div class="section" style="margin-bottom:20px;">
+      <!-- Right: worker + system resources -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Worker card -->
+        <div class="section">
           <div class="section-header">
             <h2 class="section-title">Worker</h2>
             <span id="workerDot" class="section-badge badge-gray">—</span>
@@ -398,6 +400,84 @@
           </div>
         </div>
 
+        <!-- System resources card -->
+        <div class="section">
+          <div class="section-header">
+            <h2 class="section-title">Recursos del sistema</h2>
+            <span id="uptimeBadge" class="section-badge badge-gray">—</span>
+          </div>
+          <div class="section-body" style="display:flex;flex-direction:column;gap:14px;">
+
+            <!-- CPU -->
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+                <span style="font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#39FF14" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="15" x2="4" y2="15"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="15" x2="22" y2="15"/></svg>
+                  CPU <span id="cpuCores" style="color:#6b7280;font-size:10px;"></span>
+                </span>
+                <span id="cpuPct" style="font-size:13px;font-weight:700;color:#e5e7eb;">—</span>
+              </div>
+              <div class="progress-bar" style="height:8px;">
+                <div id="cpuBar" class="progress-fill" style="width:0%;transition:width 0.6s ease;"></div>
+              </div>
+              <div id="cpuFreq" style="font-size:10px;color:#6b7280;margin-top:3px;"></div>
+            </div>
+
+            <!-- RAM -->
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+                <span style="font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="14"/><line x1="10" y1="10" x2="10" y2="14"/><line x1="14" y1="10" x2="14" y2="14"/><line x1="18" y1="10" x2="18" y2="14"/></svg>
+                  RAM
+                </span>
+                <span id="ramPct" style="font-size:13px;font-weight:700;color:#e5e7eb;">—</span>
+              </div>
+              <div class="progress-bar" style="height:8px;">
+                <div id="ramBar" class="progress-fill" style="width:0%;background:#3b82f6;transition:width 0.6s ease;"></div>
+              </div>
+              <div id="ramDetail" style="font-size:10px;color:#6b7280;margin-top:3px;"></div>
+            </div>
+
+            <!-- GPU VRAM (oculto si no hay GPU) -->
+            <div id="gpuSection" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+                <span style="font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 12h.01M12 12h.01M16 12h.01"/><line x1="6" y1="20" x2="6" y2="22"/><line x1="18" y1="20" x2="18" y2="22"/></svg>
+                  GPU <span id="gpuName" style="color:#6b7280;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                </span>
+                <span id="gpuPct" style="font-size:13px;font-weight:700;color:#e5e7eb;">—</span>
+              </div>
+              <div class="progress-bar" style="height:8px;">
+                <div id="gpuBar" class="progress-fill" style="width:0%;background:#a78bfa;transition:width 0.6s ease;"></div>
+              </div>
+              <div id="gpuDetail" style="font-size:10px;color:#6b7280;margin-top:3px;"></div>
+            </div>
+
+            <!-- Disco -->
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+                <span style="font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#facc15" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/></svg>
+                  Disco
+                </span>
+                <span id="diskPct" style="font-size:13px;font-weight:700;color:#e5e7eb;">—</span>
+              </div>
+              <div class="progress-bar" style="height:8px;">
+                <div id="diskBar" class="progress-fill" style="width:0%;background:#facc15;transition:width 0.6s ease;"></div>
+              </div>
+              <div id="diskDetail" style="font-size:10px;color:#6b7280;margin-top:3px;"></div>
+            </div>
+
+            <!-- Proceso IA -->
+            <div style="border-top:1px solid #27272a;padding-top:10px;margin-top:2px;">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4b5563;margin-bottom:8px;">Proceso IA</div>
+              <div class="info-row"><span class="info-label">CPU proceso</span><span class="info-value" id="procCpu">—</span></div>
+              <div class="info-row"><span class="info-label">RAM proceso</span><span class="info-value" id="procRam">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
         <div class="section">
           <div class="section-header">
             <h2 class="section-title">Acciones</h2>
@@ -413,7 +493,8 @@
             </button>
           </div>
         </div>
-        <p class="timestamp" style="text-align:center;width:100%;display:block;margin-top:16px;" id="lastUpdate">—</p>
+
+        <p class="timestamp" style="text-align:center;width:100%;display:block;" id="lastUpdate">—</p>
       </div>
     </div>
 
@@ -506,19 +587,72 @@
           <div class="info-row"><span class="info-label">Dispositivo</span><span class="info-value" style="text-transform:uppercase;">${h.device || '—'}</span></div>
         `;
 
+        // ── System metrics ───────────────────────────────────────────────────
+        const sys = h.system;
+        if (sys) {
+          // Uptime
+          const up = sys.uptime_seconds || 0;
+          const hh = Math.floor(up / 3600), mm = Math.floor((up % 3600) / 60), ss = Math.floor(up % 60);
+          const upStr = hh > 0 ? `${hh}h ${mm}m` : mm > 0 ? `${mm}m ${ss}s` : `${ss}s`;
+          document.getElementById('uptimeBadge').textContent = 'activo ' + upStr;
+          document.getElementById('uptimeBadge').className = 'section-badge badge-green';
+
+          // CPU
+          const cpuColor = sys.cpu_percent > 85 ? '#ef4444' : sys.cpu_percent > 60 ? '#facc15' : '#39FF14';
+          document.getElementById('cpuPct').textContent = sys.cpu_percent.toFixed(1) + '%';
+          document.getElementById('cpuBar').style.width = sys.cpu_percent + '%';
+          document.getElementById('cpuBar').style.background = cpuColor;
+          document.getElementById('cpuCores').textContent = sys.cpu_count + ' núcleos';
+          document.getElementById('cpuFreq').textContent = sys.cpu_freq_mhz ? sys.cpu_freq_mhz.toFixed(0) + ' MHz' : '';
+
+          // RAM
+          const ramColor = sys.ram_percent > 85 ? '#ef4444' : sys.ram_percent > 65 ? '#f97316' : '#3b82f6';
+          document.getElementById('ramPct').textContent = sys.ram_percent.toFixed(1) + '%';
+          document.getElementById('ramBar').style.width = sys.ram_percent + '%';
+          document.getElementById('ramBar').style.background = ramColor;
+          document.getElementById('ramDetail').textContent = `${sys.ram_used_gb} GB / ${sys.ram_total_gb} GB usados`;
+
+          // GPU
+          if (sys.gpu_name) {
+            document.getElementById('gpuSection').style.display = 'block';
+            document.getElementById('gpuName').textContent = sys.gpu_name;
+            const gpuPct = sys.gpu_vram_percent ?? 0;
+            const gpuColor = gpuPct > 90 ? '#ef4444' : gpuPct > 70 ? '#f97316' : '#a78bfa';
+            document.getElementById('gpuPct').textContent = gpuPct.toFixed(1) + '%';
+            document.getElementById('gpuBar').style.width = gpuPct + '%';
+            document.getElementById('gpuBar').style.background = gpuColor;
+            const vramUsed = sys.gpu_vram_used_mb != null ? (sys.gpu_vram_used_mb / 1024).toFixed(2) : '—';
+            const vramTotal = sys.gpu_vram_total_mb != null ? (sys.gpu_vram_total_mb / 1024).toFixed(2) : '—';
+            document.getElementById('gpuDetail').textContent = `${vramUsed} GB / ${vramTotal} GB VRAM`;
+          } else {
+            document.getElementById('gpuSection').style.display = 'none';
+          }
+
+          // Disk
+          const diskColor = sys.disk_percent > 90 ? '#ef4444' : sys.disk_percent > 75 ? '#f97316' : '#facc15';
+          document.getElementById('diskPct').textContent = sys.disk_percent.toFixed(1) + '%';
+          document.getElementById('diskBar').style.width = sys.disk_percent + '%';
+          document.getElementById('diskBar').style.background = diskColor;
+          document.getElementById('diskDetail').textContent = `${sys.disk_used_gb} GB / ${sys.disk_total_gb} GB`;
+
+          // Process
+          document.getElementById('procCpu').textContent = sys.proc_cpu_percent.toFixed(1) + '%';
+          document.getElementById('procRam').textContent = sys.proc_ram_mb > 1024
+            ? (sys.proc_ram_mb / 1024).toFixed(2) + ' GB'
+            : sys.proc_ram_mb.toFixed(0) + ' MB';
+        }
+
         // Queue
         const jobs = queueRes.jobs || [];
         const queueList = document.getElementById('jobList');
         const queueCount = document.getElementById('queueCount');
         queueCount.textContent = jobs.length + ' job' + (jobs.length !== 1 ? 's' : '');
 
-        // Stats
-        const queued = jobs.filter(j => j.status === 'queued').length;
-        const processing = jobs.filter(j => j.status === 'processing').length;
-        const failed = jobs.filter(j => j.status === 'failed').length;
-        document.getElementById('statQueued').textContent = queued;
-        document.getElementById('statProcessing').textContent = processing;
-        document.getElementById('statFailed').textContent = failed;
+        // Stats — use authoritative counts from backend DB, not just the job list
+        const stats = queueRes.stats || {};
+        document.getElementById('statQueued').textContent    = stats.queued    ?? jobs.filter(j => j.status === 'queued').length;
+        document.getElementById('statProcessing').textContent = stats.processing ?? jobs.filter(j => j.status === 'processing').length;
+        document.getElementById('statFailed').textContent    = stats.failed    ?? jobs.filter(j => j.status === 'failed').length;
 
         if (!jobs.length) {
           queueList.innerHTML = `

@@ -26,6 +26,11 @@ router.get(
   asyncHandler(MatchDetailController.getAdminAnalysisDetail)
 );
 
+router.get(
+  "/analysis/stats",
+  asyncHandler(MatchDetailController.getAdminAnalysisStats)
+);
+
 // --- Gestión completa de usuarios ---
 router.get(
   "/leagues/:leagueId/users",

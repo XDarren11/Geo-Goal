@@ -394,11 +394,18 @@ export class PlayerCareerService {
       };
     }
 
-    // 2. Una sola query batch — solo leer, nunca computar
+    // 2. Una sola query batch — extrae SOLO la grilla del jugador vía JSONB path.
+    //    Evita deserializar el payload completo (~MB) por partido.
+    //    payload->'heatmaps'->'<playerId>' → devuelve el array 14×21 directamente.
+    const { literal } = await import("sequelize");
     const cached = await MatchAnalyticsCache.findAll({
       where: { matchId: { [Op.in]: matchIds } },
-      attributes: ["matchId", "payload"],
-    });
+      attributes: [
+        "matchId",
+        [literal(`payload->'heatmaps'->'${playerId}'`), "playerHeatmap"],
+      ],
+      raw: true,
+    }) as unknown as Array<{ matchId: number; playerHeatmap: number[][] | null }>;
 
     // 3. Agregar heatmaps en memoria
     const sum: number[][] = Array.from({ length: HEATMAP_H }, () =>
@@ -407,7 +414,7 @@ export class PlayerCareerService {
     let matchesWithData = 0;
 
     for (const row of cached) {
-      const heatmap = (row.payload as any)?.heatmaps?.[playerId];
+      const heatmap = row.playerHeatmap;
       if (!Array.isArray(heatmap) || heatmap.length !== HEATMAP_H) continue;
       for (let y = 0; y < HEATMAP_H; y++) {
         const gridRow = heatmap[y];

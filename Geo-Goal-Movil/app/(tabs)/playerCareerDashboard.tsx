@@ -104,7 +104,16 @@ export default function PlayerCareerDashboardScreen() {
     onError: () => Alert.alert('Error', 'No se pudo actualizar favoritos'),
   });
 
-  if (isLoading) return <Loader fullScreen label="Cargando estadísticas..." />;
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
+        <Loader fullScreen label="Cargando estadísticas..." />
+      </View>
+    );
+  }
   if (isError || !data) {
     return (
       <View style={{ flex: 1, backgroundColor: '#0d1117', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>

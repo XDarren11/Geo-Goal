@@ -10,7 +10,7 @@
  */
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getPlayerDashboard, type PlayerCareerStats } from "@/api/publicAPI";
+import { getPlayerDashboard, getPlayerHeatmap, type PlayerCareerStats } from "@/api/publicAPI";
 import { PlayerHeatmap } from "@/components/Heatmap/PlayerHeatmap";
 import FavoriteStarButton from "@/components/FavoriteStarButton";
 
@@ -150,6 +150,15 @@ export default function PlayerDashboard() {
     staleTime: 60_000,
   });
 
+  // Heatmap se carga por separado (lazy) para no bloquear el dashboard principal
+  const { data: heatmapData, isLoading: heatmapLoading } = useQuery({
+    queryKey: ["player-heatmap", id],
+    queryFn: () => getPlayerHeatmap(id),
+    enabled: Number.isInteger(id) && id > 0,
+    staleTime: 5 * 60_000,   // el heatmap cambia poco — 5 min de cache
+    gcTime: 10 * 60_000,
+  });
+
   if (!Number.isInteger(id) || id <= 0) {
     return <div className="p-6 text-red-400">ID de jugador no válido</div>;
   }
@@ -263,11 +272,20 @@ export default function PlayerDashboard() {
 
       {/* Layout 2 columnas */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Heatmap */}
+        {/* Heatmap — lazy, no bloquea el render del dashboard */}
         <section className="rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
-          <h2 className="text-sm font-bold text-[var(--geo-text)] mb-3">📍 Heatmap acumulado</h2>
-          {data.aggregatedHeatmap?.length > 0 ? (
-            <PlayerHeatmap grid={data.aggregatedHeatmap} width={420} height={270} />
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-[var(--geo-text)]">📍 Heatmap acumulado</h2>
+            {heatmapData && (
+              <span className="text-[10px] text-[var(--geo-text-muted)]">
+                {heatmapData.matchesWithData}/{heatmapData.totalMatches} partidos
+              </span>
+            )}
+          </div>
+          {heatmapLoading ? (
+            <div className="w-full rounded-lg bg-[var(--geo-bg)] animate-pulse" style={{ aspectRatio: "420/270" }} />
+          ) : heatmapData && heatmapData.matchesWithData > 0 ? (
+            <PlayerHeatmap grid={heatmapData.heatmap} width={420} height={270} />
           ) : (
             <p className="text-xs text-[var(--geo-text-muted)]">
               No hay datos de tracking en sus partidos.

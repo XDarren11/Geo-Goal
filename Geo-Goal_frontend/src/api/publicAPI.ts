@@ -117,16 +117,36 @@ export interface AnalysisStatusResponse {
 // AI Service health check
 const AI_SERVICE_URL = (import.meta.env.VITE_AI_SERVICE_URL as string | undefined)?.trim() || "http://localhost:8000";
 
+export interface AIServiceSystemMetrics {
+  cpu_percent: number;
+  cpu_count: number;
+  cpu_freq_mhz: number | null;
+  ram_used_gb: number;
+  ram_total_gb: number;
+  ram_percent: number;
+  disk_used_gb: number;
+  disk_total_gb: number;
+  disk_percent: number;
+  gpu_name: string | null;
+  gpu_vram_used_mb: number | null;
+  gpu_vram_total_mb: number | null;
+  gpu_vram_percent: number | null;
+  proc_cpu_percent: number;
+  proc_ram_mb: number;
+  uptime_seconds: number;
+}
+
 export interface AIServiceHealth {
   status: "ok" | "error";
   worker_running: boolean;
   current_job: number | null;
   poll_interval: number;
   device: string;
+  system: AIServiceSystemMetrics | null;
 }
 
 export async function getAIServiceHealth(): Promise<AIServiceHealth> {
-  const { data } = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
+  const data = await fetch(`${AI_SERVICE_URL}/health`).then(r => r.json());
   return data;
 }
 
@@ -145,7 +165,8 @@ export async function getAIServiceHealth(): Promise<AIServiceHealth> {
 export async function uploadMatchVideo(
   matchId: number,
   videoFile: File,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
+  firstFrame?: string | null
 ): Promise<{ message: string; jobId: number; filename: string }> {
   // --- Paso 1: pedir URL firmada ---
   let signed: { uploadUrl: string; publicUrl: string; mimetype: string } | null = null;
@@ -185,10 +206,10 @@ export async function uploadMatchVideo(
       xhr.send(videoFile);
     });
 
-    // --- Paso 3: confirmar al backend ---
+    // --- Paso 3: confirmar al backend (incluye el frame para anotación posterior) ---
     const { data } = await api.post<{ message: string; jobId: number; videoSupabaseUrl: string }>(
       `${BASE}/matches/${matchId}/upload-video/complete`,
-      { publicUrl: signed.publicUrl, filename: videoFile.name }
+      { publicUrl: signed.publicUrl, filename: videoFile.name, firstFrame: firstFrame ?? null }
     );
     return { message: data.message, jobId: data.jobId, filename: videoFile.name };
   }
@@ -715,6 +736,27 @@ export interface CoachStats {
     opponentName: string;
     score: string;
   }>;
+}
+
+export interface PlayerHeatmapResponse {
+  heatmap: number[][];
+  matchesWithData: number;
+  totalMatches: number;
+}
+
+export async function getPlayerHeatmap(
+  playerId: number,
+  opts: { seasonId?: number; leagueId?: number; teamId?: number } = {}
+): Promise<PlayerHeatmapResponse> {
+  const params: Record<string, number> = {};
+  if (opts.seasonId) params.season = opts.seasonId;
+  if (opts.leagueId) params.league = opts.leagueId;
+  if (opts.teamId)   params.team   = opts.teamId;
+  const { data } = await api.get<PlayerHeatmapResponse>(
+    `${BASE}/players/${playerId}/heatmap`,
+    { params }
+  );
+  return data;
 }
 
 export async function getPlayerDashboard(

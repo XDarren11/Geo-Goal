@@ -154,12 +154,22 @@ export default function TeamDetailScreen() {
   });
 
   if (teamLoading) {
-    return <Loader fullScreen label="Cargando equipo..." />;
+    return (
+      <View className="flex-1 bg-geo-black">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
+        <Loader fullScreen label="Cargando equipo..." />
+      </View>
+    );
   }
 
   if (!team) {
     return (
       <View className="flex-1 bg-geo-black justify-center items-center">
+        <View style={{ position: 'absolute', top: 52, left: 16, zIndex: 10 }}>
+          <BackButton />
+        </View>
         <Text className="text-geo-green">Equipo no encontrado</Text>
       </View>
     );

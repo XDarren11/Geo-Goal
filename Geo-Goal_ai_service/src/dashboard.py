@@ -237,7 +237,7 @@ async def dashboard_health(request: Request):
 
 @router.get("/dashboard/api/queue")
 async def dashboard_queue(request: Request):
-    """Return enriched job queue filtered by the admin's managed leagues."""
+    """Return enriched job queue + live stats filtered by the admin's managed leagues."""
     token = _get_token(request)
     await _verify_admin(request)
 
@@ -253,20 +253,45 @@ async def dashboard_queue(request: Request):
         pass  # If we can't get leagues, fall through — no leagues = no jobs shown
 
     if not admin_league_ids:
-        return {"jobs": [], "message": "No gestionas ninguna liga"}
+        return {
+            "jobs": [],
+            "stats": {"queued": 0, "processing": 0, "failed": 0, "completed": 0},
+            "message": "No gestionas ninguna liga",
+        }
 
-    # 2. Get pending jobs from the queued-analysis endpoint
+    # 2. Get aggregate counts per status (queued / processing / failed / etc.)
+    stats = {"queued": 0, "processing": 0, "failed": 0, "annotating": 0, "uploaded": 0, "completed": 0}
     try:
-        jobs: list[dict] = await _call_backend("GET", "/public/matches/pending-analysis", token)
-    except httpx.HTTPStatusError:
-        return {"jobs": [], "message": "Error al consultar la cola"}
+        stats = await _call_backend("GET", "/admin/analysis/stats", token, timeout=8)
     except Exception:
-        return {"jobs": [], "message": "Error al consultar la cola"}
+        pass  # fall back to zeros
 
-    # 3. Filter jobs to only those in the admin's leagues
-    my_jobs = [j for j in jobs if j.get("leagueId") in admin_league_ids]
+    # 3. Get the current queue list (queued + processing jobs so the admin sees active work)
+    all_jobs: list[dict] = []
+    try:
+        # Pending (queued) jobs
+        queued_jobs: list[dict] = await _call_backend("GET", "/public/matches/pending-analysis", token)
+        all_jobs.extend(queued_jobs)
+    except Exception:
+        pass
 
-    # 4. Enrich with match details (batch, cached)
+    # Also fetch recent history to get processing + failed jobs visible in the list
+    try:
+        history_resp = await _call_backend("GET", "/admin/analysis/history", token, timeout=10)
+        history_jobs: list[dict] = history_resp.get("jobs", [])
+        # Include processing and failed jobs not already in the list
+        existing_ids = {j.get("jobId") for j in all_jobs}
+        for hj in history_jobs:
+            if hj.get("status") in ("processing", "failed") and hj.get("jobId") not in existing_ids:
+                all_jobs.append(hj)
+                existing_ids.add(hj.get("jobId"))
+    except Exception:
+        pass
+
+    # 4. Filter to admin's leagues only
+    my_jobs = [j for j in all_jobs if j.get("leagueId") in admin_league_ids]
+
+    # 5. Enrich with match name (batch, cached)
     enriched = []
     match_cache: dict[int, str | None] = {}
 
@@ -287,7 +312,7 @@ async def dashboard_queue(request: Request):
         match_name = match_cache.get(match_id) if match_id else None
         enriched.append({**job, "matchName": match_name})
 
-    return {"jobs": enriched, "leagueIds": list(admin_league_ids)}
+    return {"jobs": enriched, "stats": stats, "leagueIds": list(admin_league_ids)}
 
 
 @router.post("/dashboard/api/poll")

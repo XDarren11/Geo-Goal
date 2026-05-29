@@ -61,8 +61,15 @@ export function AdvancedAnalyticsPanel({ matchId, homeName, awayName, playerName
     );
   }
 
-  const playerIds = Object.keys(data.speeds).map(Number);
-  const currentPlayer = selectedPlayer ?? playerIds[0] ?? null;
+  // Solo mostrar jugadores que pertenecen a la convocatoria del partido.
+  // Los IDs de tracking sin nombre son trackers no identificados (ByteTrack IDs)
+  // que no corresponden a ningún jugador del partido.
+  const playerIds = Object.keys(data.speeds)
+    .map(Number)
+    .filter((pid) => pid in playerNames);
+  const currentPlayer = selectedPlayer !== null && playerIds.includes(selectedPlayer)
+    ? selectedPlayer
+    : playerIds[0] ?? null;
   const heatGrid = currentPlayer != null ? data.heatmaps[currentPlayer] : null;
   const speedStats = currentPlayer != null ? data.speeds[currentPlayer] : null;
   const zoneStats = currentPlayer != null ? data.zones[currentPlayer] : null;
