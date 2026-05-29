@@ -104,7 +104,8 @@ if _cors_origins_env.strip():
 else:
     _cors_origins = [
         "https://geo-goal.onrender.com",
-        "https://geo-goal-1.onrender.com,
+        "https://geo-goal-1.onrender.com",
+        undefined
     ]
 
 app.add_middleware(
