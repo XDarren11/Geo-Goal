@@ -2,7 +2,7 @@ requests
 python-dotenv
 psutil
 ultralytics
-opencv-python
+opencv-python-headless
 numpy
 scikit-learn
 supervision
