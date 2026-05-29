@@ -41,6 +41,15 @@ export default function RootLayout() {
           <Stack.Screen name="(Auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="leagueDetail" options={{ headerShown: false }} />
+          <Stack.Screen name="teamDetail" options={{ headerShown: false }} />
+          <Stack.Screen name="matchDetail" options={{ headerShown: false }} />
+          <Stack.Screen name="playerCareerDashboard" options={{ headerShown: false }} />
+          <Stack.Screen name="teamCareerDashboard" options={{ headerShown: false }} />
+          <Stack.Screen name="coachCareerDashboard" options={{ headerShown: false }} />
+          <Stack.Screen name="adminCareerDashboard" options={{ headerShown: false }} />
+          <Stack.Screen name="playersList" options={{ headerShown: false }} />
+          <Stack.Screen name="navigation" options={{ headerShown: false }} />
         </Stack>
       </View>
     </QueryClientProvider>

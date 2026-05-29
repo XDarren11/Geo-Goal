@@ -374,7 +374,7 @@ export default function ExploreScreen() {
                   item={item}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/leagueDetail',
+                      pathname: '/leagueDetail',
                       params: { id: String(item.id), name: item.name },
                     })
                   }
@@ -395,7 +395,7 @@ export default function ExploreScreen() {
                     item={item}
                     onPress={() =>
                       router.push({
-                        pathname: '/(tabs)/teamCareerDashboard' as any,
+                        pathname: '/teamCareerDashboard' as any,
                         params: { teamId: String(item.teamId), name: item.name },
                       })
                     }
@@ -416,7 +416,7 @@ export default function ExploreScreen() {
                     item={item}
                     onPress={() =>
                       router.push({
-                        pathname: '/(tabs)/playerCareerDashboard' as any,
+                        pathname: '/playerCareerDashboard' as any,
                         params: { playerId: String(item.playerId), name: item.name },
                       })
                     }
@@ -437,7 +437,7 @@ export default function ExploreScreen() {
                     item={item}
                     onPress={() =>
                       router.push({
-                        pathname: '/(tabs)/coachCareerDashboard' as any,
+                        pathname: '/coachCareerDashboard' as any,
                         params: { coachId: String(item.coachId), name: item.name },
                       })
                     }
@@ -510,7 +510,7 @@ export default function ExploreScreen() {
           ].map((btn) => (
             <TouchableOpacity
               key={btn.tab}
-              onPress={() => router.push({ pathname: '/(tabs)/playersList' as any, params: { tab: btn.tab } })}
+              onPress={() => router.push({ pathname: '/playersList' as any, params: { tab: btn.tab } })}
               style={{
                 flex: 1,
                 flexDirection: 'row',
@@ -625,7 +625,7 @@ export default function ExploreScreen() {
                       <TouchableOpacity
                         onPress={() =>
                           router.push({
-                            pathname: '/(tabs)/teamCareerDashboard' as any,
+                            pathname: '/teamCareerDashboard' as any,
                             params: { teamId: String(team.id), name: team.name },
                           })
                         }
@@ -642,7 +642,7 @@ export default function ExploreScreen() {
                       <TouchableOpacity
                         onPress={() =>
                           router.push({
-                            pathname: '/(tabs)/teamDetail',
+                            pathname: '/teamDetail',
                             params: { id: String(team.id) },
                           })
                         }
@@ -699,7 +699,7 @@ export default function ExploreScreen() {
                     <TouchableOpacity
                       onPress={() =>
                         router.push({
-                          pathname: '/(tabs)/teamCareerDashboard' as any,
+                          pathname: '/teamCareerDashboard' as any,
                           params: { teamId: String(singlePlayerTeam.id), name: singlePlayerTeam.name },
                         })
                       }
@@ -718,7 +718,7 @@ export default function ExploreScreen() {
                     <TouchableOpacity
                       onPress={() =>
                         router.push({
-                          pathname: '/(tabs)/teamDetail',
+                          pathname: '/teamDetail',
                           params: { id: String(singlePlayerTeam.id) },
                         })
                       }
@@ -779,7 +779,7 @@ export default function ExploreScreen() {
                       <TouchableOpacity
                         onPress={() =>
                           router.push({
-                            pathname: '/(tabs)/teamCareerDashboard' as any,
+                            pathname: '/teamCareerDashboard' as any,
                             params: { teamId: String(team.id), name: team.name },
                           })
                         }
@@ -796,7 +796,7 @@ export default function ExploreScreen() {
                       <TouchableOpacity
                         onPress={() =>
                           router.push({
-                            pathname: '/(tabs)/teamDetail',
+                            pathname: '/teamDetail',
                             params: { id: String(team.id) },
                           })
                         }
@@ -824,7 +824,7 @@ export default function ExploreScreen() {
           <TouchableOpacity
             onPress={() =>
               router.push({
-                pathname: '/(tabs)/leagueDetail',
+                pathname: '/leagueDetail',
                 params: { id: String(item.id), name: item.name },
               })
             }

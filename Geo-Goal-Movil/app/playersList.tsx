@@ -533,7 +533,7 @@ export default function SearchScreen() {
                   player={item}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/playerCareerDashboard',
+                      pathname: '/playerCareerDashboard',
                       params: { playerId: String(item.playerId), name: item.name },
                     } as any)
                   }
@@ -546,7 +546,7 @@ export default function SearchScreen() {
                   item={item}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/teamCareerDashboard' as any,
+                      pathname: '/teamCareerDashboard' as any,
                       params: { teamId: String(item.teamId), name: item.name },
                     })
                   }
@@ -559,7 +559,7 @@ export default function SearchScreen() {
                   item={item}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/coachCareerDashboard' as any,
+                      pathname: '/coachCareerDashboard' as any,
                       params: { coachId: String(item.coachId), name: item.name },
                     })
                   }
@@ -572,7 +572,7 @@ export default function SearchScreen() {
                 item={item}
                 onPress={() =>
                   router.push({
-                    pathname: '/(tabs)/leagueDetail',
+                    pathname: '/leagueDetail',
                     params: { id: String(item.id), name: item.name },
                   })
                 }

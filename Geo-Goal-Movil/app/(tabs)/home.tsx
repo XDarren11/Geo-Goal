@@ -84,7 +84,7 @@ export default function HomeScreen() {
   };
 
   const openMatchDetail = (matchId: number) => {
-    router.push(`/(tabs)/matchDetail?id=${matchId}`);
+    router.push(`/matchDetail?id=${matchId}`);
   };
 
   if (userLoading) {
@@ -152,7 +152,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: '/(tabs)/adminCareerDashboard',
+                    pathname: '/adminCareerDashboard',
                     params: { adminId: String(user.id), name: user.name },
                   } as any)
                 }
@@ -199,7 +199,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: '/(tabs)/coachCareerDashboard',
+                    pathname: '/coachCareerDashboard',
                     params: { coachId: String(user.id), name: user.name },
                   } as any)
                 }
@@ -249,7 +249,7 @@ export default function HomeScreen() {
                     <TouchableOpacity 
                       onPress={() => {
                         router.push({
-                          pathname: "/(tabs)/navigation",
+                          pathname: "/navigation",
                           params: { 
                             destLat: m.location.lat, 
                             destLng: m.location.lng,
@@ -302,7 +302,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 onPress={() =>
                   router.push({
-                    pathname: '/(tabs)/playerCareerDashboard',
+                    pathname: '/playerCareerDashboard',
                     params: { playerId: String(user.id), name: user.name },
                   } as any)
                 }

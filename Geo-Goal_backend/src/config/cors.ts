@@ -4,6 +4,7 @@ import {CorsOptions} from 'cors'
 const whitelist = [
     'https://geo-goal-ai-service.onrender.com',
     'https://geo-goal-1.onrender.com',
+    undefined
 ]
 
 export const corsConfig: CorsOptions = {

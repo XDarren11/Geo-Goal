@@ -87,7 +87,7 @@ export default function PublicResultsScreen() {
                 key={`public-league-${league.id}`}
                 onPress={() =>
                   router.push({
-                    pathname: "/(tabs)/leagueDetail",
+                    pathname: "/leagueDetail",
                     params: { id: String(league.id), name: league.name },
                   })
                 }

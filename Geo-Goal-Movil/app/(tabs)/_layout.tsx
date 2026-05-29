@@ -150,19 +150,6 @@ export default function TabLayout() {
       {/* Resultados — eliminado (contenido unificado en Explorar) */}
       <Tabs.Screen name="public" options={{ href: null }} />
 
-      {/* ── Pantallas ocultas de la barra de tabs ── */}
-      <Tabs.Screen name="leagueDetail" options={{ href: null }} />
-      <Tabs.Screen name="teamDetail" options={{ href: null }} />
-      <Tabs.Screen name="matchDetail" options={{ href: null }} />
-      <Tabs.Screen
-        name="navigation"
-        options={{ href: null, headerShown: false }}
-      />
-      <Tabs.Screen name="playerCareerDashboard" options={{ href: null }} />
-      <Tabs.Screen name="teamCareerDashboard" options={{ href: null }} />
-      <Tabs.Screen name="coachCareerDashboard" options={{ href: null }} />
-      <Tabs.Screen name="adminCareerDashboard" options={{ href: null }} />
-      <Tabs.Screen name="playersList" options={{ href: null }} />
     </Tabs>
   );
 }
