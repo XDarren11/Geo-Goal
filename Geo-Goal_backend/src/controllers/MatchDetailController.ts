@@ -475,9 +475,13 @@ export class MatchDetailController {
 
   static submitKeypoints = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
-    const srcPts: Array<{ x: number; y: number }> = req.body.srcPts;
+    const rawSrcPts: Array<{ x: number; y: number }> | undefined = req.body.srcPts;
     const playerTags: Array<{ x: number; y: number; label: "home" | "away" | "ball" }> | undefined = req.body.playerTags;
     const identityMap: Record<string, number> | undefined = req.body.identityMap;
+
+    // Determine if valid field corners were provided
+    const srcPts = Array.isArray(rawSrcPts) ? rawSrcPts : [];
+    const hasValidKeypoints = srcPts.length === 4;
 
     // Find a pending job
     const job = await MatchAnalysisJob.findOne({
@@ -498,52 +502,58 @@ export class MatchDetailController {
       return;
     }
 
-    // Save keypoints, player tags, identity map and set status to queued
+    // If no valid corners provided → mark as "annotating" (video is saved, corners pending)
+    // If valid corners provided → mark as "queued" and fire AI immediately
+    const newStatus = hasValidKeypoints ? "queued" : "annotating";
+
     await job.update({
-      srcPts,
+      // Only overwrite srcPts when valid corners are provided; keep existing if re-saving metadata only
+      ...(hasValidKeypoints ? { srcPts } : {}),
       playerTags: playerTags ?? null,
       identityMap: identityMap ?? null,
-      status: "queued",
+      status: newStatus,
       error: null,
     });
 
-    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — keypoints + ${playerTags?.length ?? 0} player tags + ${Object.keys(identityMap ?? {}).length} identity entries saved, status: queued`);
+    console.log(`[submit-keypoints] match ${matchId} job ${job.id} — ${hasValidKeypoints ? "4 keypoints" : "no keypoints (annotating)"} + ${playerTags?.length ?? 0} player tags, status: ${newStatus}`);
 
-    // PUSH TRIGGER: avisa al AI service inmediatamente para evitar polling delay (0-60s).
-    // Si el AI service está caído, no es crítico: su loop de polling actuará como fallback.
-    // Por eso es fire-and-forget (no await, no rompe la respuesta al frontend).
-    const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-    const userToken = req.headers.authorization;
-    if (userToken) {
-      fetch(`${aiUrl}/jobs/process`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": userToken,
-        },
-        body: JSON.stringify({
-          match_id: job.matchId,
-          job_id: job.id,
-          video_url: job.videoSupabaseUrl,
-          src_pts: srcPts,
-        }),
-      })
-        .then((r) => {
-          if (r.ok) {
-            console.log(`[push-trigger] AI service aceptó job ${job.id} inmediatamente`);
-          } else {
-            console.warn(`[push-trigger] AI service respondió ${r.status} — fallback a polling`);
-          }
+    // PUSH TRIGGER: only fire when we have valid keypoints to process
+    if (hasValidKeypoints) {
+      const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+      const userToken = req.headers.authorization;
+      if (userToken) {
+        fetch(`${aiUrl}/jobs/process`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": userToken,
+          },
+          body: JSON.stringify({
+            match_id: job.matchId,
+            job_id: job.id,
+            video_url: job.videoSupabaseUrl,
+            src_pts: srcPts,
+          }),
         })
-        .catch((err) => {
-          console.warn(`[push-trigger] AI service inaccesible (${err.message}) — fallback a polling`);
-        });
+          .then((r) => {
+            if (r.ok) {
+              console.log(`[push-trigger] AI service aceptó job ${job.id} inmediatamente`);
+            } else {
+              console.warn(`[push-trigger] AI service respondió ${r.status} — fallback a polling`);
+            }
+          })
+          .catch((err) => {
+            console.warn(`[push-trigger] AI service inaccesible (${err.message}) — fallback a polling`);
+          });
+      }
     }
 
     res.status(202).json({
-      message: "Keypoints y etiquetas recibidos. El análisis será procesado por el servicio de IA.",
+      message: hasValidKeypoints
+        ? "Keypoints y etiquetas recibidos. El análisis será procesado por el servicio de IA."
+        : "Video guardado. Abre el panel de análisis para marcar las esquinas del campo cuando estés listo.",
       jobId: job.id,
-      status: "queued",
+      status: newStatus,
     });
   };
 

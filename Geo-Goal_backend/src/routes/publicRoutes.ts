@@ -277,10 +277,11 @@ router.put(
   authenticate,
   param("matchId").isInt().withMessage("ID de partido no válido"),
   body("srcPts")
-    .isArray({ min: 4, max: 4 })
-    .withMessage("srcPts debe ser un arreglo de exactamente 4 puntos"),
-  body("srcPts.*.x").isNumeric().withMessage("Cada punto debe tener x numérico"),
-  body("srcPts.*.y").isNumeric().withMessage("Cada punto debe tener y numérico"),
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("srcPts debe ser un arreglo de puntos"),
+  body("srcPts.*.x").optional().isNumeric().withMessage("Cada punto debe tener x numérico"),
+  body("srcPts.*.y").optional().isNumeric().withMessage("Cada punto debe tener y numérico"),
   body("playerTags")
     .optional()
     .isArray()

@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, getPublicMatchFramesExport, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
+import { getPublicMatchAnalytics, getPublicMatchDetail, uploadMatchVideo, getAnalysisStatus, submitAnalysisKeypoints, postAnalysisPreview, getPublicMatchFramesExport, getAnalysisFrame, type AnalysisStatusResponse, type PreviewResponse, getAIServiceHealth, type AIServiceHealth, type PlayerTag } from "@/api/publicAPI";
 import { PitchPreview2D } from "@/components/Pitch/PitchPreview2D";
 import type { MatchDetailLineupEntry, MatchSquadPlayerView} from "@/types";
 import { ArrowLeftIcon, ClockIcon, CalendarDaysIcon, MapPinIcon, UserGroupIcon, VideoCameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -1146,13 +1146,8 @@ export default function PublicMatchDetailView() {
         setUploadProgress(pct);
         setBgAnalysis((prev) => prev.status === "uploading" ? { ...prev, progress: pct } : prev);
       });
-      // Upload succeeded — schedule auto-submit if user doesn't annotate within 5s
-      setTimeout(() => {
-        const hasAnnotation = srcPtsRef.current.length > 0 || playerTagsRef.current.length > 0;
-        if (!manualSubmitRef.current && !hasAnnotation && uploadStepRef.current !== "progress" && uploadStepRef.current !== "preview") {
-          autoSubmitAnalysis();
-        }
-      }, 5000);
+      // Upload succeeded — video is saved in DB. User must annotate field corners manually.
+      setBgAnalysis({ status: "uploaded" });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al subir el video";
       setUploadError(msg);
@@ -1187,29 +1182,31 @@ export default function PublicMatchDetailView() {
     await doSubmitAnalysis(srcPts, playerTags, identityMap);
   };
 
-  // Auto-submit: upload completed but user didn't annotate → submit with whatever we have
-  const autoSubmitAnalysis = async () => {
-    if (manualSubmitRef.current) return;
-    manualSubmitRef.current = true;
-    await doSubmitAnalysis(srcPtsRef.current, playerTagsRef.current, identityMapRef.current);
-  };
-
   const doSubmitAnalysis = async (
     pts: Array<{ x: number; y: number }>,
     tags: Array<PlayerTag>,
     idMap: Record<number, number>,
   ) => {
+    const hasValidPts = pts.length === 4;
     setSubmittingKeypoints(true);
     setUploadError(null);
-    setBgAnalysis({ status: "processing", progress: 0, currentStep: "starting" });
+    if (hasValidPts) {
+      setBgAnalysis({ status: "processing", progress: 0, currentStep: "starting" });
+    }
     try {
-      await submitAnalysisKeypoints(id, {
-        srcPts: pts.length === 4 ? pts : [],
+      const result = await submitAnalysisKeypoints(id, {
+        srcPts: hasValidPts ? pts : [],
         playerTags: tags.length > 0 ? tags : undefined,
         identityMap: Object.keys(idMap).length > 0 ? idMap : undefined,
       });
-      setUploadStep("progress");
-      setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
+      if (result.status === "queued" || result.status === "processing") {
+        setUploadStep("progress");
+        setAnalysisStatus({ status: "processing", progress: 0, currentStep: "starting" });
+      } else {
+        // "annotating" — video saved, corners still pending
+        setBgAnalysis({ status: "uploaded" });
+        setUploadStep("annotate");
+      }
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? e?.message ?? "Error al iniciar el análisis";
       setUploadError(msg);
@@ -1317,8 +1314,22 @@ export default function PublicMatchDetailView() {
       }
       return;
     }
-    if (bgAnalysis.status === "uploaded" && uploadStep === "select") {
+    if (bgAnalysis.status === "uploaded" && (uploadStep === "select" || uploadStep === "annotate")) {
       setUploadStep("annotate");
+      // If local frame was lost (modal closed & reopened), fetch it from server
+      if (!frameDataUrl) {
+        setFrameExtracting(true);
+        setFrameError(null);
+        getAnalysisFrame(id)
+          .then((res) => {
+            setFrameDataUrl(`data:image/jpeg;base64,${res.frame}`);
+            setFrameExtracting(false);
+          })
+          .catch((err) => {
+            setFrameError(err?.response?.data?.error ?? "No se pudo cargar el fotograma del servidor.");
+            setFrameExtracting(false);
+          });
+      }
     }
   };
 
