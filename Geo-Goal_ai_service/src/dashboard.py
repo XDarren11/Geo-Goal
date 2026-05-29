@@ -109,6 +109,12 @@ async def _require_admin_for_page(request: Request):
 # ── Pages ────────────────────────────────────────────────────────────────
 
 
+@router.get("/", response_class=RedirectResponse)
+async def root_redirect():
+    """Redirect root URL to the login page."""
+    return RedirectResponse(url="/login")
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Serve the login page."""
