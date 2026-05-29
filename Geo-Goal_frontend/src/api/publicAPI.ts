@@ -145,7 +145,8 @@ export async function getAIServiceHealth(): Promise<AIServiceHealth> {
 export async function uploadMatchVideo(
   matchId: number,
   videoFile: File,
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
+  firstFrame?: string | null
 ): Promise<{ message: string; jobId: number; filename: string }> {
   // --- Paso 1: pedir URL firmada ---
   let signed: { uploadUrl: string; publicUrl: string; mimetype: string } | null = null;
@@ -185,10 +186,10 @@ export async function uploadMatchVideo(
       xhr.send(videoFile);
     });
 
-    // --- Paso 3: confirmar al backend ---
+    // --- Paso 3: confirmar al backend (incluye el frame para anotación posterior) ---
     const { data } = await api.post<{ message: string; jobId: number; videoSupabaseUrl: string }>(
       `${BASE}/matches/${matchId}/upload-video/complete`,
-      { publicUrl: signed.publicUrl, filename: videoFile.name }
+      { publicUrl: signed.publicUrl, filename: videoFile.name, firstFrame: firstFrame ?? null }
     );
     return { message: data.message, jobId: data.jobId, filename: videoFile.name };
   }

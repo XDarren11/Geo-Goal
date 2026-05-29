@@ -1126,26 +1126,30 @@ export default function PublicMatchDetailView() {
     setFrameDataUrl(null);
     setUploadProgress(0);
 
-    // 1. Extract frame from local file immediately in browser
+    // 1. Show annotation step immediately, extract frame (needed both for canvas and for persisting server-side)
     setUploadStep("annotate");
     setFrameExtracting(true);
-    extractFrameLocal(file).then((dataUrl) => {
-      setFrameDataUrl(dataUrl);
-      setFrameExtracting(false);
-    }).catch((err) => {
-      setFrameError(err.message ?? "No se pudo extraer el fotograma.");
-      setFrameExtracting(false);
-    });
 
-    // 2. Upload in background — track in persistent state
+    // 2. Upload — extract frame first so we can send it to the backend in completeVideoUpload
     setBgAnalysis({ status: "uploading", fileName: file.name, progress: 0 });
     setBgBarDismissed(false);
     setUploadingVideo(true);
     try {
+      // Extract frame (fast, browser-side) before upload so it can be persisted with the job
+      let resolvedFrame: string | null = null;
+      try {
+        resolvedFrame = await extractFrameLocal(file);
+        setFrameDataUrl(resolvedFrame);
+      } catch (err: any) {
+        setFrameError(err?.message ?? "No se pudo extraer el fotograma.");
+      } finally {
+        setFrameExtracting(false);
+      }
+
       await uploadMatchVideo(id, file, (pct) => {
         setUploadProgress(pct);
         setBgAnalysis((prev) => prev.status === "uploading" ? { ...prev, progress: pct } : prev);
-      });
+      }, resolvedFrame);
       // Upload succeeded — video is saved in DB. User must annotate field corners manually.
       setBgAnalysis({ status: "uploaded" });
     } catch (e: any) {

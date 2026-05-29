@@ -260,6 +260,7 @@ router.post(
   param("matchId").isInt().withMessage("ID de partido no válido"),
   body("publicUrl").isURL().withMessage("publicUrl debe ser una URL válida"),
   body("filename").optional().isString(),
+  body("firstFrame").optional().isString(),
   handleInputError,
   asyncHandler(MatchDetailController.completeVideoUpload)
 );

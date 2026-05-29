@@ -37,6 +37,7 @@ import {
   uploadVideoToSupabase,
 } from "../utils/supabaseStorage";
 import { ensureFastStart, isFastStart, isFastStartUrl } from "../utils/videoFastStart";
+import ffmpegPath from "ffmpeg-static";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -394,7 +395,7 @@ export class MatchDetailController {
    */
   static completeVideoUpload = async (req: Request, res: Response): Promise<void> => {
     const { matchId } = req.params;
-    const { publicUrl, filename } = req.body as { publicUrl?: string; filename?: string };
+    const { publicUrl, filename, firstFrame } = req.body as { publicUrl?: string; filename?: string; firstFrame?: string };
 
     if (!publicUrl) {
       res.status(400).json({ error: "publicUrl es requerido" });
@@ -424,6 +425,7 @@ export class MatchDetailController {
       videoSupabaseUrl: publicUrl,
       videoFilename: filename ?? null,
       createdBy: req.user!.id,
+      firstFrame: firstFrame ?? null,               // fotograma extraído en el cliente para anotar después
     });
 
     console.log(`[complete-upload] match ${matchId} — job ${job.id} created from direct upload`);
@@ -607,52 +609,66 @@ export class MatchDetailController {
     const job = await MatchAnalysisJob.findOne({
       where: { matchId: Number(matchId) },
       order: [["createdAt", "DESC"]],
-      attributes: ["id", "videoPath", "status"],
+      attributes: ["id", "videoPath", "videoSupabaseUrl", "firstFrame", "status"],
     });
 
-    if (!job || !job.videoPath) {
+    if (!job) {
       res.status(404).json({ error: "No se encontró video para este partido" });
       return;
     }
 
+    // 1. Fast path: frame ya cacheado en DB (guardado en upload previo)
+    if (job.firstFrame) {
+      const raw = job.firstFrame.replace(/^data:image\/[a-z]+;base64,/, "");
+      res.json({ frame: raw, width: 0, height: 0 });
+      return;
+    }
+
+    // 2. Determinar fuente de video: URL de Supabase tiene prioridad; fallback a path local
+    const videoSource = job.videoSupabaseUrl ?? job.videoPath;
+    if (!videoSource) {
+      res.status(404).json({ error: "No se encontró video para este partido" });
+      return;
+    }
+
+    // 3. Extraer primer fotograma con ffmpeg-static (funciona con URLs y paths locales)
     const { spawn } = await import("child_process");
-    const path = await import("path");
-    const aiDir = path.resolve(__dirname, "..", "..", "..", "Geo-Goal_ai_service");
-    const pythonCmd = process.platform === "win32" ? "python" : "python3";
 
-    const child = spawn(pythonCmd, [
-      "src/main.py",
-      "extract-frame",
-      job.videoPath,
-      "--frame", "0",
-    ], {
-      cwd: aiDir,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    if (!ffmpegPath) {
+      res.status(500).json({ error: "ffmpeg no disponible en el servidor" });
+      return;
+    }
 
-    let stdout = "";
+    const child = spawn(ffmpegPath, [
+      "-i", videoSource,
+      "-vframes", "1",
+      "-f", "image2pipe",
+      "-vcodec", "mjpeg",
+      "pipe:1",
+    ], { stdio: ["ignore", "pipe", "pipe"] });
+
+    const chunks: Buffer[] = [];
     let stderr = "";
 
-    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
 
-    child.on("close", (code: number | null) => {
-      if (code !== 0 || !stdout.trim()) {
-        console.error(`[getAnalysisFrame] Python error (code ${code}):`, stderr);
+    child.on("close", async (code: number | null) => {
+      if (code !== 0 || chunks.length === 0) {
+        console.error(`[getAnalysisFrame] ffmpeg error (code ${code}):`, stderr.slice(-600));
         res.status(500).json({ error: "No se pudo extraer el fotograma del video" });
         return;
       }
 
-      try {
-        const result = JSON.parse(stdout.trim());
-        if (result.error) {
-          res.status(500).json({ error: result.error });
-          return;
-        }
-        res.json(result);
-      } catch {
-        res.status(500).json({ error: "Respuesta inesperada del extractor de frames" });
-      }
+      const frameBuffer = Buffer.concat(chunks);
+      const base64 = frameBuffer.toString("base64");
+
+      // Cachear en DB para próximas consultas (sin bloquear la respuesta)
+      job.update({ firstFrame: base64 }).catch((e: Error) =>
+        console.warn("[getAnalysisFrame] no se pudo cachear el frame:", e.message)
+      );
+
+      res.json({ frame: base64, width: 0, height: 0 });
     });
   };
 
