@@ -59,7 +59,7 @@ export default function PublicLeagueView() {
   const latestNews = data.news.slice(0, 5);
   const teamPreview = data.teams.slice(0, 6);
   const fieldPreview = data.fields.slice(0, 4);
-  const fixtureRounds = Object.entries(data.fixture).slice(0, 3);
+  const fixtureRounds = Object.entries(data.fixture);
   const standingsChartData = data.standings.slice(0, 8).map((row) => ({
     x: row.team?.name || `T${row.team?.id ?? row.id}`,
     pts: row.points,
@@ -256,7 +256,7 @@ export default function PublicLeagueView() {
               <h2 className="font-geo text-xl tracking-wide">Fixture y resultados</h2>
               <CalendarDaysIcon className="h-6 w-6 text-geo-green" />
             </div>
-            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+           <div className="mt-4 grid gap-4 xl:grid-cols-2 max-h-[600px] overflow-y-auto pr-2">
               {fixtureRounds.map(([roundName, matches]) => (
                 <div key={roundName} className="rounded-2xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-4">
                   <p className="font-semibold text-geo-green">{roundName}</p>
