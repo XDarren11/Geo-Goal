@@ -4,7 +4,7 @@ import {CorsOptions} from 'cors'
 const whitelist = [
     'https://geo-goal-ai-service.onrender.com',
     'https://geo-goal-1.onrender.com', 
-    'http://localhost:5173',
+    'https://geo-goal-ai-service-bukpi.ondigitalocean.app/',
     undefined
 ]
 
