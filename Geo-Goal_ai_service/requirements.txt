@@ -2,8 +2,6 @@ requests
 python-dotenv
 psutil
 numpy
-# opencv-python-headless debe instalarse ANTES que ultralytics
-# para ganar la resolución de conflicto con opencv-python
 opencv-python-headless
 ultralytics
 scikit-learn
