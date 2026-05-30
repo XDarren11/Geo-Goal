@@ -2,7 +2,6 @@ requests
 python-dotenv
 psutil
 numpy
-opencv-python-headless
 ultralytics
 scikit-learn
 supervision
@@ -13,3 +12,5 @@ uvicorn
 httpx
 jinja2
 python-multipart
+# Nota: opencv-python-headless se instala dinámicamente en bin/post_compile
+# para reemplazar a opencv-python (con libGL) que jala ultralytics como dep.
