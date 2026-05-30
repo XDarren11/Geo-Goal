@@ -100,9 +100,18 @@ export default function NavigationScreen() {
         // Paso 5: watchPositionAsync con timeout (más confiable en emuladores Android)
         if (!coords) {
           try {
-            const watched = await new Promise<Location.LocationObject>(async (resolve, reject) => {
+            const watched = await new Promise<Location.LocationObject>((resolve, reject) => {
               let settled = false;
-              const sub = await Location.watchPositionAsync(
+              let sub: Location.LocationSubscription | null = null;
+
+              const timeout = setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                sub?.remove();
+                reject(new Error('watchPositionAsync timeout (8s)'));
+              }, 8000);
+
+              Location.watchPositionAsync(
                 {
                   accuracy: Location.Accuracy.Balanced,
                   timeInterval: 1000,
@@ -112,17 +121,12 @@ export default function NavigationScreen() {
                   if (settled) return;
                   settled = true;
                   clearTimeout(timeout);
-                  sub.remove();
+                  sub?.remove();
                   resolve(loc);
                 }
-              );
-
-              const timeout = setTimeout(() => {
-                if (settled) return;
-                settled = true;
-                sub.remove();
-                reject(new Error('watchPositionAsync timeout (8s)'));
-              }, 8000);
+              ).then((subscription) => {
+                sub = subscription;
+              });
             });
 
             if (!cancelled) {
