@@ -10,7 +10,7 @@ export default function NavigationScreen() {
   const router = useRouter();
   const { destLat, destLng, fieldName } = useLocalSearchParams();
 
-  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_APIKEY;
+  const apiKey = "AIzaSyBR1HNrmLDsckW2YKQCHYjfJP5VNXctpmc";
 
   const [origin, setOrigin] = useState<{ latitude: number; longitude: number } | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
