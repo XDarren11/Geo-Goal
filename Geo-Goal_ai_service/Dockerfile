@@ -35,5 +35,9 @@ COPY yolov8n.pt ./src/yolov8n.pt 2>/dev/null || true
 # ── Arranque ───────────────────────────────────────────────────────────────
 # DigitalOcean inyecta $PORT automáticamente (por defecto 8080)
 ENV PORT=8080
+# Reduce threads de PyTorch → elimina warnings de NNPACK en CPUs sin AVX2
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
 
 CMD ["sh", "-c", "uvicorn api:app --host 0.0.0.0 --port ${PORT} --app-dir src"]

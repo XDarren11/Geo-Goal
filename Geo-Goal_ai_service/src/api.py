@@ -8,6 +8,12 @@ from typing import Optional, List
 
 import os
 
+# Silenciar warnings de NNPACK en CPUs sin soporte (hardware de nube sin AVX2).
+# PyTorch usa CPU estándar como fallback automáticamente — sin impacto en resultados.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 # Track process start time for uptime calculation
 _START_TIME = time.time()
 
