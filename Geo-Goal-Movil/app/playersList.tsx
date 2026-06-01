@@ -8,13 +8,13 @@ import {
   ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 import {
-  getPublicPlayersList,
   getPublicCoachesList,
   type PublicPlayerListItem,
   type PublicTeamListItem,
   type PublicCoachListItem,
+  type PublicCoachesListResponse,
 } from '@/Api/publicAPI';
 import { getMyPlayerTeams, getMyTeams, getPlayersTeam } from '@/Api/teamAPI';
 import { getAdminDashboardSummary } from '@/Api/adminAPI';
@@ -34,6 +34,10 @@ const TAB_CONFIG = [
 ] as const;
 
 type TabKey = typeof TAB_CONFIG[number]['key'];
+
+const TEAM_PAGE_SIZE = 5;
+const LEAGUE_PAGE_SIZE = 4;
+const COACH_PAGE_SIZE = 50;
 
 // ─── Rating helper ────────────────────────────────────────────────────────────
 function ratingColor(r: number): string {
@@ -327,13 +331,37 @@ export default function SearchScreen() {
     [adminLeagues]
   );
 
-  // Admin: detalle de cada liga (incluye equipos)
-  const { data: adminLeagueDetails = [], isLoading: loadingLeagueDetails } = useQuery({
+  // Admin: detalle de cada liga (incluye equipos) con paginación
+  const adminLeagueDetailsQuery = useInfiniteQuery<
+    { ids: number[]; results: any[] },
+    Error,
+    InfiniteData<{ ids: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
     queryKey: ['admin-league-details', adminLeagueIds],
-    queryFn: () => Promise.all(adminLeagueIds.map((id) => getLeagueById(id))),
-    enabled: user?.role === 'admin' && adminLeagueIds.length > 0,
+    queryFn: async ({ pageParam = 0 }) => {
+      const ids = adminLeagueIds.slice(pageParam, pageParam + LEAGUE_PAGE_SIZE);
+      const results = await Promise.all(ids.map((id) => getLeagueById(id)));
+      return { ids, results };
+    },
+    enabled:
+      user?.role === 'admin' &&
+      adminLeagueIds.length > 0 &&
+      (activeTab === 'players' || activeTab === 'teams' || activeTab === 'coaches' || activeTab === 'leagues'),
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.ids.length, 0);
+      return loaded < adminLeagueIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
     staleTime: 5 * 60_000,
   });
+
+  const adminLeagueDetails = React.useMemo(
+    () => adminLeagueDetailsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [adminLeagueDetailsQuery.data]
+  );
+  const loadingLeagueDetails = adminLeagueDetailsQuery.isLoading;
 
   // IDs de todos los equipos en las ligas del admin (para filtrar coaches)
   const adminTeamIds = React.useMemo(() => {
@@ -355,32 +383,92 @@ export default function SearchScreen() {
     return [...seen];
   }, [user?.role, myCoachTeams]);
 
-  // Fetch de detalles de esas ligas (nombre, descripción)
-  const { data: coachLeagueDetails = [] } = useQuery({
+  // Fetch de detalles de esas ligas (nombre, descripción) con paginación
+  const coachLeagueDetailsQuery = useInfiniteQuery<
+    { ids: number[]; results: any[] },
+    Error,
+    InfiniteData<{ ids: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
     queryKey: ['coach-league-details', coachLeagueIds],
-    queryFn: () => Promise.all(coachLeagueIds.map((id) => getPublicLeagueDetail(id))),
-    enabled: user?.role === 'coach' && coachLeagueIds.length > 0,
+    queryFn: async ({ pageParam = 0 }) => {
+      const ids = coachLeagueIds.slice(pageParam, pageParam + LEAGUE_PAGE_SIZE);
+      const results = await Promise.all(ids.map((id) => getPublicLeagueDetail(id)));
+      return { ids, results };
+    },
+    enabled:
+      user?.role === 'coach' &&
+      coachLeagueIds.length > 0 &&
+      (activeTab === 'coaches' || activeTab === 'leagues'),
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.ids.length, 0);
+      return loaded < coachLeagueIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
     staleTime: 5 * 60_000,
   });
 
-  // ── 2. Todos los coaches (filtrado local) ─────────────────────────────────────
-  const { data: allCoachesData, isLoading: loadingAllCoaches } = useQuery({
+  const coachLeagueDetails = React.useMemo(
+    () => coachLeagueDetailsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [coachLeagueDetailsQuery.data]
+  );
+
+  // ── 2. Todos los coaches (filtrado local) con paginación ─────────────────────
+  const coachesQuery = useInfiniteQuery<
+    PublicCoachesListResponse,
+    Error,
+    InfiniteData<PublicCoachesListResponse>,
+    (string | number)[],
+    number
+  >({
     queryKey: ['all-coaches-context'],
-    queryFn: () => getPublicCoachesList({ pageSize: 500 }),
+    queryFn: ({ pageParam = 1 }) => getPublicCoachesList({ page: pageParam, pageSize: COACH_PAGE_SIZE }),
     enabled: !!user && activeTab === 'coaches',
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
     staleTime: 10 * 60_000,
   });
 
+  const allCoachesItems = React.useMemo(
+    () => coachesQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [coachesQuery.data]
+  );
+  const loadingAllCoaches = coachesQuery.isLoading;
+
   // ── 3. Jugadores usando getPlayersTeam (datos reales de miembros del equipo) ──
-  const { data: teamPlayersRaw = [], isLoading: loadingTeamPlayers } = useQuery({
+  const teamPlayersQuery = useInfiniteQuery<
+    { teamIds: number[]; results: any[] },
+    Error,
+    InfiniteData<{ teamIds: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
     queryKey: ['context-team-players', myTeamIds],
-    queryFn: async () => {
-      const results = await Promise.all(myTeamIds.map((id) => getPlayersTeam(id)));
-      const all: PublicPlayerListItem[] = [];
-      const seen = new Set<number>();
-      myTeamIds.forEach((teamId, i) => {
-        const team = myRoleTeams[i];
-        (results[i] ?? []).forEach((p: any) => {
+    queryFn: async ({ pageParam = 0 }) => {
+      const teamIds = myTeamIds.slice(pageParam, pageParam + TEAM_PAGE_SIZE);
+      const results = await Promise.all(teamIds.map((id) => getPlayersTeam(id)));
+      return { teamIds, results };
+    },
+    enabled: (user?.role === 'player' || user?.role === 'coach') && myTeamIds.length > 0 && activeTab === 'players',
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.teamIds.length, 0);
+      return loaded < myTeamIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const teamPlayersRaw = React.useMemo(() => {
+    const pages = teamPlayersQuery.data?.pages ?? [];
+    const teamMap = new Map<number, any>(myRoleTeams.map((t: any) => [t.id, t]));
+    const all: PublicPlayerListItem[] = [];
+    const seen = new Set<number>();
+    pages.forEach((page) => {
+      page.teamIds.forEach((teamId, i) => {
+        const team = teamMap.get(teamId);
+        (page.results[i] ?? []).forEach((p: any) => {
           const uid: number = p.id ?? p.userId ?? p.playerId;
           if (!uid || seen.has(uid)) return;
           seen.add(uid);
@@ -388,7 +476,7 @@ export default function SearchScreen() {
             playerId: uid,
             name: p.name ?? p.playerName ?? 'Jugador',
             username: p.username ?? null,
-            team: { id: team.id, name: team.name },
+            team: { id: teamId, name: team?.name ?? '' },
             avgRating: p.avgRating ?? 0,
             totalGoals: p.totalGoals ?? 0,
             totalAssists: p.totalAssists ?? 0,
@@ -397,30 +485,56 @@ export default function SearchScreen() {
           });
         });
       });
-      return all;
-    },
-    enabled: (user?.role === 'player' || user?.role === 'coach') && myTeamIds.length > 0 && activeTab === 'players',
-    staleTime: 5 * 60_000,
-  });
+    });
+    return all;
+  }, [teamPlayersQuery.data, myRoleTeams]);
+
+  const loadingTeamPlayers = teamPlayersQuery.isLoading;
 
   // Admin: jugadores — usa getPlayersTeam por cada equipo de sus ligas
   // (el endpoint público solo devuelve jugadores con estadísticas, getPlayersTeam devuelve todos los miembros)
   const adminTeamIdsArray = React.useMemo(() => [...adminTeamIds], [adminTeamIds]);
 
-  const { data: adminLeaguePlayers = [], isLoading: loadingAdminPlayers } = useQuery({
+  const adminLeaguePlayersQuery = useInfiniteQuery<
+    { teamIds: number[]; results: any[] },
+    Error,
+    InfiniteData<{ teamIds: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
     queryKey: ['context-admin-team-players', adminTeamIdsArray],
-    queryFn: async () => {
-      const results = await Promise.all(adminTeamIdsArray.map((id) => getPlayersTeam(id)));
-      const all: PublicPlayerListItem[] = [];
-      const seen = new Set<number>();
-      adminTeamIdsArray.forEach((teamId, i) => {
-        // Buscar nombre del equipo en los detalles de liga
-        let teamName = '';
-        adminLeagueDetails.forEach((league: any) => {
-          const found = (league.teams ?? []).find((t: any) => t.id === teamId);
-          if (found) teamName = found.name;
-        });
-        (results[i] ?? []).forEach((p: any) => {
+    queryFn: async ({ pageParam = 0 }) => {
+      const teamIds = adminTeamIdsArray.slice(pageParam, pageParam + TEAM_PAGE_SIZE);
+      const results = await Promise.all(teamIds.map((id) => getPlayersTeam(id)));
+      return { teamIds, results };
+    },
+    enabled: user?.role === 'admin' && adminTeamIdsArray.length > 0 && activeTab === 'players',
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.teamIds.length, 0);
+      return loaded < adminTeamIdsArray.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const adminTeamNameMap = React.useMemo(() => {
+    const map = new Map<number, string>();
+    adminLeagueDetails.forEach((league: any) => {
+      (league.teams ?? []).forEach((t: any) => {
+        if (t.id && !map.has(t.id)) map.set(t.id, t.name ?? '');
+      });
+    });
+    return map;
+  }, [adminLeagueDetails]);
+
+  const adminLeaguePlayers = React.useMemo(() => {
+    const pages = adminLeaguePlayersQuery.data?.pages ?? [];
+    const all: PublicPlayerListItem[] = [];
+    const seen = new Set<number>();
+    pages.forEach((page) => {
+      page.teamIds.forEach((teamId, i) => {
+        const teamName = adminTeamNameMap.get(teamId) ?? '';
+        (page.results[i] ?? []).forEach((p: any) => {
           const uid: number = p.id ?? p.userId ?? p.playerId;
           if (!uid || seen.has(uid)) return;
           seen.add(uid);
@@ -437,11 +551,11 @@ export default function SearchScreen() {
           });
         });
       });
-      return all;
-    },
-    enabled: user?.role === 'admin' && adminTeamIdsArray.length > 0 && activeTab === 'players',
-    staleTime: 5 * 60_000,
-  });
+    });
+    return all;
+  }, [adminLeaguePlayersQuery.data, adminTeamNameMap]);
+
+  const loadingAdminPlayers = adminLeaguePlayersQuery.isLoading;
 
   // ── 4. Datos derivados por tab ────────────────────────────────────────────────
 
@@ -480,20 +594,20 @@ export default function SearchScreen() {
   }, [coachLeagueDetails]);
 
   const rawCoaches: PublicCoachListItem[] = React.useMemo(() => {
-    if (!allCoachesData?.items) return [];
+    if (allCoachesItems.length === 0) return [];
     if (user?.role === 'coach') {
       // Mostrar coaches de equipos en las mismas ligas (incluye al propio coach)
       // Si aún no hay league details cargados, caer en los equipos propios
       const ids = coachLeagueTeamIds.size > 0 ? coachLeagueTeamIds : new Set(myTeamIds);
-      return allCoachesData.items.filter((c) =>
+      return allCoachesItems.filter((c: PublicCoachListItem) =>
         (c.teams ?? []).some((t: any) => ids.has(t.id))
       );
     }
     const contextIds = user?.role === 'admin' ? adminTeamIds : new Set(myTeamIds);
-    return allCoachesData.items.filter((c) =>
+    return allCoachesItems.filter((c: PublicCoachListItem) =>
       (c.teams ?? []).some((t: any) => contextIds.has(t.id))
     );
-  }, [allCoachesData, adminTeamIds, myTeamIds, user?.role, coachLeagueTeamIds]);
+  }, [allCoachesItems, adminTeamIds, myTeamIds, user?.role, coachLeagueTeamIds]);
 
   const rawLeagues: PublicLeagueSummary[] = React.useMemo(() => {
     if (user?.role === 'admin') {
@@ -529,10 +643,19 @@ export default function SearchScreen() {
   // ── 6. Loading / isFetching / paginación ─────────────────────────────────────
   const contextLoading = loadingPlayerTeams || loadingCoachTeams || loadingAdmin || loadingLeagueDetails;
   const isLoading =
-    activeTab === 'players' ? (user?.role === 'admin' ? loadingAdminPlayers  : loadingTeamPlayers) :
-    activeTab === 'teams'   ? (user?.role === 'admin' ? loadingLeagueDetails : contextLoading)      :
-    activeTab === 'coaches' ? loadingAllCoaches :
-    contextLoading;
+    activeTab === 'players'
+      ? (user?.role === 'admin' ? loadingAdminPlayers : loadingTeamPlayers)
+      : activeTab === 'teams'
+        ? (user?.role === 'admin' ? loadingLeagueDetails : contextLoading)
+        : activeTab === 'coaches'
+          ? (loadingAllCoaches || (user?.role === 'coach' ? coachLeagueDetailsQuery.isLoading : false))
+          : activeTab === 'leagues'
+            ? (user?.role === 'admin'
+              ? loadingLeagueDetails
+              : user?.role === 'coach'
+                ? coachLeagueDetailsQuery.isLoading
+                : contextLoading)
+            : contextLoading;
 
   const isFetching = false;
   const totalPages = 1;
@@ -545,6 +668,57 @@ export default function SearchScreen() {
     activeTab === 'coaches' ? coaches  : leagues;
 
   const empty = !isLoading && listData.length === 0;
+
+  const isLoadingMore =
+    activeTab === 'players'
+      ? (user?.role === 'admin' ? adminLeaguePlayersQuery.isFetchingNextPage : teamPlayersQuery.isFetchingNextPage)
+      : activeTab === 'teams'
+        ? (user?.role === 'admin' ? adminLeagueDetailsQuery.isFetchingNextPage : false)
+        : activeTab === 'coaches'
+          ? (coachesQuery.isFetchingNextPage || (user?.role === 'coach' ? coachLeagueDetailsQuery.isFetchingNextPage : false))
+          : activeTab === 'leagues'
+            ? (user?.role === 'admin'
+              ? adminLeagueDetailsQuery.isFetchingNextPage
+              : user?.role === 'coach'
+                ? coachLeagueDetailsQuery.isFetchingNextPage
+                : false)
+            : false;
+
+  function handleLoadMore() {
+    if (activeTab === 'players') {
+      if (user?.role === 'admin') {
+        if (adminLeagueDetailsQuery.hasNextPage) adminLeagueDetailsQuery.fetchNextPage();
+        if (adminLeaguePlayersQuery.hasNextPage) adminLeaguePlayersQuery.fetchNextPage();
+      } else if (teamPlayersQuery.hasNextPage) {
+        teamPlayersQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'teams') {
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'coaches') {
+      if (coachesQuery.hasNextPage) coachesQuery.fetchNextPage();
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      if (user?.role === 'coach' && coachLeagueDetailsQuery.hasNextPage) {
+        coachLeagueDetailsQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'leagues') {
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      if (user?.role === 'coach' && coachLeagueDetailsQuery.hasNextPage) {
+        coachLeagueDetailsQuery.fetchNextPage();
+      }
+    }
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1117' }}>
@@ -679,6 +853,8 @@ export default function SearchScreen() {
             return `${activeTab}-${rawId ?? 'unknown'}-${index}`;
           }}
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
           refreshControl={
             <RefreshControl
               refreshing={false}
@@ -738,7 +914,13 @@ export default function SearchScreen() {
               />
             );
           }}
-          ListFooterComponent={null}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color={currentTab.color} />
+              </View>
+            ) : null
+          }
         ></FlatList>
       )}
     </View>
