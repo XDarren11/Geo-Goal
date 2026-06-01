@@ -522,7 +522,7 @@ export class MatchDetailController {
 
     // PUSH TRIGGER: only fire when we have valid keypoints to process
     if (hasValidKeypoints) {
-      const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
+      const aiUrl = (process.env.AI_SERVICE_URL || "https://geo-goal-ai-service-bukpi.ondigitalocean.app").replace(/\/$/, "");
       const userToken = req.headers.authorization;
       if (userToken) {
         fetch(`${aiUrl}/jobs/process`, {
@@ -729,11 +729,17 @@ export class MatchDetailController {
       return;
     }
 
-    const aiUrl = (process.env.AI_SERVICE_URL || "http://localhost:8000").replace(/\/$/, "");
-    const userToken = req.headers.authorization; // reutilizamos el token admin del usuario
+    const aiUrl = (process.env.AI_SERVICE_URL || "https://geo-goal-ai-service-bukpi.ondigitalocean.app").replace(/\/$/, "");
+
+    const userToken = req.headers.authorization;
+    const targetUrl = `${aiUrl}/analysis/preview`;
+    console.log(`[preview] → llamando ${targetUrl}`);
 
     try {
-      const response = await fetch(`${aiUrl}/analysis/preview`, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const response = await fetch(targetUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -744,20 +750,29 @@ export class MatchDetailController {
           src_pts: srcPts,
           detect_pitch: !!detectPitch,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!response.ok) {
         const text = await response.text();
-        console.error(`[preview] AI service ${response.status}: ${text}`);
+        console.error(`[preview] ❌ AI service respondió ${response.status}: ${text.slice(0, 200)}`);
         res.status(502).json({ error: "AI service rechazó la petición", detail: text.slice(0, 200) });
         return;
       }
 
       const data = await response.json();
+      console.log(`[preview] ✅ respuesta OK del AI service`);
       res.json(data);
     } catch (err: any) {
-      console.error("[preview] AI service unreachable:", err.message);
-      res.status(503).json({ error: "AI service no disponible" });
+      if (err.name === "AbortError") {
+        console.error(`[preview] ❌ Timeout (30s) al llamar ${targetUrl}`);
+        res.status(503).json({ error: "AI service no respondió a tiempo (timeout 30s)" });
+      } else {
+        console.error(`[preview] ❌ AI service unreachable en ${targetUrl}: ${err.message}`);
+        res.status(503).json({ error: "AI service no disponible", detail: err.message });
+      }
     }
   };
 

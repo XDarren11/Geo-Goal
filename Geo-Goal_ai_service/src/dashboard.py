@@ -163,41 +163,70 @@ async def login_action(request: Request):
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email y contraseña son requeridos")
 
+    # Validar que la URL del backend esté configurada
+    if not API_BASE:
+        print("[login] ❌ GEO_API_URL no está configurada en las env vars")
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio no está correctamente configurado (falta GEO_API_URL)",
+        )
+
+    print(f"[login] Intentando autenticar {email} contra {API_BASE}/auth/login")
+
     # 1. Get tokens from backend
-    async with httpx.AsyncClient() as client:
+    # Timeout amplio (45s) porque Render free tier puede tardar en despertar
+    async with httpx.AsyncClient(timeout=45.0) as client:
         try:
             r = await client.post(
                 f"{API_BASE}/auth/login",
                 json={"email": email, "password": password},
-                timeout=10,
             )
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
+            print(f"[login] ❌ Backend respondió {e.response.status_code}: {e.response.text[:200]}")
             if e.response.status_code == 401:
                 raise HTTPException(status_code=401, detail="Credenciales inválidas")
-            raise HTTPException(status_code=503, detail="Error al conectar con el backend")
-        except Exception:
-            raise HTTPException(status_code=503, detail="No se puede conectar con el backend")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Backend respondió con error {e.response.status_code}",
+            )
+        except httpx.TimeoutException:
+            print(f"[login] ❌ Timeout al contactar {API_BASE}/auth/login")
+            raise HTTPException(
+                status_code=503,
+                detail="El backend tardó demasiado en responder. Intenta de nuevo.",
+            )
+        except Exception as e:
+            print(f"[login] ❌ Error inesperado: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se puede conectar con el backend: {type(e).__name__}",
+            )
 
     tokens: dict = r.json()
     access_token = tokens.get("accessToken") or tokens.get("token")
 
     if not access_token:
+        print(f"[login] ❌ Backend no devolvió token. Respuesta: {tokens}")
         raise HTTPException(status_code=500, detail="Token no recibido del backend")
 
     # 2. Verify user role
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             r = await client.get(
                 f"{API_BASE}/auth/user",
                 headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10,
             )
             r.raise_for_status()
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            print(f"[login] ❌ /auth/user respondió {e.response.status_code}")
             raise HTTPException(status_code=401, detail="No se pudo verificar el usuario")
-        except Exception:
-            raise HTTPException(status_code=503, detail="No se puede conectar con el backend")
+        except Exception as e:
+            print(f"[login] ❌ Error al verificar usuario: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"No se puede verificar el usuario: {type(e).__name__}",
+            )
 
     user: dict = r.json()
     if user.get("role") != "admin":
