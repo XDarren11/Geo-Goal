@@ -18,9 +18,11 @@ import {
   type PublicTeamListItem,
   type PublicCoachListItem,
 } from '@/Api/publicAPI';
+import { getMyPlayerTeams } from '@/Api/teamAPI';
 import type { PublicLeagueSummary } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/BackButton';
+import { useAuth } from '@/hooks/useAuth';
 
 // ─── Colores por tab ──────────────────────────────────────────────────────────
 const TAB_CONFIG = [
@@ -257,6 +259,7 @@ const PAGE_SIZE = 20;
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
+  const { data: user } = useAuth();
 
   const initialTab = (TAB_CONFIG.find((t) => t.key === params.tab)?.key ?? 'players') as TabKey;
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
@@ -267,6 +270,21 @@ export default function SearchScreen() {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTab = TAB_CONFIG.find((t) => t.key === activeTab)!;
+
+  // Para jugadores: obtener sus equipos para filtrar la lista de jugadores
+  const { data: myTeams = [] } = useQuery({
+    queryKey: ['my-player-teams-list'],
+    queryFn: getMyPlayerTeams,
+    enabled: user?.role === 'player' && activeTab === 'players',
+    staleTime: 5 * 60_000,
+  });
+  // Si el jugador no busca, filtra por su primer equipo.
+  // Si tiene múltiples equipos y no hay búsqueda, muestra el primero
+  // (el usuario puede buscar por nombre para ver jugadores de otros equipos).
+  const playerTeamFilter: number | undefined =
+    user?.role === 'player' && !searchDebounced && myTeams.length > 0
+      ? (myTeams[0] as any).id
+      : undefined;
 
   // Debounce
   useEffect(() => {
@@ -283,8 +301,15 @@ export default function SearchScreen() {
 
   // ── Queries ──
   const { data: playersData, isLoading: loadingPlayers, isFetching: fetchingPlayers, refetch: refetchPlayers } = useQuery({
-    queryKey: ['search', 'players', searchDebounced, sortBy, page],
-    queryFn: () => getPublicPlayersList({ page, pageSize: PAGE_SIZE, sortBy, search: searchDebounced || undefined }),
+    queryKey: ['search', 'players', searchDebounced, sortBy, page, playerTeamFilter],
+    queryFn: () => getPublicPlayersList({
+      page,
+      pageSize: PAGE_SIZE,
+      sortBy,
+      search: searchDebounced || undefined,
+      // Si el usuario es jugador y no hay búsqueda, filtra por su equipo
+      team: playerTeamFilter,
+    }),
     enabled: activeTab === 'players',
     staleTime: 60_000,
     placeholderData: (prev) => prev,
