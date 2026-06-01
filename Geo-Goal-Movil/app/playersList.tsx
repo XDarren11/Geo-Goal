@@ -676,7 +676,7 @@ export default function SearchScreen() {
               activeTab === 'players'  ? item.playerId :
               activeTab === 'teams'    ? item.teamId   :
               activeTab === 'coaches'  ? item.coachId  : item.id;
-            return rawId ? `${activeTab}-${String(rawId)}` : `${activeTab}-idx-${index}`;
+            return `${activeTab}-${rawId ?? 'unknown'}-${index}`;
           }}
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
           refreshControl={
