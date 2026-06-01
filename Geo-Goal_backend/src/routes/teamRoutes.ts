@@ -34,9 +34,9 @@ router.post(
   hasRole("coach"),
   upload.single("logo"),
   body("name").notEmpty().withMessage("El nombre es obligatorio"),
-  body("lat").notEmpty().withMessage("Falta la latitud"),
-  body("lng").notEmpty().withMessage("Falta la longitud"),
-  body("fieldAddress").notEmpty().withMessage("La dirección es obligatoria"),
+  body("lat").optional({ nullable: true }).isFloat().withMessage("Latitud inválida"),
+  body("lng").optional({ nullable: true }).isFloat().withMessage("Longitud inválida"),
+  body("fieldAddress").optional({ nullable: true }).isString(),
   handleInputError,
   asyncHandler(TeamController.createTeam)
 );

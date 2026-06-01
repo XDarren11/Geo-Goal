@@ -22,13 +22,19 @@ export default function BackButton({
   variant = "inline",
 }: Props) {
   const router = useRouter();
+  // Evita doble-tap: bloquea el botón hasta que la navegación termine
+  const pressedRef = React.useRef(false);
 
   const handlePress = () => {
+    if (pressedRef.current) return;
+    pressedRef.current = true;
     if (to) {
       router.replace(to as any);
     } else {
       router.back();
     }
+    // Resetear por si la navegación falla o el componente no se desmonta
+    setTimeout(() => { pressedRef.current = false; }, 800);
   };
 
   if (variant === "floating") {

@@ -4,10 +4,14 @@ import {
   assignRefereeToMatch,
   autoAssignRefereesForLeague,
   getMatchAnalytics,
+  getLeagueReferees,
+  getUpcomingLeagueMatches,
   getRefereeTodayMatches,
   registerMatchEvent,
   registerTrackingFrame,
   type RefereeAssignment,
+  type LeagueReferee,
+  type UpcomingLeagueMatchesResponse,
 } from "@/api/refereeAPI";
 import { getLeagues } from "@/api/leagueAPI";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,6 +44,7 @@ export default function RefereeCenterView() {
   const [eventType, setEventType] = useState<(typeof EVENT_OPTIONS)[number]>("goal");
   const [assignMatchId, setAssignMatchId] = useState("");
   const [assignRefereeUserId, setAssignRefereeUserId] = useState("");
+  const [assignLeagueId, setAssignLeagueId] = useState("");
   const [autoLeagueId, setAutoLeagueId] = useState("");
   const [autoResult, setAutoResult] = useState<AutoAssignResult | null>(null);
   const [minute, setMinute] = useState("1");
@@ -116,6 +121,18 @@ export default function RefereeCenterView() {
     enabled: role === "admin",
   });
 
+  const { data: leagueReferees = [], isLoading: loadingReferees } = useQuery({
+    queryKey: ["league-referees", assignLeagueId],
+    queryFn: () => getLeagueReferees(Number(assignLeagueId)),
+    enabled: role === "admin" && Boolean(assignLeagueId),
+  });
+
+  const { data: upcomingMatches = null, isLoading: loadingMatches } = useQuery<UpcomingLeagueMatchesResponse>({
+    queryKey: ["league-upcoming-matches", assignLeagueId],
+    queryFn: () => getUpcomingLeagueMatches(Number(assignLeagueId), 1, 100),
+    enabled: role === "admin" && Boolean(assignLeagueId),
+  });
+
   const autoAssignMutation = useMutation({
     mutationFn: async () => {
       if (!autoLeagueId) throw new Error("Selecciona una liga");
@@ -170,9 +187,45 @@ export default function RefereeCenterView() {
       <>
       <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
         <h2 className="font-bold text-[var(--geo-text)]">Asignar árbitro (Manual)</h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <input value={assignMatchId} onChange={(e) => setAssignMatchId(e.target.value)} placeholder="matchId" className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2" />
-          <input value={assignRefereeUserId} onChange={(e) => setAssignRefereeUserId(e.target.value)} placeholder="refereeUserId" className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2" />
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <select
+            value={assignLeagueId}
+            onChange={(e) => {
+              setAssignLeagueId(e.target.value);
+              setAssignMatchId("");
+              setAssignRefereeUserId("");
+            }}
+            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-[var(--geo-text)]"
+          >
+            <option value="">Seleccionar liga</option>
+            {leagues.map((l) => (
+              <option key={l.id} value={l.id}>{l.name} (ID: {l.id})</option>
+            ))}
+          </select>
+          <select
+            value={assignMatchId}
+            onChange={(e) => setAssignMatchId(e.target.value)}
+            disabled={!assignLeagueId || loadingMatches}
+            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-[var(--geo-text)] disabled:opacity-60"
+          >
+            <option value="">Seleccionar partido</option>
+            {(upcomingMatches?.data ?? []).map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.roundName || "Partido"} · {m.homeTeam?.name || "Local"} vs {m.awayTeam?.name || "Visitante"} (ID: {m.id})
+              </option>
+            ))}
+          </select>
+          <select
+            value={assignRefereeUserId}
+            onChange={(e) => setAssignRefereeUserId(e.target.value)}
+            disabled={!assignLeagueId || loadingReferees}
+            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-[var(--geo-text)] disabled:opacity-60"
+          >
+            <option value="">Seleccionar árbitro</option>
+            {(leagueReferees ?? []).map((r: LeagueReferee) => (
+              <option key={r.id} value={r.id}>{r.name} (ID: {r.id})</option>
+            ))}
+          </select>
           <button
             type="button"
             disabled={!assignMatchId || !assignRefereeUserId || assignMutation.isPending}
@@ -182,6 +235,12 @@ export default function RefereeCenterView() {
             {assignMutation.isPending ? "Asignando..." : "Asignar"}
           </button>
         </div>
+        {assignLeagueId && !loadingMatches && (upcomingMatches?.data?.length ?? 0) === 0 ? (
+          <p className="mt-2 text-xs text-[var(--geo-text-muted)]">No hay partidos próximos sin filtrar.</p>
+        ) : null}
+        {assignLeagueId && !loadingReferees && leagueReferees.length === 0 ? (
+          <p className="mt-2 text-xs text-[var(--geo-text-muted)]">No hay árbitros registrados en la liga.</p>
+        ) : null}
       </div>
 
       <div className="mt-6 rounded-xl border border-[var(--geo-border)] bg-[var(--geo-bg-card)] p-5">
@@ -193,7 +252,7 @@ export default function RefereeCenterView() {
           <select
             value={autoLeagueId}
             onChange={(e) => { setAutoLeagueId(e.target.value); setAutoResult(null); }}
-            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2"
+            className="rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] px-3 py-2 text-[var(--geo-text)]"
           >
             <option value="">Seleccionar liga</option>
             {leagues.map((l) => (
@@ -213,9 +272,9 @@ export default function RefereeCenterView() {
         {autoResult && (
           <div className="mt-4 rounded-lg border border-[var(--geo-border)] bg-[var(--geo-bg)] p-4">
             <p className="font-semibold text-[var(--geo-text)]">{autoResult.message}</p>
-            {autoResult.details.length > 0 && (
+            {(autoResult.details ?? []).length > 0 && (
               <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto text-sm text-[var(--geo-text-muted)]">
-                {autoResult.details.map((d) => (
+                {(autoResult.details ?? []).map((d) => (
                   <li key={d.matchId} className="flex items-center gap-2">
                     <span className="font-mono text-xs text-geo-green">{d.status === "assigned" ? "OK" : "—"}</span>
                     <span>{d.roundName} (ID: {d.matchId})</span>

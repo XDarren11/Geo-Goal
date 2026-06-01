@@ -2,25 +2,28 @@
  * Pantalla de búsqueda universal — Jugadores · Equipos · Entrenadores · Ligas
  * Accesible desde la pestaña Explorar mediante el botón "Buscar"
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, type InfiniteData } from '@tanstack/react-query';
 import {
-  getPublicPlayersList,
-  getPublicTeamsList,
   getPublicCoachesList,
-  getPublicLeagues,
   type PublicPlayerListItem,
   type PublicTeamListItem,
   type PublicCoachListItem,
+  type PublicCoachesListResponse,
 } from '@/Api/publicAPI';
+import { getMyPlayerTeams, getMyTeams, getPlayersTeam } from '@/Api/teamAPI';
+import { getAdminDashboardSummary } from '@/Api/adminAPI';
+import { getLeagueById } from '@/Api/leagueAPI';
+import { getPublicLeagueDetail } from '@/Api/publicAPI';
 import type { PublicLeagueSummary } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/BackButton';
+import { useAuth } from '@/hooks/useAuth';
 
 // ─── Colores por tab ──────────────────────────────────────────────────────────
 const TAB_CONFIG = [
@@ -32,6 +35,10 @@ const TAB_CONFIG = [
 
 type TabKey = typeof TAB_CONFIG[number]['key'];
 
+const TEAM_PAGE_SIZE = 5;
+const LEAGUE_PAGE_SIZE = 4;
+const COACH_PAGE_SIZE = 50;
+
 // ─── Rating helper ────────────────────────────────────────────────────────────
 function ratingColor(r: number): string {
   if (r >= 8) return '#10b981';
@@ -42,9 +49,22 @@ function ratingColor(r: number): string {
   return '#6b7280';
 }
 
+// ─── Tipo de relación ─────────────────────────────────────────────────────────
+/** null = sin contexto (invitado). mine = true → relacionado, false → externo */
+type Relation = { mine: boolean } | null;
+
+/** Opacidad de la tarjeta: externo → 0.35, relacionado/sin-contexto → 1 */
+function cardOp(rel: Relation | undefined) {
+  return rel !== null && rel !== undefined && !rel.mine ? 0.35 : 1;
+}
+
 // ─── Row components ───────────────────────────────────────────────────────────
 
-function PlayerRow({ player, onPress }: { player: PublicPlayerListItem; onPress: () => void }) {
+function PlayerRow({ player, onPress, relation }: {
+  player: PublicPlayerListItem;
+  onPress: () => void;
+  relation?: Relation;
+}) {
   const initial = player.name?.[0]?.toUpperCase() ?? '?';
   return (
     <TouchableOpacity
@@ -60,6 +80,7 @@ function PlayerRow({ player, onPress }: { player: PublicPlayerListItem; onPress:
         borderRadius: 16,
         padding: 12,
         marginBottom: 8,
+        opacity: cardOp(relation),
       }}
     >
       <View
@@ -102,7 +123,11 @@ function PlayerRow({ player, onPress }: { player: PublicPlayerListItem; onPress:
   );
 }
 
-function TeamRow({ item, onPress }: { item: PublicTeamListItem; onPress: () => void }) {
+function TeamRow({ item, onPress, relation }: {
+  item: PublicTeamListItem;
+  onPress: () => void;
+  relation?: Relation;
+}) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -117,6 +142,7 @@ function TeamRow({ item, onPress }: { item: PublicTeamListItem; onPress: () => v
         borderRadius: 16,
         padding: 12,
         marginBottom: 8,
+        opacity: cardOp(relation),
       }}
     >
       <View
@@ -148,7 +174,11 @@ function TeamRow({ item, onPress }: { item: PublicTeamListItem; onPress: () => v
   );
 }
 
-function CoachRow({ item, onPress }: { item: PublicCoachListItem; onPress: () => void }) {
+function CoachRow({ item, onPress, relation }: {
+  item: PublicCoachListItem;
+  onPress: () => void;
+  relation?: Relation;
+}) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -163,6 +193,7 @@ function CoachRow({ item, onPress }: { item: PublicCoachListItem; onPress: () =>
         borderRadius: 16,
         padding: 12,
         marginBottom: 8,
+        opacity: cardOp(relation),
       }}
     >
       <View
@@ -197,7 +228,11 @@ function CoachRow({ item, onPress }: { item: PublicCoachListItem; onPress: () =>
   );
 }
 
-function LeagueRow({ item, onPress }: { item: PublicLeagueSummary; onPress: () => void }) {
+function LeagueRow({ item, onPress, relation }: {
+  item: PublicLeagueSummary;
+  onPress: () => void;
+  relation?: Relation;
+}) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -212,6 +247,7 @@ function LeagueRow({ item, onPress }: { item: PublicLeagueSummary; onPress: () =
         borderRadius: 16,
         padding: 12,
         marginBottom: 8,
+        opacity: cardOp(relation),
       }}
     >
       <View
@@ -243,116 +279,446 @@ function LeagueRow({ item, onPress }: { item: PublicLeagueSummary; onPress: () =
   );
 }
 
-// ─── Sort pills for players tab ───────────────────────────────────────────────
-type SortBy = 'rating' | 'goals' | 'assists' | 'matches';
-const SORT_OPTIONS: { key: SortBy; label: string }[] = [
-  { key: 'rating',   label: '⭐ Rating' },
-  { key: 'goals',    label: '⚽ Goles'  },
-  { key: 'assists',  label: '🅰️ Asist.' },
-  { key: 'matches',  label: '📋 PJ'     },
-];
-const PAGE_SIZE = 20;
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
+  const { data: user } = useAuth();
 
   const initialTab = (TAB_CONFIG.find((t) => t.key === params.tab)?.key ?? 'players') as TabKey;
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [search, setSearch] = useState('');
-  const [searchDebounced, setSearchDebounced] = useState('');
-  const [sortBy, setSortBy] = useState<SortBy>('rating');
-  const [page, setPage] = useState(1);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTab = TAB_CONFIG.find((t) => t.key === activeTab)!;
 
-  // Debounce
-  useEffect(() => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => {
-      setSearchDebounced(search);
-      setPage(1);
-    }, 350);
-    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
-  }, [search]);
+  // ── 1. Contexto base (sin condición de tab, se carga al entrar a la pantalla) ──
 
-  // Reset page on tab change
-  useEffect(() => { setPage(1); }, [activeTab]);
-
-  // ── Queries ──
-  const { data: playersData, isLoading: loadingPlayers, isFetching: fetchingPlayers, refetch: refetchPlayers } = useQuery({
-    queryKey: ['search', 'players', searchDebounced, sortBy, page],
-    queryFn: () => getPublicPlayersList({ page, pageSize: PAGE_SIZE, sortBy, search: searchDebounced || undefined }),
-    enabled: activeTab === 'players',
-    staleTime: 60_000,
-    placeholderData: (prev) => prev,
+  const { data: myPlayerTeams = [], isLoading: loadingPlayerTeams } = useQuery({
+    queryKey: ['my-player-teams'],
+    queryFn: getMyPlayerTeams,
+    enabled: user?.role === 'player',
+    staleTime: 5 * 60_000,
   });
 
-  const { data: teamsData, isLoading: loadingTeams, isFetching: fetchingTeams, refetch: refetchTeams } = useQuery({
-    queryKey: ['search', 'teams', searchDebounced, page],
-    queryFn: () => getPublicTeamsList({ search: searchDebounced || undefined, page, pageSize: PAGE_SIZE }),
-    enabled: activeTab === 'teams',
-    staleTime: 60_000,
-    placeholderData: (prev) => prev,
+  const { data: myCoachTeams = [], isLoading: loadingCoachTeams } = useQuery({
+    queryKey: ['my-coach-teams'],
+    queryFn: getMyTeams,
+    enabled: user?.role === 'coach',
+    staleTime: 5 * 60_000,
   });
 
-  const { data: coachesData, isLoading: loadingCoaches, isFetching: fetchingCoaches, refetch: refetchCoaches } = useQuery({
-    queryKey: ['search', 'coaches', searchDebounced, page],
-    queryFn: () => getPublicCoachesList({ search: searchDebounced || undefined, page, pageSize: PAGE_SIZE }),
-    enabled: activeTab === 'coaches',
-    staleTime: 60_000,
-    placeholderData: (prev) => prev,
+  const { data: adminDashboard, isLoading: loadingAdmin } = useQuery({
+    queryKey: ['admin-dashboard-context'],
+    queryFn: getAdminDashboardSummary,
+    enabled: user?.role === 'admin',
+    staleTime: 5 * 60_000,
   });
 
-  const { data: leaguesRaw = [], isLoading: loadingLeagues, refetch: refetchLeagues } = useQuery({
-    queryKey: ['public-leagues'],
-    queryFn: getPublicLeagues,
-    enabled: activeTab === 'leagues',
-    staleTime: 60_000,
+  const myRoleTeams: any[] = user?.role === 'player' ? myPlayerTeams :
+                              user?.role === 'coach'  ? myCoachTeams  : [];
+  const myTeamIds = React.useMemo(
+    () => myRoleTeams.map((t: any) => t.id as number),
+    [myRoleTeams]
+  );
+
+  const adminLeagues: any[] = React.useMemo(
+    () => adminDashboard?.leagues ?? [],
+    [adminDashboard]
+  );
+  const adminLeagueIds = React.useMemo(
+    () => adminLeagues.map((l: any) => (l.id ?? l.leagueId) as number).filter(Boolean),
+    [adminLeagues]
+  );
+
+  // Admin: detalle de cada liga (incluye equipos) con paginación
+  const adminLeagueDetailsQuery = useInfiniteQuery<
+    { ids: number[]; results: any[] },
+    Error,
+    InfiniteData<{ ids: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
+    queryKey: ['admin-league-details', adminLeagueIds],
+    queryFn: async ({ pageParam = 0 }) => {
+      const ids = adminLeagueIds.slice(pageParam, pageParam + LEAGUE_PAGE_SIZE);
+      const results = await Promise.all(ids.map((id) => getLeagueById(id)));
+      return { ids, results };
+    },
+    enabled:
+      user?.role === 'admin' &&
+      adminLeagueIds.length > 0 &&
+      (activeTab === 'players' || activeTab === 'teams' || activeTab === 'coaches' || activeTab === 'leagues'),
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.ids.length, 0);
+      return loaded < adminLeagueIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
   });
 
-  // Leagues are filtered client-side (small list)
-  const filteredLeagues = searchDebounced
-    ? leaguesRaw.filter((l) => l.name.toLowerCase().includes(searchDebounced.toLowerCase()))
-    : leaguesRaw;
+  const adminLeagueDetails = React.useMemo(
+    () => adminLeagueDetailsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [adminLeagueDetailsQuery.data]
+  );
+  const loadingLeagueDetails = adminLeagueDetailsQuery.isLoading;
 
-  // Per-tab derived state
-  const players    = playersData?.players ?? [];
-  const teams      = teamsData?.items    ?? [];
-  const coaches    = coachesData?.items  ?? [];
+  // IDs de todos los equipos en las ligas del admin (para filtrar coaches)
+  const adminTeamIds = React.useMemo(() => {
+    const ids = new Set<number>();
+    adminLeagueDetails.forEach((league: any) => {
+      (league.teams ?? []).forEach((t: any) => { if (t.id) ids.add(t.id); });
+    });
+    return ids;
+  }, [adminLeagueDetails]);
 
-  const playersTotal  = playersData?.total ?? 0;
-  const teamsTotal    = teamsData?.total   ?? 0;
-  const coachesTotal  = coachesData?.total ?? 0;
+  // IDs únicos de ligas de los equipos del coach (usando leagueId o league.id)
+  const coachLeagueIds = React.useMemo(() => {
+    if (user?.role !== 'coach') return [];
+    const seen = new Set<number>();
+    myCoachTeams.forEach((t: any) => {
+      const id = t.league?.id ?? t.leagueId;
+      if (id) seen.add(id);
+    });
+    return [...seen];
+  }, [user?.role, myCoachTeams]);
 
-  const playersPages  = Math.max(1, Math.ceil(playersTotal  / PAGE_SIZE));
-  const teamsPages    = Math.max(1, Math.ceil(teamsTotal    / PAGE_SIZE));
-  const coachesPages  = Math.max(1, Math.ceil(coachesTotal  / PAGE_SIZE));
+  // Fetch de detalles de esas ligas (nombre, descripción) con paginación
+  const coachLeagueDetailsQuery = useInfiniteQuery<
+    { ids: number[]; results: any[] },
+    Error,
+    InfiniteData<{ ids: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
+    queryKey: ['coach-league-details', coachLeagueIds],
+    queryFn: async ({ pageParam = 0 }) => {
+      const ids = coachLeagueIds.slice(pageParam, pageParam + LEAGUE_PAGE_SIZE);
+      const results = await Promise.all(ids.map((id) => getPublicLeagueDetail(id)));
+      return { ids, results };
+    },
+    enabled:
+      user?.role === 'coach' &&
+      coachLeagueIds.length > 0 &&
+      (activeTab === 'coaches' || activeTab === 'leagues'),
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.ids.length, 0);
+      return loaded < coachLeagueIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
+  });
 
-  const isLoading  = activeTab === 'players' ? loadingPlayers  : activeTab === 'teams' ? loadingTeams  : activeTab === 'coaches' ? loadingCoaches  : loadingLeagues;
-  const isFetching = activeTab === 'players' ? fetchingPlayers : activeTab === 'teams' ? fetchingTeams : activeTab === 'coaches' ? fetchingCoaches : false;
+  const coachLeagueDetails = React.useMemo(
+    () => coachLeagueDetailsQuery.data?.pages.flatMap((p) => p.results) ?? [],
+    [coachLeagueDetailsQuery.data]
+  );
 
-  const totalPages =
-    activeTab === 'players' ? playersPages :
-    activeTab === 'teams'   ? teamsPages   :
-    activeTab === 'coaches' ? coachesPages : 1;
+  // ── 2. Todos los coaches (filtrado local) con paginación ─────────────────────
+  const coachesQuery = useInfiniteQuery<
+    PublicCoachesListResponse,
+    Error,
+    InfiniteData<PublicCoachesListResponse>,
+    (string | number)[],
+    number
+  >({
+    queryKey: ['all-coaches-context'],
+    queryFn: ({ pageParam = 1 }) => getPublicCoachesList({ page: pageParam, pageSize: COACH_PAGE_SIZE }),
+    enabled: !!user && activeTab === 'coaches',
+    getNextPageParam: (lastPage) =>
+      lastPage.page * lastPage.pageSize < lastPage.total ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
+    staleTime: 10 * 60_000,
+  });
 
-  function refetchActive() {
-    if (activeTab === 'players')  return refetchPlayers();
-    if (activeTab === 'teams')    return refetchTeams();
-    if (activeTab === 'coaches')  return refetchCoaches();
-    return refetchLeagues();
-  }
+  const allCoachesItems = React.useMemo(
+    () => coachesQuery.data?.pages.flatMap((p) => p.items) ?? [],
+    [coachesQuery.data]
+  );
+  const loadingAllCoaches = coachesQuery.isLoading;
 
-  // ── Render list data ──
+  // ── 3. Jugadores usando getPlayersTeam (datos reales de miembros del equipo) ──
+  const teamPlayersQuery = useInfiniteQuery<
+    { teamIds: number[]; results: any[] },
+    Error,
+    InfiniteData<{ teamIds: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
+    queryKey: ['context-team-players', myTeamIds],
+    queryFn: async ({ pageParam = 0 }) => {
+      const teamIds = myTeamIds.slice(pageParam, pageParam + TEAM_PAGE_SIZE);
+      const results = await Promise.all(teamIds.map((id) => getPlayersTeam(id)));
+      return { teamIds, results };
+    },
+    enabled: (user?.role === 'player' || user?.role === 'coach') && myTeamIds.length > 0 && activeTab === 'players',
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.teamIds.length, 0);
+      return loaded < myTeamIds.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const teamPlayersRaw = React.useMemo(() => {
+    const pages = teamPlayersQuery.data?.pages ?? [];
+    const teamMap = new Map<number, any>(myRoleTeams.map((t: any) => [t.id, t]));
+    const all: PublicPlayerListItem[] = [];
+    const seen = new Set<number>();
+    pages.forEach((page) => {
+      page.teamIds.forEach((teamId, i) => {
+        const team = teamMap.get(teamId);
+        (page.results[i] ?? []).forEach((p: any) => {
+          const uid: number = p.id ?? p.userId ?? p.playerId;
+          if (!uid || seen.has(uid)) return;
+          seen.add(uid);
+          all.push({
+            playerId: uid,
+            name: p.name ?? p.playerName ?? 'Jugador',
+            username: p.username ?? null,
+            team: { id: teamId, name: team?.name ?? '' },
+            avgRating: p.avgRating ?? 0,
+            totalGoals: p.totalGoals ?? 0,
+            totalAssists: p.totalAssists ?? 0,
+            totalMinutes: p.totalMinutes ?? 0,
+            matchCount: p.matchCount ?? 0,
+          });
+        });
+      });
+    });
+    return all;
+  }, [teamPlayersQuery.data, myRoleTeams]);
+
+  const loadingTeamPlayers = teamPlayersQuery.isLoading;
+
+  // Admin: jugadores — usa getPlayersTeam por cada equipo de sus ligas
+  // (el endpoint público solo devuelve jugadores con estadísticas, getPlayersTeam devuelve todos los miembros)
+  const adminTeamIdsArray = React.useMemo(() => [...adminTeamIds], [adminTeamIds]);
+
+  const adminLeaguePlayersQuery = useInfiniteQuery<
+    { teamIds: number[]; results: any[] },
+    Error,
+    InfiniteData<{ teamIds: number[]; results: any[] }>,
+    (string | number[])[],
+    number
+  >({
+    queryKey: ['context-admin-team-players', adminTeamIdsArray],
+    queryFn: async ({ pageParam = 0 }) => {
+      const teamIds = adminTeamIdsArray.slice(pageParam, pageParam + TEAM_PAGE_SIZE);
+      const results = await Promise.all(teamIds.map((id) => getPlayersTeam(id)));
+      return { teamIds, results };
+    },
+    enabled: user?.role === 'admin' && adminTeamIdsArray.length > 0 && activeTab === 'players',
+    getNextPageParam: (_lastPage, pages) => {
+      const loaded = pages.reduce((sum, page) => sum + page.teamIds.length, 0);
+      return loaded < adminTeamIdsArray.length ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const adminTeamNameMap = React.useMemo(() => {
+    const map = new Map<number, string>();
+    adminLeagueDetails.forEach((league: any) => {
+      (league.teams ?? []).forEach((t: any) => {
+        if (t.id && !map.has(t.id)) map.set(t.id, t.name ?? '');
+      });
+    });
+    return map;
+  }, [adminLeagueDetails]);
+
+  const adminLeaguePlayers = React.useMemo(() => {
+    const pages = adminLeaguePlayersQuery.data?.pages ?? [];
+    const all: PublicPlayerListItem[] = [];
+    const seen = new Set<number>();
+    pages.forEach((page) => {
+      page.teamIds.forEach((teamId, i) => {
+        const teamName = adminTeamNameMap.get(teamId) ?? '';
+        (page.results[i] ?? []).forEach((p: any) => {
+          const uid: number = p.id ?? p.userId ?? p.playerId;
+          if (!uid || seen.has(uid)) return;
+          seen.add(uid);
+          all.push({
+            playerId: uid,
+            name: p.name ?? p.playerName ?? 'Jugador',
+            username: p.username ?? null,
+            team: { id: teamId, name: teamName },
+            avgRating: p.avgRating ?? 0,
+            totalGoals: p.totalGoals ?? 0,
+            totalAssists: p.totalAssists ?? 0,
+            totalMinutes: p.totalMinutes ?? 0,
+            matchCount: p.matchCount ?? 0,
+          });
+        });
+      });
+    });
+    return all;
+  }, [adminLeaguePlayersQuery.data, adminTeamNameMap]);
+
+  const loadingAdminPlayers = adminLeaguePlayersQuery.isLoading;
+
+  // ── 4. Datos derivados por tab ────────────────────────────────────────────────
+
+  const rawPlayers: PublicPlayerListItem[] =
+    user?.role === 'admin' ? adminLeaguePlayers : teamPlayersRaw;
+
+  const rawTeams: PublicTeamListItem[] = React.useMemo(() => {
+    if (user?.role === 'admin') {
+      const seen = new Set<number>();
+      const items: PublicTeamListItem[] = [];
+      adminLeagueDetails.forEach((league: any) => {
+        (league.teams ?? []).forEach((t: any) => {
+          if (!t.id || seen.has(t.id)) return;
+          seen.add(t.id);
+          items.push({ teamId: t.id, name: t.name, logoUrl: t.logoUrl ?? null, league: { id: league.id, name: league.name } });
+        });
+      });
+      return items;
+    }
+    return myRoleTeams.map((t: any) => ({
+      teamId: t.id,
+      name: t.name,
+      logoUrl: t.logoUrl ?? null,
+      league: t.league ?? (t.leagueId ? { id: t.leagueId, name: '' } : null),
+    }));
+  }, [user?.role, myRoleTeams, adminLeagueDetails]);
+
+  // IDs de equipos en las ligas del coach (para filtrar coaches rivales/pares)
+  const coachLeagueTeamIds = React.useMemo(() => {
+    const ids = new Set<number>();
+    coachLeagueDetails.forEach((detail: any) => {
+      (detail.standings ?? []).forEach((s: any) => { if (s.teamId) ids.add(s.teamId); });
+      (detail.teams ?? []).forEach((t: any) => { if (t.id) ids.add(t.id); });
+    });
+    return ids;
+  }, [coachLeagueDetails]);
+
+  const rawCoaches: PublicCoachListItem[] = React.useMemo(() => {
+    if (allCoachesItems.length === 0) return [];
+    if (user?.role === 'coach') {
+      // Mostrar coaches de equipos en las mismas ligas (incluye al propio coach)
+      // Si aún no hay league details cargados, caer en los equipos propios
+      const ids = coachLeagueTeamIds.size > 0 ? coachLeagueTeamIds : new Set(myTeamIds);
+      return allCoachesItems.filter((c: PublicCoachListItem) =>
+        (c.teams ?? []).some((t: any) => ids.has(t.id))
+      );
+    }
+    const contextIds = user?.role === 'admin' ? adminTeamIds : new Set(myTeamIds);
+    return allCoachesItems.filter((c: PublicCoachListItem) =>
+      (c.teams ?? []).some((t: any) => contextIds.has(t.id))
+    );
+  }, [allCoachesItems, adminTeamIds, myTeamIds, user?.role, coachLeagueTeamIds]);
+
+  const rawLeagues: PublicLeagueSummary[] = React.useMemo(() => {
+    if (user?.role === 'admin') {
+      return adminLeagues.map((l: any) => ({
+        id: l.id ?? l.leagueId,
+        name: l.name,
+        description: l.description,
+      }));
+    }
+    if (user?.role === 'coach') {
+      // getPublicLeagueDetail devuelve { league: { id, name, ... }, standings, ... }
+      return coachLeagueDetails.map((detail: any) => ({
+        id: detail.league?.id ?? detail.id,
+        name: detail.league?.name ?? detail.name ?? '',
+        description: detail.league?.description ?? detail.description,
+      })).filter((l: any) => l.id);
+    }
+    // player: derivar de los equipos (que sí traen league completo)
+    const seen = new Set<number>();
+    return myRoleTeams
+      .filter((t: any) => t.league?.id)
+      .filter((t: any) => { if (seen.has(t.league.id)) return false; seen.add(t.league.id); return true; })
+      .map((t: any) => ({ id: t.league.id, name: t.league.name }));
+  }, [user?.role, myRoleTeams, adminLeagues, coachLeagueDetails]);
+
+  // ── 5. Búsqueda LOCAL dentro del contexto del usuario ────────────────────────
+  const q = search.toLowerCase().trim();
+  const players  = q ? rawPlayers.filter((p) => p.name.toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q)) : rawPlayers;
+  const teams    = q ? rawTeams.filter((t) => t.name.toLowerCase().includes(q))   : rawTeams;
+  const coaches  = q ? rawCoaches.filter((c) => c.name.toLowerCase().includes(q)) : rawCoaches;
+  const leagues  = q ? rawLeagues.filter((l) => l.name.toLowerCase().includes(q)) : rawLeagues;
+
+  // ── 6. Loading / isFetching / paginación ─────────────────────────────────────
+  const contextLoading = loadingPlayerTeams || loadingCoachTeams || loadingAdmin || loadingLeagueDetails;
+  const isLoading =
+    activeTab === 'players'
+      ? (user?.role === 'admin' ? loadingAdminPlayers : loadingTeamPlayers)
+      : activeTab === 'teams'
+        ? (user?.role === 'admin' ? loadingLeagueDetails : contextLoading)
+        : activeTab === 'coaches'
+          ? (loadingAllCoaches || (user?.role === 'coach' ? coachLeagueDetailsQuery.isLoading : false))
+          : activeTab === 'leagues'
+            ? (user?.role === 'admin'
+              ? loadingLeagueDetails
+              : user?.role === 'coach'
+                ? coachLeagueDetailsQuery.isLoading
+                : contextLoading)
+            : contextLoading;
+
+  const isFetching = false;
+  const totalPages = 1;
+
+  function refetchActive() { /* datos locales — no hay fetch extra */ }
+
   const listData: any[] =
-    activeTab === 'players' ? players   :
-    activeTab === 'teams'   ? teams     :
-    activeTab === 'coaches' ? coaches   : filteredLeagues;
+    activeTab === 'players' ? players  :
+    activeTab === 'teams'   ? teams    :
+    activeTab === 'coaches' ? coaches  : leagues;
 
   const empty = !isLoading && listData.length === 0;
+
+  const isLoadingMore =
+    activeTab === 'players'
+      ? (user?.role === 'admin' ? adminLeaguePlayersQuery.isFetchingNextPage : teamPlayersQuery.isFetchingNextPage)
+      : activeTab === 'teams'
+        ? (user?.role === 'admin' ? adminLeagueDetailsQuery.isFetchingNextPage : false)
+        : activeTab === 'coaches'
+          ? (coachesQuery.isFetchingNextPage || (user?.role === 'coach' ? coachLeagueDetailsQuery.isFetchingNextPage : false))
+          : activeTab === 'leagues'
+            ? (user?.role === 'admin'
+              ? adminLeagueDetailsQuery.isFetchingNextPage
+              : user?.role === 'coach'
+                ? coachLeagueDetailsQuery.isFetchingNextPage
+                : false)
+            : false;
+
+  function handleLoadMore() {
+    if (activeTab === 'players') {
+      if (user?.role === 'admin') {
+        if (adminLeagueDetailsQuery.hasNextPage) adminLeagueDetailsQuery.fetchNextPage();
+        if (adminLeaguePlayersQuery.hasNextPage) adminLeaguePlayersQuery.fetchNextPage();
+      } else if (teamPlayersQuery.hasNextPage) {
+        teamPlayersQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'teams') {
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'coaches') {
+      if (coachesQuery.hasNextPage) coachesQuery.fetchNextPage();
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      if (user?.role === 'coach' && coachLeagueDetailsQuery.hasNextPage) {
+        coachLeagueDetailsQuery.fetchNextPage();
+      }
+      return;
+    }
+    if (activeTab === 'leagues') {
+      if (user?.role === 'admin' && adminLeagueDetailsQuery.hasNextPage) {
+        adminLeagueDetailsQuery.fetchNextPage();
+      }
+      if (user?.role === 'coach' && coachLeagueDetailsQuery.hasNextPage) {
+        coachLeagueDetailsQuery.fetchNextPage();
+      }
+    }
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#0d1117' }}>
@@ -457,40 +823,6 @@ export default function SearchScreen() {
           })}
         </ScrollView>
 
-        {/* Sort pills — players only */}
-        {activeTab === 'players' && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 8 }}
-            contentContainerStyle={{ gap: 6, paddingRight: 4 }}
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.key}
-                onPress={() => { setSortBy(opt.key); setPage(1); }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: sortBy === opt.key ? '#a78bfa' : '#a78bfa30',
-                  backgroundColor: sortBy === opt.key ? '#a78bfa20' : 'transparent',
-                }}
-              >
-                <Text
-                  style={{
-                    color: sortBy === opt.key ? '#a78bfa' : '#6b7280',
-                    fontSize: 11,
-                    fontWeight: '700',
-                  }}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        )}
       </View>
 
       {/* ── Content ── */}
@@ -513,16 +845,20 @@ export default function SearchScreen() {
       ) : (
         <FlatList
           data={listData}
-          keyExtractor={(item) =>
-            activeTab === 'players'  ? String(item.playerId)  :
-            activeTab === 'teams'    ? String(item.teamId)    :
-            activeTab === 'coaches'  ? String(item.coachId)   : String(item.id)
-          }
+          keyExtractor={(item, index) => {
+            const rawId =
+              activeTab === 'players'  ? item.playerId :
+              activeTab === 'teams'    ? item.teamId   :
+              activeTab === 'coaches'  ? item.coachId  : item.id;
+            return `${activeTab}-${rawId ?? 'unknown'}-${index}`;
+          }}
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
           refreshControl={
             <RefreshControl
               refreshing={false}
-              onRefresh={() => { setPage(1); refetchActive(); }}
+              onRefresh={refetchActive}
               tintColor={currentTab.color}
             />
           }
@@ -566,7 +902,6 @@ export default function SearchScreen() {
                 />
               );
             }
-            // leagues
             return (
               <LeagueRow
                 item={item}
@@ -580,55 +915,13 @@ export default function SearchScreen() {
             );
           }}
           ListFooterComponent={
-            totalPages > 1 && activeTab !== 'leagues' ? (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: 16,
-                  paddingTop: 8,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: currentTab.color + '40',
-                    opacity: page <= 1 ? 0.4 : 1,
-                  }}
-                >
-                  <Text style={{ color: currentTab.color, fontSize: 13, fontWeight: '700' }}>
-                    ← Anterior
-                  </Text>
-                </TouchableOpacity>
-                <Text style={{ color: '#9ca3af', fontSize: 13 }}>
-                  {page} / {totalPages}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 8,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: currentTab.color + '40',
-                    opacity: page >= totalPages ? 0.4 : 1,
-                  }}
-                >
-                  <Text style={{ color: currentTab.color, fontSize: 13, fontWeight: '700' }}>
-                    Siguiente →
-                  </Text>
-                </TouchableOpacity>
+            isLoadingMore ? (
+              <View style={{ paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color={currentTab.color} />
               </View>
             ) : null
           }
-        />
+        ></FlatList>
       )}
     </View>
   );

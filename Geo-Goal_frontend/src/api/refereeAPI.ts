@@ -18,6 +18,28 @@ export type RefereeAssignment = {
   };
 };
 
+export type LeagueReferee = {
+  id: number;
+  name: string;
+  email?: string | null;
+  role: "referee" | "admin" | string;
+};
+
+export type UpcomingLeagueMatchesResponse = {
+  data: Array<{
+    id: number;
+    date?: string | null;
+    roundName?: string;
+    homeTeam?: { id: number; name: string; logoUrl?: string | null };
+    awayTeam?: { id: number; name: string; logoUrl?: string | null };
+    homeTeamId?: number;
+    awayTeamId?: number;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export async function getRefereeTodayMatches(): Promise<RefereeAssignment[]> {
   const { data } = await api.get<RefereeAssignment[]>("/league/referee/matches/today");
   return Array.isArray(data) ? data : [];
@@ -69,6 +91,23 @@ export async function assignRefereeToMatch(
   body: { refereeUserId: number; status?: "assigned" | "checked_in" | "closed" }
 ) {
   const { data } = await api.post(`/league/matches/${matchId}/referee/assign`, body);
+  return data;
+}
+
+export async function getLeagueReferees(leagueId: number): Promise<LeagueReferee[]> {
+  const { data } = await api.get<LeagueReferee[]>(`/league/${leagueId}/referees`);
+  return Array.isArray(data) ? data : [];
+}
+
+export async function getUpcomingLeagueMatches(
+  leagueId: number,
+  page = 1,
+  pageSize = 50
+): Promise<UpcomingLeagueMatchesResponse> {
+  const { data } = await api.get<UpcomingLeagueMatchesResponse>(
+    `/league/${leagueId}/matches/upcoming`,
+    { params: { page, pageSize } }
+  );
   return data;
 }
 

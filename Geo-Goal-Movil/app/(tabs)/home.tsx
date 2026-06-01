@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, View, Text, ScrollView, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { Alert, View, Text, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -100,6 +100,7 @@ export default function HomeScreen() {
   }
 
   return (
+    <View className="flex-1 bg-geo-black">
     <ScrollView className="flex-1 bg-geo-black">
       {/* Header */}
       <View className="bg-gray-900/90 border-b border-geo-green/30 px-4 pt-7 pb-6">
@@ -428,6 +429,9 @@ export default function HomeScreen() {
         )}
       </View>
 
+    </ScrollView>
+
+      {/* Modal de notificaciones FUERA del ScrollView para evitar ANR */}
       <Modal
         visible={notificationsOpen}
         transparent
@@ -458,19 +462,17 @@ export default function HomeScreen() {
             {notificationsLoading ? (
               <Loader label="Cargando notificaciones..." />
             ) : notifications.length > 0 ? (
-              <FlatList
-                data={notifications.slice(0, 10)}
-                keyExtractor={(item: any) => String(item.id)}
-                renderItem={({ item }: { item: any }) => (
-                  <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-4 mb-3">
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {notifications.slice(0, 10).map((item: any) => (
+                  <View key={String(item.id)} className="bg-gray-800 border border-geo-green/20 rounded-lg p-4 mb-3">
                     <View className="flex-row items-center justify-between">
                       <Text className="text-white font-bold flex-1 mr-2">{item.title}</Text>
                       {!item.readAt ? <Text className="text-geo-green text-[10px] font-bold uppercase">Nueva</Text> : null}
                     </View>
                     <Text className="text-gray-400 text-sm mt-1">{item.message}</Text>
                   </View>
-                )}
-              />
+                ))}
+              </ScrollView>
             ) : (
               <View className="bg-gray-800 border border-geo-green/20 rounded-lg p-4">
                 <Text className="text-gray-400">No tienes notificaciones.</Text>
@@ -479,7 +481,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
