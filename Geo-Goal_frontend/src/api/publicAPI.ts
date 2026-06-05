@@ -797,7 +797,7 @@ export async function getCoachDashboard(coachId: number): Promise<CoachStats> {
 // ── Listado público de jugadores ─────────────────────────────────────────────
 
 export interface PublicPlayerListItem {
-  playerId: number;
+  id: number;
   name: string;
   username: string | null;
   team: { id: number; name: string; logoUrl?: string | null } | null;
@@ -809,7 +809,7 @@ export interface PublicPlayerListItem {
 }
 
 export interface PublicPlayersListResponse {
-  players: PublicPlayerListItem[];
+  items: PublicPlayerListItem[];
   total: number;
   page: number;
   pageSize: number;

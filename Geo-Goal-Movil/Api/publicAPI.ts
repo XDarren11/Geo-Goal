@@ -355,7 +355,7 @@ export async function getMatchXT(matchId: number): Promise<MatchXTResponse> {
 // ── Listado público de jugadores ─────────────────────────────────────────────
 
 export interface PublicPlayerListItem {
-  playerId: number;
+  id: number;
   name: string;
   username: string | null;
   team: { id: number; name: string; logoUrl?: string | null } | null;

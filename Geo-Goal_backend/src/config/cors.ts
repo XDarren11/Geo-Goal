@@ -5,6 +5,7 @@ const whitelist = [
     'https://geo-goal-ai-service.onrender.com',
     'https://geo-goal-1.onrender.com', 
     'https://geo-goal-ai-service-bukpi.ondigitalocean.app/',
+    'http://localhost:5173',
     undefined
 ]
 

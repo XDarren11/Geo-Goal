@@ -36,7 +36,7 @@ function ratingColor(r: number): string {
 function PlayerCard({ player }: { player: PublicPlayerListItem }) {
   return (
     <Link
-      to={`/players/${player.playerId}/dashboard`}
+      to={`/players/${player.id}/dashboard`}
       className="flex items-center gap-4 rounded-2xl border border-geo-green/20 bg-[var(--geo-bg-card)] p-4 transition-all hover:scale-[1.01] hover:border-geo-green/50 hover:shadow-lg"
     >
       {/* Avatar inicial */}
@@ -135,7 +135,7 @@ export default function PlayersListView() {
     staleTime: 5 * 60_000,
   });
 
-  const players = data?.players ?? [];
+  const players = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -268,7 +268,7 @@ export default function PlayersListView() {
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {players.map((p) => (
-              <PlayerCard key={p.playerId} player={p} />
+              <PlayerCard key={p.id} player={p} />
             ))}
           </div>
 
